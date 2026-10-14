@@ -2,8 +2,11 @@ name: crawl
 
 on:
   schedule:
-    # Every day at 04:17 UTC (Actions minutes are free on public repositories).
-    - cron: '17 4 * * *'
+    # Every other day at 04:17 UTC (odd days of the month; the 31st and the 1st
+    # run back to back). Minutes are free on public repositories, but each run
+    # (~24 min) still shows on the account's Actions usage meter, shared with
+    # private repositories on a 2,000-minute plan.
+    - cron: '17 4 */2 * *'
   workflow_dispatch:
 
 permissions:

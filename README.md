@@ -10,7 +10,7 @@ Browse **every public Agent Skill** (`SKILL.md` format) grouped by theme in a co
 npx skills-atlas            # or: npm i -g skills-atlas
 ```
 
-Node ≥ 20. A catalog snapshot ships inside the package, so it works offline; online, the CLI fetches the latest daily snapshot (see [The catalog](#the-catalog)).
+Node ≥ 20. A catalog snapshot ships inside the package, so it works offline; online, the CLI fetches the latest snapshot, rebuilt every other day (see [The catalog](#the-catalog)).
 
 ## Usage
 
@@ -120,7 +120,7 @@ In a terminal, progress is shown uv-style: one line per task (uninstall, then on
 
 ## The catalog
 
-`data/catalog.json.gz` is rebuilt every day by GitHub Actions (`npm run crawl`). The CLI downloads that snapshot from GitHub, keeps it in `~/.cache/skills-atlas/` (or `$XDG_CACHE_HOME/skills-atlas/`) and checks for a new one at most every 12 hours, with an ETag, so an unchanged catalog is not downloaded again. It uses the snapshot bundled in the npm package when that one is newer, when GitHub cannot be reached (it then waits an hour before trying again), or with `--offline`. `--refresh` skips the 12-hour wait; failing that, deleting `~/.cache/skills-atlas/` has the same effect on older versions. Changes to the catalog format must stay readable by released versions, which download it too.
+`data/catalog.json.gz` is rebuilt every other day by GitHub Actions (`npm run crawl`). The CLI downloads that snapshot from GitHub, keeps it in `~/.cache/skills-atlas/` (or `$XDG_CACHE_HOME/skills-atlas/`) and checks for a new one at most every 12 hours, with an ETag, so an unchanged catalog is not downloaded again. It uses the snapshot bundled in the npm package when that one is newer, when GitHub cannot be reached (it then waits an hour before trying again), or with `--offline`. `--refresh` skips the 12-hour wait; failing that, deleting `~/.cache/skills-atlas/` has the same effect on older versions. Changes to the catalog format must stay readable by released versions, which download it too.
 
 The snapshot is built from:
 
@@ -132,7 +132,7 @@ The snapshot is built from:
 | GitHub | Trees API + `raw.githubusercontent.com` | missing descriptions, read from `SKILL.md` |
 | [officialskills.sh](https://officialskills.sh) | sitemap | official publishers: every skill whose GitHub owner is listed there is flagged `official` |
 
-**Rate limits.** The skills.sh search API allows 30 requests per minute. The crawl queries it at that pace, about 2 s per owner. The daily workflow covers the top 600 owners; a local crawl covers none by default. With `VERCEL_OIDC_TOKEN`, the crawl uses the [official API](https://skills.sh/docs/api) instead, which returns the full leaderboard.
+**Rate limits.** The skills.sh search API allows 30 requests per minute. The crawl queries it at that pace, about 2 s per owner. The scheduled workflow covers the top 600 owners; a local crawl covers none by default. With `VERCEL_OIDC_TOKEN`, the crawl uses the [official API](https://skills.sh/docs/api) instead, which returns the full leaderboard.
 
 **Processing:**
 
