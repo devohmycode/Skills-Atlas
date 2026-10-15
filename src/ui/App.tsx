@@ -11,6 +11,7 @@ import { ListSelect } from './ListSelect.js';
 import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
 import { scopesLabel, TreeSelect } from './TreeSelect.js';
+import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 
 export interface WizardResult {
   /** Skills to install (`owner/repo@name`). */
@@ -146,7 +147,7 @@ export function App(props: AppProps) {
   );
 
   if (step === 'loading') {
-    return screen(<Text color="yellow">{m.loading(scopesLabel(readScopes))}</Text>);
+    return screen(<Text color={PALETTE.gold}>{m.loading(scopesLabel(readScopes))}</Text>);
   }
 
   if (step === 'tree') {
@@ -154,7 +155,7 @@ export function App(props: AppProps) {
     const removedIds = new Set(installedIds.filter((id) => removals.some((r) => r.name === tree.installed.get(id)!.name)));
     return screen(
       <Box flexDirection="column">
-        {error && <Text color="red">{error}</Text>}
+        {error && <Text color={PALETTE.danger}>{error}</Text>}
         <TreeSelect
           themes={tree.installed.size ? [INSTALLED_THEME, ...themes] : themes}
           skills={tree.skills}
@@ -288,12 +289,12 @@ function Confirm({ ids, remove, options, onConfirm, onBack }: ConfirmProps) {
     <Box flexDirection="column" gap={1}>
       <Text bold>{m.confirm.title}</Text>
       {remove.length > 0 && (
-        <Panel color="red" title={`− ${m.confirm.remove(remove.length)}`}>
+        <Panel color={PALETTE.danger} title={`− ${m.confirm.remove(remove.length)}`}>
           <Text wrap="wrap">{remove.map((r) => `${r.name} (${scopesLabel(r.scopes)})`).join('  ·  ')}</Text>
         </Panel>
       )}
       {ids.length > 0 && (
-        <Panel color="green" title={`+ ${m.confirm.install(ids.length, addCommands.length)}`}>
+        <Panel color={PALETTE.success} title={`+ ${m.confirm.install(ids.length, addCommands.length)}`}>
           {addCommands.map((c) => (
             <Text key={c.source} wrap="truncate-end">
               <Text dimColor>{c.source}</Text>
@@ -310,7 +311,7 @@ function Confirm({ ids, remove, options, onConfirm, onBack }: ConfirmProps) {
       <Box flexDirection="column">
         <Text dimColor>{m.confirm.commands}</Text>
         {[...removeCommands, ...addCommands].map((c, i) => (
-          <Text key={i} color="gray" wrap="truncate-end">
+          <Text key={i} color={PALETTE.muted} wrap="truncate-end">
             {`  $ ${formatCommand(c)}`}
           </Text>
         ))}

@@ -5,6 +5,7 @@ import type { InstallCommand } from '../install/plan.js';
 import { isSuccess, phaseOf, runAll, type CommandOutcome, type Phase } from '../install/run.js';
 import { ACCENT, useTerminalSize } from './Layout.js';
 import { fit, width as textWidth } from './width.js';
+import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const TICK_MS = 80;
@@ -50,7 +51,7 @@ function Bar({ fraction, color, width = BAR_WIDTH }: { fraction: number; color: 
   return (
     <Text>
       <Text color={color}>{'━'.repeat(full) + head}</Text>
-      <Text color="gray">{'─'.repeat(width - full - head.length)}</Text>
+      <Text color={PALETTE.border}>{'─'.repeat(width - full - head.length)}</Text>
     </Text>
   );
 }
@@ -148,13 +149,13 @@ export function Progress({ commands, verbose, onDone }: ProgressProps) {
           const running = task.phase !== 'queued' && !isOver(task);
           const elapsed = task.startedAt ? (task.endedAt ?? now) - task.startedAt : 0;
           const icon =
-            task.phase === 'done' ? <Text color="green">✓</Text> : task.phase === 'partial' ? <Text color="yellow">✓</Text> : task.phase === 'failed' ? <Text color="red">✗</Text> : running ? <Text color={ACCENT}>{spinner}</Text> : <Text dimColor>·</Text>;
-          const color = task.phase === 'failed' ? 'red' : task.phase === 'partial' ? 'yellow' : task.phase === 'done' ? 'green' : ACCENT;
+            task.phase === 'done' ? <Text color={PALETTE.success}>✓</Text> : task.phase === 'partial' ? <Text color={PALETTE.gold}>✓</Text> : task.phase === 'failed' ? <Text color={PALETTE.danger}>✗</Text> : running ? <Text color={ACCENT}>{spinner}</Text> : <Text dimColor>·</Text>;
+          const color = task.phase === 'failed' ? PALETTE.danger : task.phase === 'partial' ? PALETTE.gold : task.phase === 'done' ? PALETTE.success : ACCENT;
           const label = c.kind === 'remove' ? removeLabel(c) : c.source;
           return (
             <Text key={i} wrap="truncate-end">
               {icon}{' '}
-              <Text bold={running} dimColor={task.phase === 'queued'} color={c.kind === 'remove' ? 'red' : undefined}>
+              <Text bold={running} dimColor={task.phase === 'queued'} color={c.kind === 'remove' ? PALETTE.danger : undefined}>
                 {fit(label, labelW)}
               </Text>
               {'  '}
@@ -163,7 +164,7 @@ export function Progress({ commands, verbose, onDone }: ProgressProps) {
               <Bar fraction={barFraction(task.phase, elapsed)} color={color} />
               {'  '}
               <Text
-                color={task.phase === 'failed' ? 'red' : task.phase === 'partial' ? 'yellow' : undefined}
+                color={task.phase === 'failed' ? PALETTE.danger : task.phase === 'partial' ? PALETTE.gold : undefined}
                 dimColor={task.phase !== 'failed' && task.phase !== 'partial'}
               >
                 {fit(phaseText[task.phase], phaseW)}
@@ -184,25 +185,25 @@ export function Progress({ commands, verbose, onDone }: ProgressProps) {
           {results.map((r, i) =>
             r.status === 'installed' ? (
               <Text key={i}>
-                <Text color="green"> + </Text>
+                <Text color={PALETTE.success}> + </Text>
                 <Text bold>{r.name}</Text>
                 <Text dimColor>{r.agents?.length ? `  → ${r.agents.join(', ')}` : ''}</Text>
               </Text>
             ) : r.status === 'removed' ? (
               <Text key={i}>
-                <Text color="red"> - </Text>
+                <Text color={PALETTE.danger}> - </Text>
                 <Text bold>{r.name}</Text>
               </Text>
             ) : (
               <Text key={i}>
-                <Text color={r.status === 'skipped' ? 'yellow' : 'red'}> × </Text>
+                <Text color={r.status === 'skipped' ? PALETTE.gold : PALETTE.danger}> × </Text>
                 <Text bold>{r.name ?? '?'}</Text>
-                <Text color={r.status === 'skipped' ? 'yellow' : 'red'}>{`  ${r.reason ?? r.error ?? m.run.failed}`}</Text>
+                <Text color={r.status === 'skipped' ? PALETTE.gold : PALETTE.danger}>{`  ${r.reason ?? r.error ?? m.run.failed}`}</Text>
               </Text>
             ),
           )}
           {failedWithoutResults.map((x, i) => (
-            <Text key={`f${i}`} color="red" wrap="truncate-end">
+            <Text key={`f${i}`} color={PALETTE.danger} wrap="truncate-end">
               {` × ${x.outcome?.command.source || p.uninstallTask}  ${x.outcome?.stderr.trim().split('\n').pop() ?? ''}`}
             </Text>
           ))}

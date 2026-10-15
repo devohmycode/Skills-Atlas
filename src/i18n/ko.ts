@@ -9,6 +9,7 @@ export const ko: Messages = {
   keyNames: { enter: '↵', space: '␣', esc: 'Esc' },
 
   keys: {
+    github: 'GitHub',
     move: '이동',
     toggle: '선택',
     search: '검색',
@@ -45,6 +46,7 @@ export const ko: Messages = {
     noDescription: '설명이 없습니다.',
     noMatch: '검색과 일치하는 스킬이 없습니다.',
     groupHint: '스페이스로 그룹 전체를 선택합니다.',
+    recommendedHint: '개인적으로 선정한 스킬입니다.',
     installed: '설치됨',
     toRemove: '제거 예정',
     position: (a, b) => `${a} / ${b}`,
@@ -112,6 +114,8 @@ export const ko: Messages = {
   },
 
   web: {
+    github: 'GitHub 저장소 열기',
+    recommendedHint: '개인적으로 선정한 스킬입니다.',
     serving: 'Skills Atlas가 열렸습니다:',
     stop: 'Ctrl+C를 눌러 중지하세요.',
     needAgent: '에이전트를 하나 이상 선택하세요.',
@@ -235,6 +239,7 @@ export const ko: Messages = {
   },
 
   themes: {
+    recommended: '추천',
     installed: '설치됨',
     frontend: '프론트엔드 & 웹',
     backend: '백엔드 & API',

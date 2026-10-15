@@ -3,8 +3,9 @@ import type { ReactNode } from 'react';
 import { t } from '../i18n/index.js';
 import { logo } from './logo.js';
 import { useClick } from './mouse.js';
+import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 
-export const ACCENT = 'cyan';
+export const ACCENT = PALETTE.accent;
 
 export type StepId = 'scope' | 'select' | 'agents' | 'method' | 'confirm';
 export const STEPS: StepId[] = ['select', 'scope', 'agents', 'method', 'confirm'];
@@ -39,7 +40,7 @@ export function Header({ step }: { step: StepId }) {
           <Text key={s}>
             {i > 0 && <Text dimColor>{'  ›  '}</Text>}
             {i < current ? (
-              <Text color="green">✓ {t().steps[s]}</Text>
+              <Text color={PALETTE.success}>✓ {t().steps[s]}</Text>
             ) : i === current ? (
               <Text bold color={ACCENT}>
                 ● {t().steps[s]}
@@ -103,11 +104,11 @@ function HintItem({ keyName, action, onPress }: { keyName: string; action: strin
 }
 
 /** Rounded panel for details and summaries. */
-export function Panel({ children, color = 'gray', title }: { children: ReactNode; color?: string; title?: string }) {
+export function Panel({ children, color = PALETTE.border, title }: { children: ReactNode; color?: string; title?: string }) {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={color} paddingX={1}>
       {title && (
-        <Text bold color={color === 'gray' ? undefined : color}>
+        <Text bold color={color === PALETTE.border ? undefined : color}>
           {title}
         </Text>
       )}

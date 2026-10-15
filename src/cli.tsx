@@ -1,10 +1,11 @@
 import { Command, Option } from 'commander';
-import { render } from 'ink';
+import { renderTerminal as render } from './ui/render.js';
 import { styleText } from 'node:util';
 import { AGENTS, detectAgents, unknownAgents } from './agents.js';
 import { mergeInstalled } from './catalog/installed.js';
 import { loadCatalog } from './catalog/load.js';
 import { loadLatestCatalog } from './catalog/remote.js';
+import { withRecommendations } from './catalog/recommended.js';
 import pkg from '../package.json' with { type: 'json' };
 import { groupByTheme, popularityLabel, querySkills, resolveTheme, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
@@ -14,7 +15,8 @@ import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install
 import type { Catalog, InstallMethod, InstallOptions, Removal, Scope } from './types.js';
 import { App, type WizardResult } from './ui/App.js';
 import { Progress } from './ui/Progress.js';
-import { logo } from './ui/logo.js';
+import { colorDepth, logo } from './ui/logo.js';
+import { TERMINAL_PALETTE } from './ui/palette.js';
 import { enableMouse } from './ui/mouse.js';
 import { padEnd, width } from './ui/width.js';
 import { openBrowser, startServer } from './web/server.js';
@@ -23,9 +25,17 @@ import { openBrowser, startServer } from './web/server.js';
 const SKILLS_VERSION = '1.7.0';
 const LANG_LIST = Object.keys(LANGUAGES).join(', ');
 
-type Style = Parameters<typeof styleText>[0];
+type Style = Parameters<typeof styleText>[0] | 'pink';
 /** Colors only on a terminal, so that piped output stays plain. */
-const paint = (style: Style, text: string) => (process.stdout.isTTY ? styleText(style, text) : text);
+const paint = (style: Style, text: string) => {
+  if (!process.stdout.isTTY) return text;
+  if (style !== 'pink') return styleText(style, text);
+  const depth = colorDepth();
+  if (depth === 'none') return text;
+  if (depth === '256') return styleText('magentaBright', text);
+  const rgb = TERMINAL_PALETTE.success.slice(1).match(/../g)!.map((c) => Number.parseInt(c, 16));
+  return `\x1b[38;2;${rgb.join(';')}m${text}\x1b[39m`;
+};
 
 interface CommonOptions {
   catalog?: string;
@@ -88,7 +98,7 @@ function resolveLang(argv: string[]): Lang {
 
 async function openCatalog(opts: CommonOptions): Promise<Catalog> {
   try {
-    if (opts.catalog) return await loadCatalog(opts.catalog);
+    if (opts.catalog) return withRecommendations(await loadCatalog(opts.catalog));
     // Latest snapshot from GitHub (refreshed daily), else the one bundled in the package.
     const catalog = await loadLatestCatalog({
       offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE),
@@ -101,7 +111,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
     if (opts.refresh && !opts.quiet) {
       console.error(paint('dim', t().cli.catalogOf(catalog.generatedAt.slice(0, 10), formatNumber(catalog.skills.length))));
     }
-    return catalog;
+    return withRecommendations(catalog);
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   }
@@ -147,8 +157,8 @@ async function apply(ids: string[], remove: Removal[], options: InstallOptions, 
   const removed = results.filter((x) => x.status === 'removed').length;
   const failed = outcomes.filter((o) => !isSuccess(o)).length;
   const parts = [
-    ids.length ? paint(installed === ids.length ? 'green' : 'yellow', r.summaryInstalled(installed, ids.length)) : '',
-    remove.length ? paint(removed === remove.length ? 'green' : 'yellow', r.summaryRemoved(removed, remove.length)) : '',
+    ids.length ? paint(installed === ids.length ? 'pink' : 'yellow', r.summaryInstalled(installed, ids.length)) : '',
+    remove.length ? paint(removed === remove.length ? 'pink' : 'yellow', r.summaryRemoved(removed, remove.length)) : '',
     failed ? paint('red', r.summaryFailed(failed)) : '',
     paint('dim', t().progress.finished(`${((Date.now() - started) / 1000).toFixed(1)}s`)),
   ].filter(Boolean);
@@ -179,7 +189,7 @@ async function runPlain(commands: InstallCommand[], options: InstallOptions, fla
     onDone: (o) => {
       for (const res of o.results) {
         const ok = res.status === 'installed' || res.status === 'removed';
-        const icon = ok ? paint('green', '✓') : res.status === 'skipped' ? paint('yellow', '–') : paint('red', '✗');
+        const icon = ok ? paint('pink', '✓') : res.status === 'skipped' ? paint('yellow', '–') : paint('red', '✗');
         const detail =
           res.status === 'installed'
             ? paint('dim', `→ ${(res.agents ?? []).join(', ')}`)
@@ -371,7 +381,7 @@ program
   .action(() => {
     const detected = new Set(detectAgents().map((a) => a.id));
     for (const a of AGENTS) {
-      const star = detected.has(a.id) ? paint('green', '★') : ' ';
+      const star = detected.has(a.id) ? paint('pink', '★') : ' ';
       console.log(`${star} ${paint('cyan', a.id.padEnd(18))} ${a.displayName.padEnd(22)} ${paint('dim', a.projectDir)}`);
     }
   });

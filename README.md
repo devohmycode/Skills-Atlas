@@ -41,11 +41,13 @@ The server listens on `127.0.0.1` only. The address carries a random token (afte
 
 ### Interface language
 
-The interface speaks **English, French, Spanish, Brazilian Portuguese, German, Simplified Chinese, Japanese and Korean** (`en`, `fr`, `es`, `pt`, `de`, `zh`, `ja`, `ko`). It follows your system language when it is one of these, and falls back to English:
+The interface speaks **English, French, German, Spanish, Brazilian Portuguese, Italian, Japanese, Korean and Simplified Chinese** (`en`, `fr`, `de`, `es`, `pt`, `it`, `ja`, `ko`, `zh`; `zh-CN` is also accepted). It follows your system language when it is one of these, and falls back to English:
 
 ```bash
 skills-atlas -l fr                  # switch to French (or --lang fr): the choice is remembered
 skills-atlas -l en                  # back to English
+skills-atlas -l it                  # italiano
+skills-atlas -l zh-CN               # Simplified Chinese (saved as zh)
 skills-atlas -l ja                  # 日本語 (es: español, pt: português, de: Deutsch, zh: 简体中文, ko: 한국어)
 skills-atlas lang                   # current language
 SKILLS_ATLAS_LANG=fr skills-atlas   # force a language from the environment, without saving it
@@ -53,7 +55,30 @@ SKILLS_ATLAS_LANG=fr skills-atlas   # force a language from the environment, wit
 
 The choice made with `-l` is saved in `~/.config/skills-atlas/config.json`, so later runs keep it without the flag. Precedence: `-l`/`--lang`, then `SKILLS_ATLAS_LANG`, then the saved choice, then the system language (`LC_ALL`, `LC_MESSAGES`, `LANG`, or the OS locale on Windows), then English. Chinese, Japanese and Korean characters take two terminal columns; the tree measures them as such, so columns stay aligned. `--theme` accepts a theme id or its label in any language (`security`, `Sécurité`…).
 
-Translations live in `src/i18n/`. Adding a language takes one file implementing the `Messages` type (TypeScript reports any missing key), one entry in `LANGUAGES` and its number locale in `LOCALES`; the tests check that every theme is translated. The Spanish, Portuguese, German, Chinese, Japanese and Korean translations have not been reviewed by native speakers yet: corrections are welcome.
+Translations live in `src/i18n/`. Adding a language takes one file implementing the `Messages` type (TypeScript reports any missing key), one entry in `LANGUAGES` and its number locale in `LOCALES`; the tests check that every theme is translated. The Spanish, Portuguese, German, Italian, Chinese, Japanese and Korean translations have not been reviewed by native speakers yet: corrections are welcome.
+
+### Recommended skills
+
+**★ Recommended** appears just below **Already installed** in the terminal tree and web sidebar. It is a personal, curated selection, independent of install counts and official publisher status. The initial pick is [Ponytail](https://github.com/DietrichGebert/ponytail); its reason for inclusion is shown with its details. A recommended skill can also appear in its usual theme, with the same checkbox and installation identity.
+
+Press **`g`** on a skill to open its GitHub repository in your default browser. In the web interface, focus a skill row first. The key remains ordinary text while searching; local skills without a repository have no GitHub action.
+
+The shared selection is maintained in [`data/recommended.json`](data/recommended.json). To use your own selection without rebuilding or editing the package, create `~/.config/skills-atlas/recommended.json` (or `$XDG_CONFIG_HOME/skills-atlas/recommended.json`). On Windows the default is `%USERPROFILE%\.config\skills-atlas\recommended.json`. A personal file replaces the bundled selection; `[]` hides it. Restart Skills Atlas after editing it.
+
+```json
+[
+  {
+    "name": "ponytail",
+    "repository": "https://github.com/DietrichGebert/ponytail",
+    "reason": "A useful reminder to keep solutions simple and focused on the task.",
+    "description": "Helps agents make smaller, maintainable changes with appropriate verification.",
+    "themes": ["code"],
+    "path": "skills/ponytail"
+  }
+]
+```
+
+Only `name` (the skill's frontmatter name), `repository` and `reason` are required. Use a GitHub repository URL, with a separate entry for each skill you recommend from it. `description`, `themes` (ids from `skills-atlas themes --all`) and the skill directory `path` are optional. Existing catalog metadata is preserved. Add a pick after reviewing its `SKILL.md`, installation source and usefulness; keep `reason` specific enough to explain your choice. The list ships in the built CLI and is merged after every catalog refresh, including offline use. Changes to the shared JSON take effect after `npm run build`; personal JSON needs no build.
 
 ### Installed skills
 
@@ -76,6 +101,7 @@ Translations live in `src/i18n/`. Adding a language takes one file implementing 
 | `a` | expand / collapse all |
 | `s` | sort: installs (default) ↔ name |
 | `o` | only official skills (marked ◆) |
+| `g` | open the focused skill's GitHub repository |
 | enter | continue |
 | `q` | quit |
 
@@ -101,6 +127,8 @@ The mouse works too: the wheel moves through the list, a click ticks a skill, op
 | `-l, --lang <code>` | interface language, remembered |
 
 Any option left out is asked after the selection, pre-filled with your last choices (`~/.config/skills-atlas/config.json`) and the agents detected on the machine.
+
+The terminal uses a sky-blue, lavender and pink palette, including the ASCII logo gradient. Selected skills, completed steps and success summaries use candy pink (`#FF8AD8`); recommended skills keep their gold star. Piped output stays plain, and the logo respects `NO_COLOR`.
 
 ### What runs
 
@@ -164,3 +192,5 @@ npm run typecheck
 npm run dev        # run the CLI from sources
 npm run build      # dist/cli.js
 ```
+
+The CLI defaults to React's production runtime (also with `npm run dev`) with a maximum of 60 frames per second. It uses Ink's standard renderer because the incremental renderer in Ink 6.8 can duplicate lines. Set `NODE_ENV=development` explicitly when debugging React. The compiled `dist/cli.js` launcher and its sibling chunks must stay together.

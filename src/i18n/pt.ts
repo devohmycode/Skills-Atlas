@@ -11,6 +11,7 @@ export const pt: Messages = {
   keyNames: { enter: '↵', space: '␣', esc: 'esc' },
 
   keys: {
+    github: 'GitHub',
     move: 'mover',
     toggle: 'marcar',
     search: 'buscar',
@@ -47,6 +48,7 @@ export const pt: Messages = {
     noDescription: 'Sem descrição.',
     noMatch: 'Nenhum skill corresponde a esta busca.',
     groupHint: 'Pressione espaço para marcar o grupo inteiro.',
+    recommendedHint: 'Uma seleção pessoal de skills.',
     installed: 'instalado',
     toRemove: 'será desinstalado',
     position: (a, b) => `${a} / ${b}`,
@@ -114,6 +116,8 @@ export const pt: Messages = {
   },
 
   web: {
+    github: 'Abrir o repositório no GitHub',
+    recommendedHint: 'Uma seleção pessoal de skills.',
     serving: 'Skills Atlas está aberto em',
     stop: 'Pressione Ctrl+C para parar.',
     needAgent: 'Escolha pelo menos um agente.',
@@ -237,6 +241,7 @@ export const pt: Messages = {
   },
 
   themes: {
+    recommended: 'Recomendados',
     installed: 'Já instalados',
     frontend: 'Frontend e web',
     backend: 'Backend e APIs',

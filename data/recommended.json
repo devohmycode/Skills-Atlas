@@ -1,0 +1,10 @@
+[
+  {
+    "name": "ponytail",
+    "repository": "https://github.com/DietrichGebert/ponytail",
+    "path": "skills/ponytail",
+    "description": "Helps agents make smaller, maintainable changes with appropriate verification.",
+    "reason": "A useful reminder to keep solutions simple and focused on the task.",
+    "themes": ["code"]
+  }
+]

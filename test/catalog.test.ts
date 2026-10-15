@@ -300,7 +300,10 @@ describe('i18n', () => {
     expect(normalizeLang('fr_FR.UTF-8')).toBe('fr');
     expect(normalizeLang('en-US')).toBe('en');
     expect(normalizeLang('de')).toBe('de');
-    expect(normalizeLang('it')).toBeUndefined();
+    expect(normalizeLang('it-IT')).toBe('it');
+    expect(normalizeLang('zh-CN')).toBe('zh');
+    expect(normalizeLang('zh')).toBe('zh');
+    expect(normalizeLang('nl')).toBeUndefined();
     expect(normalizeLang(undefined)).toBeUndefined();
   });
 
@@ -312,7 +315,9 @@ describe('i18n', () => {
     expect(systemLang({}, 'fr-FR')).toBe('fr');
     expect(systemLang({ LANG: 'C.UTF-8' }, 'ja-JP')).toBe('ja');
     // A language we do not have, set explicitly, is not overridden by the OS locale.
-    expect(systemLang({ LANG: 'it_IT.UTF-8' }, 'fr-FR')).toBeUndefined();
+    expect(systemLang({ LANG: 'nl_NL.UTF-8' }, 'fr-FR')).toBeUndefined();
+    expect(systemLang({ LANG: 'it_IT.UTF-8' }, 'en-US')).toBe('it');
+    expect(systemLang({}, 'it-IT')).toBe('it');
     expect(normalizeLang('zh-TW')).toBe('zh');
     expect(systemLang({ LANG: 'pt_BR.UTF-8' }, 'en-US')).toBe('pt');
     expect(systemLang({}, 'de-AT')).toBe('de');
@@ -335,7 +340,7 @@ describe('i18n', () => {
 
   it('translates every theme of the taxonomy in every language', () => {
     // From the taxonomy, not from English: a new theme must be translated everywhere.
-    const ids = [INSTALLED_THEME, ...allThemes()].map((th) => th.id);
+    const ids = ['recommended', ...[INSTALLED_THEME, ...allThemes()].map((th) => th.id)];
     for (const [lang, messages] of Object.entries(LANGUAGES)) {
       for (const id of ids) expect(messages.themes[id], `${lang}: ${id}`).toBeTruthy();
     }

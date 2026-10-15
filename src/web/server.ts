@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -13,6 +12,7 @@ import { formatCommand, planInstall, planRemovals, type InstallCommand } from '.
 import { isSuccess, listInstalled, phaseOf, runAll, type CommandOutcome, type InstalledSkill, type Phase } from '../install/run.js';
 import { SCOPES, type InstallOptions, type Removal, type Skill } from '../types.js';
 import { PAGE_HTML } from './page.js';
+export { openBrowser } from '../browser.js';
 
 export interface ServerOptions {
   /** Skills to browse (already filtered like the tree: `querySkills`). */
@@ -64,6 +64,7 @@ const slim = (s: Skill) => ({
   stars: s.stars,
   rank: s.rank,
   official: s.official,
+  recommendation: s.recommendation,
   themes: s.themes,
 });
 
@@ -88,6 +89,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   const token = randomBytes(24).toString('hex');
   const texts = new Map(opts.skills.map((s) => [s.id, haystack(s)]));
   const sorted = { installs: sortSkills(opts.skills, 'installs'), name: sortSkills(opts.skills, 'name') };
+  let queryCache: { key: string; matching: Skill[]; counts: Record<string, number> } | undefined;
   let running = false;
 
   /** What is installed now, in both scopes, merged into the catalog like the tree does. */
@@ -126,11 +128,17 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     const theme = params.get('theme') || undefined;
     const offset = Math.max(0, Number(params.get('offset')) || 0);
     const limit = Math.min(MAX_LIMIT, Math.max(1, Number(params.get('limit')) || 100));
-    const matching = sorted[sort].filter(
-      (s) => (!official || s.official) && terms.every((term) => texts.get(s.id)!.includes(term)),
-    );
-    const counts: Record<string, number> = {};
-    for (const s of matching) for (const th of s.themes) counts[th] = (counts[th] ?? 0) + 1;
+    // Paging and switching themes keep the same search: scan the catalog once for both.
+    const key = JSON.stringify([sort, terms, official]);
+    if (queryCache?.key !== key) {
+      const matching = sorted[sort].filter(
+        (s) => (!official || s.official) && terms.every((term) => texts.get(s.id)!.includes(term)),
+      );
+      const counts: Record<string, number> = {};
+      for (const s of matching) for (const th of s.themes) counts[th] = (counts[th] ?? 0) + 1;
+      queryCache = { key, matching, counts };
+    }
+    const { matching, counts } = queryCache;
     const inTheme = theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
     return { total: inTheme.length, all: matching.length, counts, items: inTheme.slice(offset, offset + limit).map(slim) };
   }
@@ -288,22 +296,5 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
     throw new HttpError(400, 'invalid JSON');
-  }
-}
-
-/** Opens `url` in the default browser; failures are silent (the URL is printed anyway). */
-export function openBrowser(url: string): void {
-  const [file, args] =
-    process.platform === 'win32'
-      ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
-      : process.platform === 'darwin'
-        ? ['open', [url]]
-        : ['xdg-open', [url]];
-  try {
-    const child = spawn(file, args as string[], { stdio: 'ignore', detached: true });
-    child.on('error', () => {});
-    child.unref();
-  } catch {
-    // No browser: the address is printed.
   }
 }

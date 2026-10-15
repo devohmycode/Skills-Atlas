@@ -9,6 +9,7 @@ export const zh: Messages = {
   keyNames: { enter: '↵', space: '␣', esc: 'Esc' },
 
   keys: {
+    github: 'GitHub',
     move: '移动',
     toggle: '勾选',
     search: '搜索',
@@ -45,6 +46,7 @@ export const zh: Messages = {
     noDescription: '暂无描述。',
     noMatch: '没有匹配此搜索的技能。',
     groupHint: '按空格键勾选整个分组。',
+    recommendedHint: '个人精选的技能。',
     installed: '已安装',
     toRemove: '将被卸载',
     position: (a, b) => `${a} / ${b}`,
@@ -112,6 +114,8 @@ export const zh: Messages = {
   },
 
   web: {
+    github: '打开 GitHub 仓库',
+    recommendedHint: '个人精选的技能。',
     serving: 'Skills Atlas 已打开：',
     stop: '按 Ctrl+C 停止。',
     needAgent: '请至少选择一个智能体。',
@@ -235,6 +239,7 @@ export const zh: Messages = {
   },
 
   themes: {
+    recommended: '推荐',
     installed: '已安装',
     frontend: '前端与 Web',
     backend: '后端与 API',

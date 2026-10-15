@@ -1,20 +1,22 @@
 /**
  * The web interface: one self-contained page (no external request, so it works offline), served
  * by `server.ts`. Written with String.raw so that the script keeps its backslashes; it must not
- * contain backticks or dollar-brace sequences.
+ * contain backticks or dollar-brace sequences inside its browser script.
  *
  * Design: an atlas. Themes are regions of a map, each with its own hue (same lightness in OKLCH),
  * shown as a legend on the left and as a margin rule on every skill; everything else stays quiet.
  * DIN (Bahnschrift on Windows, DIN Alternate on macOS), the typeface of maps and road signs,
  * sets titles and figures.
  */
+import { PALETTE } from '../ui/palette.js';
+
 export const PAGE_HTML = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Skills Atlas</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%230E7C86' stroke-width='2.5'/%3E%3Cpath d='M16 6l3 10-3 10-3-10z' fill='%230E7C86'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%230E0D0B'/%3E%3Cpath d='M16 6l3 10-3 10-3-10z' fill='%238BD5F5'/%3E%3C/svg%3E">
 <script>
   // Theme before the first paint: light, dark, or the system's (no attribute).
   try {
@@ -24,11 +26,13 @@ export const PAGE_HTML = String.raw`<!doctype html>
 </script>
 <style>
 :root {
-  --paper: #F2F4F1; --sheet: #FFFFFF; --sheet-2: #F7F8F6; --ink: #17212B; --ink-2: #5B6672; --ink-3: #8A949E;
-  --rule: #DCE1DB; --rule-2: #C9D0C8; --accent: #0E7C86; --accent-ink: #FFFFFF;
-  --add: #1F8A4C; --remove: #C2412D; --official: #3558C8;
-  --region-l: 0.62; --region-c: 0.13;
-  --shadow: 0 1px 0 rgba(23,33,43,.04), 0 8px 24px -12px rgba(23,33,43,.18);
+  --paper: ${PALETTE.foreground}; --sheet: #F7F3EA; --sheet-2: #EEE8DC; --ink: ${PALETTE.background}; --ink-2: #5E584F; --ink-3: #6F675B;
+  --rule: #D7CFC0; --rule-2: #B7AC99; --accent: #366586; --accent-ink: #FFFFFF;
+  --add: #356541; --remove: #A23D38; --official: #6E4DB0; --gold: #876117;
+  --blue: ${PALETTE.accent}; --lavender: ${PALETTE.lavender}; --pink: ${PALETTE.pink};
+  --brand-gradient: linear-gradient(120deg, var(--blue), var(--lavender) 52%, var(--pink));
+  --region-l: 0.53; --region-c: 0.10;
+  --shadow: 0 1px 0 rgba(14,13,11,.04), 0 8px 24px -12px rgba(14,13,11,.18);
   --display: "Bahnschrift", "DIN Alternate", "DIN 2014", "D-DIN", "Barlow", "Roboto Condensed", system-ui, sans-serif;
   --text: system-ui, "Segoe UI Variable Text", "Segoe UI", -apple-system, Roboto, "Helvetica Neue", sans-serif;
   --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
@@ -36,19 +40,19 @@ export const PAGE_HTML = String.raw`<!doctype html>
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #0C1520; --sheet: #121E2B; --sheet-2: #172536; --ink: #E3EAF0; --ink-2: #93A1AF; --ink-3: #66788A;
-    --rule: #223142; --rule-2: #2E4053; --accent: #3CC6CF; --accent-ink: #06222A;
-    --add: #4CC47E; --remove: #F07A64; --official: #8FA8FF;
-    --region-l: 0.74; --region-c: 0.12;
+    --paper: ${PALETTE.background}; --sheet: #171511; --sheet-2: #211E19; --ink: ${PALETTE.foreground}; --ink-2: #B8B0A3; --ink-3: ${PALETTE.muted};
+    --rule: #302B24; --rule-2: #5D5549; --accent: ${PALETTE.accent}; --accent-ink: ${PALETTE.background};
+    --add: ${PALETTE.success}; --remove: ${PALETTE.danger}; --official: ${PALETTE.lavender}; --gold: ${PALETTE.gold};
+    --region-l: 0.76; --region-c: 0.10;
     --shadow: 0 1px 0 rgba(0,0,0,.3), 0 12px 32px -12px rgba(0,0,0,.6);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #0C1520; --sheet: #121E2B; --sheet-2: #172536; --ink: #E3EAF0; --ink-2: #93A1AF; --ink-3: #66788A;
-  --rule: #223142; --rule-2: #2E4053; --accent: #3CC6CF; --accent-ink: #06222A;
-  --add: #4CC47E; --remove: #F07A64; --official: #8FA8FF;
-  --region-l: 0.74; --region-c: 0.12;
+  --paper: ${PALETTE.background}; --sheet: #171511; --sheet-2: #211E19; --ink: ${PALETTE.foreground}; --ink-2: #B8B0A3; --ink-3: ${PALETTE.muted};
+  --rule: #302B24; --rule-2: #5D5549; --accent: ${PALETTE.accent}; --accent-ink: ${PALETTE.background};
+  --add: ${PALETTE.success}; --remove: ${PALETTE.danger}; --official: ${PALETTE.lavender}; --gold: ${PALETTE.gold};
+  --region-l: 0.76; --region-c: 0.10;
   --shadow: 0 1px 0 rgba(0,0,0,.3), 0 12px 32px -12px rgba(0,0,0,.6);
   color-scheme: dark;
 }
@@ -73,6 +77,10 @@ header {
 }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand svg { flex: none; color: var(--accent); }
+.brand-mark { display: grid; place-content: center; width: 42px; height: 42px; border-radius: 12px; background: ${PALETTE.background}; }
+.brand-mark svg { color: var(--blue); }
+.brand-mark circle, .brand-mark path { stroke: url(#brand-gradient); }
+.brand-mark path:first-of-type { fill: url(#brand-gradient); }
 .brand h1 { margin: 0; font: 600 21px/1 var(--display); letter-spacing: .01em; }
 .search { position: relative; }
 .search input {
@@ -117,6 +125,7 @@ nav button[aria-current="true"]::before { transform: scale(1.25); }
 nav button .n { font-family: var(--display); font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 nav button.all::before { background: conic-gradient(from 0deg, oklch(var(--region-l) var(--region-c) 30), oklch(var(--region-l) var(--region-c) 150), oklch(var(--region-l) var(--region-c) 270), oklch(var(--region-l) var(--region-c) 30)); border-radius: 50%; }
 nav button.mine::before { background: var(--accent); border-radius: 50%; }
+nav button.recommended::before { content: '★'; background: none; color: var(--gold); line-height: 12px; font-size: 17px; }
 nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 
 /* ---- skill list -------------------------------------------------------------------------- */
@@ -129,6 +138,7 @@ nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
   --region: oklch(var(--region-l) var(--region-c) var(--hue, 200));
   position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 14px;
   padding: 13px 18px 13px 22px; border-top: 1px solid var(--rule); cursor: pointer; outline: none;
+  content-visibility: auto; contain-intrinsic-size: auto 94px;
 }
 .row:first-child { border-top: 0; }
 .row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--region); opacity: .85; }
@@ -152,12 +162,15 @@ nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 a.source:hover { color: var(--accent); text-decoration: underline; }
 .tag { font-size: 12px; white-space: nowrap; }
 .tag.official { color: var(--official); }
+.tag.recommended { color: var(--gold); }
 .tag.installed { color: var(--accent); }
 .tag.drop { color: var(--remove); font-weight: 600; }
 .desc {
   grid-column: 2 / 3; margin: 3px 0 0; color: var(--ink-2); font-size: 13px; max-width: 78ch;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.reason { grid-column: 2 / 3; margin: 5px 0 0; color: var(--ink-2); font-size: 12px; max-width: 78ch; }
+.reason::before { content: '★ '; color: var(--gold); }
 .pop { grid-row: 1 / 3; grid-column: 3; text-align: right; line-height: 1.15; padding-top: 1px; }
 .pop b { display: block; font: 600 17px/1.1 var(--display); font-variant-numeric: tabular-nums; }
 .pop span { font-size: 11.5px; color: var(--ink-3); }
@@ -223,7 +236,7 @@ pre {
 }
 .warn { margin: 0 0 10px; color: var(--remove); font-size: 13px; }
 .primary {
-  width: 100%; height: 46px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink);
+  width: 100%; height: 46px; border: 0; border-radius: 12px; background: var(--brand-gradient); color: ${PALETTE.background};
   font: 600 16px/1 var(--display); letter-spacing: .02em; transition: filter .15s, transform .1s;
 }
 .primary:hover:not(:disabled) { filter: brightness(1.08); }
@@ -266,10 +279,10 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   header { grid-template-columns: 1fr auto; padding: 12px 16px; gap: 12px; }
   .search { grid-column: 1 / -1; grid-row: 2; }
   .toggle .label { display: none; }
-  main { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  main { grid-template-columns: minmax(0, 1fr); align-content: start; overflow: auto; }
   nav { display: flex; gap: 4px; overflow-x: auto; padding: 10px 16px; border-bottom: 1px solid var(--rule); }
   nav h2, nav .sep { display: none; }
-  nav button { width: auto; white-space: nowrap; }
+  nav button { flex: none; width: max-content; grid-template-columns: 12px max-content max-content; white-space: nowrap; }
   .list { overflow: visible; padding: 14px 16px 24px; }
   .row { grid-template-columns: 22px minmax(0, 1fr); }
   .pop { grid-row: auto; grid-column: 2; text-align: left; }
@@ -283,12 +296,13 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 <body>
 <header>
   <div class="brand">
-    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+    <span class="brand-mark"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+      <defs><linearGradient id="brand-gradient" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${PALETTE.accent}"/><stop offset=".52" stop-color="${PALETTE.lavender}"/><stop offset="1" stop-color="${PALETTE.pink}"/></linearGradient></defs>
       <circle cx="17" cy="17" r="15" fill="none" stroke="currentColor" stroke-width="1.5"/>
       <circle cx="17" cy="17" r="10" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>
       <path d="M17 4.5l3.2 12.5L17 29.5l-3.2-12.5z" fill="currentColor"/>
       <path d="M4.5 17h4M25.5 17h4" stroke="currentColor" stroke-width="1.5"/>
-    </svg>
+    </svg></span>
     <h1>Skills Atlas</h1>
   </div>
   <label class="search">
@@ -381,7 +395,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     if (installedById.has(skill.id)) { if (removes.has(skill.id)) removes.delete(skill.id); else removes.add(skill.id); }
     else if (adds.has(skill.id)) adds.delete(skill.id);
     else adds.set(skill.id, skill);
-    renderRows(); renderPanel();
+    updateRow(skill.id); renderPanel();
   }
 
   // ---- list ------------------------------------------------------------------------------
@@ -394,7 +408,10 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     if (s.stars) return '<b>' + esc(compact.format(s.stars)) + '</b><span>' + esc(M.stars) + '</span>';
     return s.rank != null ? '<b>#' + esc(fmt.format(s.rank)) + '</b><span>skills.sh</span>' : '';
   }
-  function githubUrl(s) { return /^[\w.-]+\/[\w.-]+$/.test(s.source) ? 'https://github.com/' + s.source : ''; }
+  function githubUrl(s) {
+    return /^[\w.-]+\/[\w.-]+$/.test(s.source) && !s.source.split('/').some(function (part) { return part === '.' || part === '..'; })
+      ? 'https://github.com/' + s.source : '';
+  }
 
   function rowHtml(s) {
     var inst = installedById.get(s.id);
@@ -402,28 +419,49 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var cls = inst ? (on ? '' : ' drop') : (on ? ' add' : '');
     var tags = '';
     if (s.official) tags += '<span class="tag official">◆ ' + esc(M.official) + '</span>';
+    if (s.recommendation) tags += '<span class="tag recommended" title="' + esc(themeName('recommended')) + '">★</span>';
     if (inst) tags += on
       ? '<span class="tag installed">● ' + esc(tr('installedIn', { where: inst.scopes.map(function (x) { return M[x]; }).join(' + ') })) + '</span>'
       : '<span class="tag drop">' + esc(M.willRemove) + '</span>';
     var url = githubUrl(s);
-    var source = url ? '<a class="source" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(s.source) + '</a>'
+    var source = url ? '<a class="source" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="g · ' + esc(M.github) + '">' + esc(s.source) + '</a>'
                      : '<span class="source">' + esc(s.source) + '</span>';
-    return '<div class="row' + cls + '" role="listitem" tabindex="0" data-id="' + esc(s.id) + '" style="' + hueStyle(s.themes && s.themes[0]) + '">' +
+    return '<div class="row' + cls + '" role="listitem" tabindex="0"' + (url ? ' aria-keyshortcuts="g"' : '') + ' data-id="' + esc(s.id) + '" style="' + hueStyle(s.themes && s.themes[0]) + '">' +
       '<input class="pin" type="checkbox" tabindex="-1"' + (on ? ' checked' : '') + ' aria-label="' + esc(s.name) + '">' +
       '<div class="title"><span class="name">' + esc(s.name) + '</span>' + source + tags + '</div>' +
       '<div class="pop">' + popularity(s) + '</div>' +
-      '<p class="desc">' + esc(s.description || M.noDescription) + '</p></div>';
+      '<p class="desc">' + esc(s.description || M.noDescription) + '</p>' +
+      (s.recommendation ? '<p class="reason">' + esc(s.recommendation.reason) + '</p>' : '') + '</div>';
   }
 
   var shown = new Map();
-  function renderRows() {
+  function updateRow(id) {
+    var s = shown.get(id), row = $('rows').querySelector('[data-id="' + CSS.escape(id) + '"]');
+    if (!s || !row) return;
+    var inst = installedById.get(id), on = isChecked(id);
+    row.classList.toggle('add', !inst && on);
+    row.classList.toggle('drop', !!inst && !on);
+    row.querySelector('.pin').checked = on;
+    if (inst) {
+      var tag = row.querySelector('.tag.installed, .tag.drop');
+      tag.className = 'tag ' + (on ? 'installed' : 'drop');
+      tag.textContent = on ? '● ' + tr('installedIn', { where: inst.scopes.map(function (x) { return M[x]; }).join(' + ') }) : M.willRemove;
+    }
+  }
+  function renderRows(append, newItems) {
     var focused = document.activeElement && document.activeElement.classList.contains('row') ? document.activeElement.dataset.id : null;
-    shown = new Map(view.items.map(function (s) { return [s.id, s]; }));
-    $('rows').innerHTML = view.items.length ? view.items.map(rowHtml).join('') : '<div class="empty">' + esc(M.noMatch) + '</div>';
+    if (append) {
+      newItems.forEach(function (s) { shown.set(s.id, s); });
+      $('rows').insertAdjacentHTML('beforeend', newItems.map(rowHtml).join(''));
+    } else {
+      shown = new Map(view.items.map(function (s) { return [s.id, s]; }));
+      $('rows').innerHTML = view.items.length ? view.items.map(rowHtml).join('') : '<div class="empty">' + esc(M.noMatch) + '</div>';
+    }
     $('rows').hidden = false;
     $('count').textContent = fmt.format(view.total);
     $('where').textContent = view.theme ? tr('resultsIn', { theme: themeName(view.theme) }) : M.resultsAll;
     var more = $('more');
+    more.disabled = false;
     more.hidden = view.items.length >= view.total;
     more.textContent = tr('loadMore', { n: fmt.format(Math.min(PAGE, view.total - view.items.length)) });
     if (focused) { var el = $('rows').querySelector('[data-id="' + CSS.escape(focused) + '"]'); if (el) el.focus(); }
@@ -436,7 +474,13 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   $('rows').addEventListener('keydown', function (e) {
     var row = e.target.closest('.row');
     if (!row) return;
+    if (e.target.closest('a') && (e.key === 'Enter' || e.key === ' ')) return;
+    if ((e.target.tagName === 'INPUT' || e.target.isContentEditable) && e.key !== ' ' && e.key !== 'Enter') return;
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(shown.get(row.dataset.id)); }
+    else if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      var url = githubUrl(shown.get(row.dataset.id));
+      if (url) { e.preventDefault(); window.open(url, '_blank', 'noopener,noreferrer'); }
+    }
     else if (e.key === 'ArrowDown' && row.nextElementSibling) { e.preventDefault(); row.nextElementSibling.focus(); }
     else if (e.key === 'ArrowUp' && row.previousElementSibling) { e.preventDefault(); row.previousElementSibling.focus(); }
   });
@@ -451,6 +495,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   function load(append) {
     var seq = ++querySeq;
     var local = view.theme === 'installed';
+    $('more').disabled = true;
     // For installed skills the server only gives the theme counts of the search.
     var p = new URLSearchParams({ q: view.q, sort: view.sort, official: view.official ? '1' : '0', theme: local ? '' : view.theme,
       offset: String(append ? view.items.length : 0), limit: String(local ? 1 : PAGE) });
@@ -467,9 +512,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
         view.items = append ? view.items.concat(r.items) : r.items;
         view.total = r.total;
       }
-      renderRows(); renderThemes();
+      renderRows(append && !local, r.items); renderThemes();
       if (!append) document.querySelector('.list').scrollTop = 0;
-    }).catch(fail);
+    }).catch(function (err) { if (seq === querySeq) { $('more').disabled = false; fail(err); } });
   }
   $('more').addEventListener('click', function () { load(true); });
 
@@ -488,9 +533,12 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       html += '<button class="mine" data-theme="installed"' + cur('installed') + '><span>' + esc(themeName('installed')) +
         '</span><span class="n">' + fmt.format(installedCount) + '</span></button>';
     }
+    var recommended = S.themes.some(function (th) { return th.id === 'recommended'; });
+    if (recommended) html += '<button class="recommended" data-theme="recommended"' + cur('recommended') + ' title="' + esc(M.recommendedHint) + '"><span>' +
+      esc(themeName('recommended')) + '</span><span class="n">' + fmt.format(view.counts.recommended || 0) + '</span></button>';
     html += '<div class="sep"></div>';
     S.themes.forEach(function (th) {
-      if (th.id === 'installed') return;
+      if (th.id === 'installed' || th.id === 'recommended') return;
       html += '<button data-theme="' + esc(th.id) + '"' + cur(th.id) + ' style="' + hueStyle(th.id) + '"><span>' +
         esc(th.label) + '</span><span class="n">' + fmt.format(view.counts[th.id] || 0) + '</span></button>';
     });
@@ -586,12 +634,13 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   $('panel').addEventListener('click', function (e) {
     var t = e.target.closest('[data-act],[data-add],[data-rm]');
     if (!t) return;
-    if (t.dataset.add) adds.delete(t.dataset.add);
-    else if (t.dataset.rm) removes.delete(t.dataset.rm);
-    else if (t.dataset.act === 'clear') { adds.clear(); removes.clear(); }
+    var changed = [];
+    if (t.dataset.add) { adds.delete(t.dataset.add); changed.push(t.dataset.add); }
+    else if (t.dataset.rm) { removes.delete(t.dataset.rm); changed.push(t.dataset.rm); }
+    else if (t.dataset.act === 'clear') { changed = Array.from(adds.keys()).concat(Array.from(removes)); adds.clear(); removes.clear(); }
     else if (t.dataset.act === 'all-agents') showAllAgents = !showAllAgents;
     else if (t.dataset.act === 'apply') return apply();
-    renderRows(); renderPanel();
+    changed.forEach(updateRow); renderPanel();
   });
   $('panel').addEventListener('change', function (e) {
     var t = e.target;
@@ -662,7 +711,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     S = st;
     installedById = new Map(st.installed.map(function (s) { return [s.id, s]; }));
     // Regions of the map: hues spread evenly over the themes, in catalog order.
-    var regions = st.themes.filter(function (th) { return th.id !== 'installed' && th.id !== 'other'; });
+    var regions = st.themes.filter(function (th) { return th.id !== 'installed' && th.id !== 'recommended' && th.id !== 'other'; });
     regions.forEach(function (th, i) { hues[th.id] = Math.round(200 + i * 360 / regions.length) % 360; });
   }
   function fail(err) {

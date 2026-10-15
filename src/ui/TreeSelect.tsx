@@ -1,16 +1,29 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByTheme, haystack, popularityLabel, SORT_ORDERS, sortSkills, type SortOrder } from '../catalog/query.js';
+import { githubUrl, openGitHub } from '../github.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
 import type { InstalledEntry } from '../catalog/installed.js';
 import type { Scope, Skill, Theme } from '../types.js';
 import { ACCENT, BOX, Hints, Panel, useTerminalSize, type Hint } from './Layout.js';
 import { isMouseInput, useListMouse } from './mouse.js';
+import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 import { fit, padStart, width } from './width.js';
 
 type Row =
   | { kind: 'theme'; theme: Theme; skills: Skill[]; expanded: boolean }
   | { kind: 'skill'; skill: Skill; themeId: string };
+
+interface ViewCache {
+  skills: Skill[];
+  themes: Theme[];
+  sort: SortOrder;
+  officialOnly: boolean;
+  filter: string;
+  sorted: Skill[];
+  visible: Skill[];
+  groups: ReturnType<typeof groupByTheme>;
+}
 
 export interface TreeSelectProps {
   themes: Theme[];
@@ -26,6 +39,8 @@ export interface TreeSelectProps {
   initialOfficial?: boolean;
   onSubmit: (ids: string[]) => void;
   onCancel: () => void;
+  /** Opens the focused skill's validated GitHub repository. */
+  onOpenGitHub?: (skill: Skill) => void;
 }
 
 /** Lines used around the list: header, status, search, details panel, hints (may wrap). */
@@ -36,6 +51,8 @@ const WHEEL_STEP = 3;
 const THEME_BOX_COLUMN = 7;
 /** Marks official skills in the list and the details panel. */
 const OFFICIAL_MARK = '◆';
+const RECOMMENDED_MARK = '★';
+const EMPTY_INSTALLED = new Map<string, InstalledEntry>();
 
 /** Theme headers, each followed by its skills when open (always open during a search). */
 function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<string>, filter: string): Row[] {
@@ -65,21 +82,26 @@ export function TreeSelect({
   themes,
   skills,
   initialSelected = [],
-  installed = new Map(),
+  installed = EMPTY_INSTALLED,
   scopes,
   initialSort = 'installs',
   initialOfficial = false,
   onSubmit,
   onCancel,
+  onOpenGitHub = openGitHub,
 }: TreeSelectProps) {
   const m = t();
   const { columns, rows: termRows } = useTerminalSize();
   const [expanded, setExpandedState] = useState<Set<string>>(new Set());
   const [selected, setSelectedState] = useState<Set<string>>(new Set(initialSelected));
   const [cursor, setCursorState] = useState(0);
+  const [filter, setFilterState] = useState('');
+  const [editingFilter, setEditingFilterState] = useState(false);
+  const [sort, setSort] = useState<SortOrder>(initialSort);
+  const [officialOnly, setOfficialOnly] = useState(initialOfficial);
   // Keys can arrive faster than renders (held arrows, pasted input, a slow terminal): the
   // handlers read and write these through a ref, so that each key sees the previous one.
-  const live = useRef({ expanded, selected, cursor });
+  const live = useRef({ expanded, selected, cursor, filter, editingFilter, sort, officialOnly });
   const setExpanded = (next: Set<string>) => {
     live.current.expanded = next;
     setExpandedState(next);
@@ -92,29 +114,61 @@ export function TreeSelect({
     live.current.cursor = next;
     setCursorState(next);
   };
-  const [filter, setFilter] = useState('');
-  const [editingFilter, setEditingFilter] = useState(false);
-  const [sort, setSort] = useState<SortOrder>(initialSort);
-  const [officialOnly, setOfficialOnly] = useState(initialOfficial);
+  const setFilter = (next: string) => {
+    live.current.filter = next;
+    setFilterState(next);
+  };
+  const setEditingFilter = (next: boolean) => {
+    live.current.editingFilter = next;
+    setEditingFilterState(next);
+  };
 
   const texts = useMemo(() => new Map(skills.map((s) => [s.id, haystack(s)])), [skills]);
-  const sorted = useMemo(() => sortSkills(skills, sort), [skills, sort]);
-  const visible = useMemo(() => {
+  const viewCache = useRef<ViewCache | undefined>(undefined);
+  // Render and input handlers share the query cache. A sort or filter key immediately changes
+  // the view used by subsequent keys, even when React has not rendered the new state yet.
+  const getView = (sort: SortOrder, officialOnly: boolean, filter: string): ViewCache => {
+    const cached = viewCache.current;
+    const sameSort = cached !== undefined && cached.skills === skills && cached.sort === sort;
+    const sameFilter = sameSort && cached.officialOnly === officialOnly && cached.filter === filter;
+    if (sameFilter && cached.themes === themes) return cached;
+    const sorted = sameSort ? cached.sorted : sortSkills(skills, sort);
     const terms = filter.toLowerCase().split(/\s+/).filter(Boolean);
-    return sorted.filter(
+    const visible = sameFilter ? cached.visible : sorted.filter(
       (s) => (!officialOnly || s.official) && terms.every((term) => texts.get(s.id)!.includes(term)),
     );
-  }, [sorted, texts, filter, officialOnly]);
-  const groups = useMemo(() => groupByTheme(themes, visible), [themes, visible]);
+    const groups = groupByTheme(themes, visible);
+    const view = { skills, themes, sort, officialOnly, filter, sorted, visible, groups };
+    viewCache.current = view;
+    return view;
+  };
+  const { visible, groups } = getView(sort, officialOnly, filter);
 
-  const rows = useMemo(() => buildRows(groups, expanded, filter), [groups, expanded, filter]);
+  // Reuse the flattened list between navigation events. Expansion still updates synchronously,
+  // so a second key arriving before React renders sees the newly opened or closed theme.
+  const rowCache = useRef<{ groups: typeof groups; expanded: Set<string>; filter: string; rows: Row[] } | undefined>(undefined);
+  const getRows = (open: Set<string>, groups: ViewCache['groups'], filter: string) => {
+    const cached = rowCache.current;
+    if (cached?.groups === groups && cached.expanded === open && cached.filter === filter) return cached.rows;
+    const rows = buildRows(groups, open, filter);
+    rowCache.current = { groups, expanded: open, filter, rows };
+    return rows;
+  };
+  const rows = getRows(expanded, groups, filter);
+
+  const { toInstall, toRemove, checkedByTheme } = useMemo(() => {
+    let toInstall = 0;
+    let toRemove = 0;
+    for (const id of selected) if (!installed.has(id)) toInstall++;
+    for (const id of installed.keys()) if (!selected.has(id)) toRemove++;
+    const checkedByTheme = new Map(groups.map((g) => [g.theme.id, g.skills.reduce((n, s) => n + Number(selected.has(s.id)), 0)]));
+    return { toInstall, toRemove, checkedByTheme };
+  }, [selected, installed, groups]);
 
   const height = Math.max(5, termRows - CHROME_LINES);
   const current = Math.min(cursor, Math.max(0, rows.length - 1));
   const top = Math.max(0, Math.min(current - Math.floor(height / 2), rows.length - height));
   const row = rows[current];
-  const toInstall = [...selected].filter((id) => !installed.has(id)).length;
-  const toRemove = [...installed.keys()].filter((id) => !selected.has(id)).length;
 
   // Column widths of skill rows: cursor+indent+box (8), name, source, status, popularity.
   const popW = 8;
@@ -124,13 +178,15 @@ export function TreeSelect({
   const sourceW = Math.max(0, columns - 2 - 8 - nameW - 2 - statusW - 2 - popW - 1);
 
   /** Rows and cursor as the keys typed so far left them, even before the next render. */
-  const liveRows = () => buildRows(groups, live.current.expanded, filter);
+  const liveView = () => getView(live.current.sort, live.current.officialOnly, live.current.filter);
+  const liveRows = () => getRows(live.current.expanded, liveView().groups, live.current.filter);
   const liveCurrent = (list: Row[]) => Math.min(live.current.cursor, Math.max(0, list.length - 1));
   const move = (delta: number) => {
     const list = liveRows();
     setCursor(Math.max(0, Math.min(list.length - 1, liveCurrent(list) + delta)));
   };
   const setOpen = (themeId: string, open: boolean) => {
+    if (live.current.expanded.has(themeId) === open) return;
     const next = new Set(live.current.expanded);
     if (open) next.add(themeId);
     else next.delete(themeId);
@@ -149,7 +205,7 @@ export function TreeSelect({
   // Actions shared by the keys and the buttons of the hint bar.
   const changes = (sel: Set<string>) =>
     [...sel].some((id) => !installed.has(id)) || [...installed.keys()].some((id) => !sel.has(id));
-  const canSubmit = changes(selected);
+  const canSubmit = toInstall > 0 || toRemove > 0;
   const submit = () => onSubmit([...live.current.selected]);
   const startSearch = () => setEditingFilter(true);
   const endSearch = () => setEditingFilter(false);
@@ -159,15 +215,25 @@ export function TreeSelect({
     setCursor(0);
   };
   const cycleSort = () => {
-    setSort((prev) => SORT_ORDERS[(SORT_ORDERS.indexOf(prev) + 1) % SORT_ORDERS.length]!);
+    const next = SORT_ORDERS[(SORT_ORDERS.indexOf(live.current.sort) + 1) % SORT_ORDERS.length]!;
+    live.current.sort = next;
+    setSort(next);
     setCursor(0);
   };
   const toggleOfficial = () => {
-    setOfficialOnly((prev) => !prev);
+    const next = !live.current.officialOnly;
+    live.current.officialOnly = next;
+    setOfficialOnly(next);
     setCursor(0);
   };
   const toggleAll = () =>
-    setExpanded(live.current.expanded.size ? new Set() : new Set(groups.map((g) => g.theme.id)));
+    setExpanded(live.current.expanded.size ? new Set() : new Set(liveView().groups.map((g) => g.theme.id)));
+  const openFocusedGitHub = () => {
+    const list = liveRows();
+    const focused = list[liveCurrent(list)];
+    if (focused?.kind === 'skill' && githubUrl(focused.skill)) onOpenGitHub(focused.skill);
+  };
+  const canOpenGitHub = row?.kind === 'skill' && githubUrl(row.skill) !== undefined;
 
   // Wheel moves the cursor; a click ticks a skill, or opens a theme (ticks it on its checkbox).
   const { ref: listRef, hover } = useListMouse(Math.min(height, rows.length - top), (e) => {
@@ -186,11 +252,11 @@ export function TreeSelect({
 
   useInput((input, key) => {
     if (isMouseInput(input)) return;
-    if (editingFilter) {
+    if (live.current.editingFilter) {
       if (key.return) endSearch();
       else if (key.escape) clearSearch();
-      else if (key.backspace || key.delete) setFilter((f) => f.slice(0, -1));
-      else if (input && !key.ctrl && !key.meta) setFilter((f) => f + input);
+      else if (key.backspace || key.delete) setFilter(live.current.filter.slice(0, -1));
+      else if (input && !key.ctrl && !key.meta) setFilter(live.current.filter + input);
       setCursor(0);
       return;
     }
@@ -211,7 +277,8 @@ export function TreeSelect({
     else if (input === 's') cycleSort();
     else if (input === 'o') toggleOfficial();
     else if (input === 'a') toggleAll();
-    else if (key.escape && filter) setFilter('');
+    else if (input === 'g') openFocusedGitHub();
+    else if (key.escape && live.current.filter) setFilter('');
     else if (key.return && changes(live.current.selected)) submit();
     else if (key.return && row?.kind === 'theme') setOpen(row.theme.id, !row.expanded);
     else if (input === 'q' || key.escape) onCancel();
@@ -230,6 +297,7 @@ export function TreeSelect({
         ['a', m.keys.expandAll, toggleAll],
         ['s', m.keys.sort, cycleSort],
         ['o', m.keys.official, toggleOfficial],
+        ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint] : []),
         [m.keyNames.enter, m.keys.continue, canSubmit ? submit : undefined],
         ['q', m.keys.quit, onCancel],
       ];
@@ -241,26 +309,26 @@ export function TreeSelect({
         <Text>
           <Text bold>{m.tree.skills(formatNumber(visible.length))}</Text>
           <Text dimColor>{'   '}</Text>
-          <Text color="green">
+          <Text color={PALETTE.success}>
             {BOX.on} {m.tree.selected(selected.size)}
           </Text>
           {(toInstall > 0 || toRemove > 0) && (
             <Text>
               {'   '}
-              <Text color="green">+{toInstall}</Text> <Text color="red">−{toRemove}</Text>
+              <Text color={PALETTE.success}>+{toInstall}</Text> <Text color={PALETTE.danger}>−{toRemove}</Text>
             </Text>
           )}
           {scopes && <Text dimColor>{`   ${m.tree.scope(scopesLabel(scopes))}`}</Text>}
           <Text dimColor>{`   ${m.tree.sortedBy(m.tree.sort[sort])}`}</Text>
-          {officialOnly && <Text color="blue">{`   ${OFFICIAL_MARK} ${m.tree.officialOnly}`}</Text>}
+          {officialOnly && <Text color={PALETTE.lavender}>{`   ${OFFICIAL_MARK} ${m.tree.officialOnly}`}</Text>}
         </Text>
         <Text dimColor>{rows.length ? m.tree.position(formatNumber(current + 1), formatNumber(rows.length)) : ''}</Text>
       </Box>
 
       {/* Search line: always reserved so that the list does not jump. */}
       <Text>
-        <Text color={editingFilter ? ACCENT : 'gray'}>/ {m.tree.searchLabel}: </Text>
-        {filter ? <Text color="yellow">{filter}</Text> : editingFilter ? <Text dimColor>{m.tree.searchPlaceholder}</Text> : null}
+        <Text color={editingFilter ? ACCENT : PALETTE.muted}>/ {m.tree.searchLabel}: </Text>
+        {filter ? <Text color={PALETTE.gold}>{filter}</Text> : editingFilter ? <Text dimColor>{m.tree.searchPlaceholder}</Text> : null}
         {editingFilter && <Text color={ACCENT}>▌</Text>}
       </Text>
 
@@ -271,20 +339,21 @@ export function TreeSelect({
           const hovered = i === hover && !focused;
           const pointer = <Text color={ACCENT}>{focused ? '❯ ' : hovered ? '› ' : '  '}</Text>;
           if (r.kind === 'theme') {
-            const n = r.skills.filter((s) => selected.has(s.id)).length;
+            const n = checkedByTheme.get(r.theme.id) ?? 0;
             const box = n === 0 ? BOX.off : n === r.skills.length ? BOX.on : BOX.some;
             return (
               <Box key={`t:${r.theme.id}`} justifyContent="space-between">
                 <Text wrap="truncate-end">
                   {pointer}
                   <Text dimColor>{r.expanded ? '▾ ' : '▸ '}</Text>
-                  <Text color={n ? 'green' : undefined}>{box} </Text>
+                  <Text color={n ? PALETTE.success : undefined}>{box} </Text>
                   <Text bold underline={hovered} color={focused || hovered ? ACCENT : undefined}>
+                    {r.theme.id === 'recommended' && <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>}
                     {themeLabel(r.theme)}
                   </Text>
                 </Text>
                 <Text>
-                  {n > 0 && <Text color="green">{`${formatNumber(n)} ✓   `}</Text>}
+                  {n > 0 && <Text color={PALETTE.success}>{`${formatNumber(n)} ✓   `}</Text>}
                   <Text dimColor>{padStart(formatNumber(r.skills.length), 7)}</Text>
                 </Text>
               </Box>
@@ -299,13 +368,14 @@ export function TreeSelect({
             <Text key={`s:${r.themeId}:${s.id}`} wrap="truncate-end">
               {pointer}
               {'  '}
-              <Text color="blue">{s.official ? OFFICIAL_MARK : ' '} </Text>
-              <Text color={isInstalled && !isOn ? 'red' : isOn ? 'green' : 'gray'}>{isOn ? BOX.on : BOX.off} </Text>
+              <Text color={PALETTE.lavender}>{s.official ? OFFICIAL_MARK : ' '} </Text>
+              <Text color={isInstalled && !isOn ? PALETTE.danger : isOn ? PALETTE.success : PALETTE.muted}>{isOn ? BOX.on : BOX.off} </Text>
               <Text bold={focused} underline={hovered} color={focused || hovered ? ACCENT : undefined}>
-                {fit(s.name, nameW)}
+                {s.recommendation && <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>}
+                {fit(s.name, nameW - (s.recommendation ? 2 : 0))}
               </Text>
               <Text dimColor>{`  ${fit(s.source, sourceW)}`}</Text>
-              <Text color={isInstalled && !isOn ? 'red' : 'cyan'}>{`  ${fit(status, statusW)}`}</Text>
+              <Text color={isInstalled && !isOn ? PALETTE.danger : PALETTE.accent}>{`  ${fit(status, statusW)}`}</Text>
               <Text dimColor>{padStart(popularityLabel(s), popW)}</Text>
             </Text>
           );
@@ -317,27 +387,27 @@ export function TreeSelect({
           <>
             <Box justifyContent="space-between">
               <Text wrap="truncate-end">
-                <Text bold>{row.skill.name}</Text>
+                <Text bold>{row.skill.recommendation && <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>}{row.skill.name}</Text>
                 <Text dimColor>{`  ${row.skill.source}`}</Text>
-                {row.skill.official && <Text color="blue">{`  ${OFFICIAL_MARK} ${m.tree.official}`}</Text>}
+                {row.skill.official && <Text color={PALETTE.lavender}>{`  ${OFFICIAL_MARK} ${m.tree.official}`}</Text>}
                 {installed.has(row.skill.id) && (
-                  <Text color="cyan">{`  ● ${m.tree.installedIn(scopesLabel(installed.get(row.skill.id)!.scopes))}`}</Text>
+                  <Text color={PALETTE.accent}>{`  ● ${m.tree.installedIn(scopesLabel(installed.get(row.skill.id)!.scopes))}`}</Text>
                 )}
               </Text>
               <Text dimColor>{popularityLong(row.skill)}</Text>
             </Box>
             <Box height={2} overflow="hidden">
-              <Text wrap="wrap">{row.skill.description ?? m.tree.noDescription}</Text>
+              <Text wrap="wrap">{row.skill.recommendation?.reason ?? row.skill.description ?? m.tree.noDescription}</Text>
             </Box>
           </>
         ) : row ? (
           <>
             <Text>
-              <Text bold>{themeLabel(row.theme)}</Text>
+              <Text bold>{row.theme.id === 'recommended' && <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>}{themeLabel(row.theme)}</Text>
               <Text dimColor>{`  ${m.tree.skills(formatNumber(row.skills.length))}`}</Text>
             </Text>
             <Box height={2}>
-              <Text dimColor>{m.tree.groupHint}</Text>
+              <Text dimColor>{row.theme.id === 'recommended' ? m.tree.recommendedHint : m.tree.groupHint}</Text>
             </Box>
           </>
         ) : (

@@ -7,6 +7,7 @@ export const en = {
   keyNames: { enter: '↵', space: '␣', esc: 'esc' },
 
   keys: {
+    github: 'GitHub',
     move: 'move',
     toggle: 'toggle',
     search: 'search',
@@ -43,6 +44,7 @@ export const en = {
     noDescription: 'No description.',
     noMatch: 'No skill matches this search.',
     groupHint: 'Press space to toggle the whole group.',
+    recommendedHint: 'A personal selection of skills.',
     installed: 'installed',
     toRemove: 'will be uninstalled',
     position: (a: string, b: string) => `${a} / ${b}`,
@@ -111,6 +113,8 @@ export const en = {
 
   /** Web interface (`skills-atlas ui`): plain strings, {placeholders} filled in by the page. */
   web: {
+    github: 'Open GitHub repository',
+    recommendedHint: 'A personal selection of skills.',
     serving: 'Skills Atlas is open at',
     stop: 'Press Ctrl+C to stop.',
     needAgent: 'Pick at least one agent.',
@@ -234,6 +238,7 @@ export const en = {
   },
 
   themes: {
+    recommended: 'Recommended',
     installed: 'Already installed',
     frontend: 'Frontend & web',
     backend: 'Backend & APIs',

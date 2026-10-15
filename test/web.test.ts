@@ -7,6 +7,8 @@ import type { InstallCommand } from '../src/install/plan.js';
 import type { CommandOutcome, InstalledSkill } from '../src/install/run.js';
 import type { Skill } from '../src/types.js';
 import { startServer, type AtlasServer } from '../src/web/server.js';
+import { withRecommendations } from '../src/catalog/recommended.js';
+import { querySkills } from '../src/catalog/query.js';
 
 const skill = (id: string, themes: string[], extra: Partial<Skill> = {}): Skill => {
   const [source, name] = id.split('@') as [string, string];
@@ -69,6 +71,31 @@ const post = (path: string, body: unknown) =>
 const options = { agents: ['claude-code'], scope: 'project', method: 'symlink' };
 
 describe('web server', () => {
+  it('serves and plans curated skills absent from the downloaded catalog', async () => {
+    const catalog = withRecommendations({
+      version: 1, generatedAt: '2026-10-15', themes: [{ id: 'code', label: 'Code' }], skills: [],
+      stats: { raw: { 'skills.sh': 0, smithery: 0, 'claude-plugins.dev': 0 }, merged: 0, byTheme: {} },
+    }, [{ name: 'ponytail', repository: 'https://github.com/DietrichGebert/ponytail', reason: 'Keep changes focused.', themes: ['code'] }]);
+    const curated = await startServer({
+      skills: querySkills(catalog), catalogSkills: catalog.skills, themes: catalog.themes,
+      skillsVersion: '1.7.0', port: 0, cwd: configDir, listInstalled: async () => [],
+    });
+    const headers = { 'x-atlas-token': curated.token };
+    const url = `http://127.0.0.1:${curated.port}`;
+    try {
+      const state = await (await fetch(`${url}/api/state`, { headers })).json();
+      expect(state.themes.slice(0, 2).map((th: { id: string }) => th.id)).toEqual(['installed', 'recommended']);
+      const page = await (await fetch(`${url}/api/skills?theme=recommended`, { headers })).json();
+      expect(page.total).toBe(1);
+      expect(page.items[0]).toMatchObject({ name: 'ponytail', recommendation: { reason: 'Keep changes focused.' } });
+      const plan = await (await fetch(`${url}/api/plan`, {
+        method: 'POST', headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ install: ['DietrichGebert/ponytail@ponytail'], remove: [], options }),
+      })).json();
+      expect(plan.commands).toEqual(['npx -y skills@1.7.0 add DietrichGebert/ponytail -s ponytail -a claude-code -y --json']);
+    } finally { await curated.close(); }
+  });
+
   it('serves the page, the token staying in the fragment', async () => {
     expect(server.url).toBe(`${base()}/#${server.token}`);
     const res = await fetch(`${base()}/`);

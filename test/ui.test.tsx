@@ -1,5 +1,5 @@
-import { render } from 'ink-testing-library';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render } from 'ink-testing-library';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mergeInstalled } from '../src/catalog/installed.js';
 import { setLang } from '../src/i18n/index.js';
 import type { Skill, Theme } from '../src/types.js';
@@ -9,6 +9,8 @@ import { parseMouse } from '../src/ui/mouse.js';
 import { fit, padEnd, width } from '../src/ui/width.js';
 import stringWidth from 'string-width';
 import { TreeSelect } from '../src/ui/TreeSelect.js';
+
+afterEach(cleanup);
 
 const themes: Theme[] = [
   { id: 'frontend', label: 'Frontend & web' },
@@ -57,6 +59,115 @@ describe('TreeSelect', () => {
     await tick();
     expect(lastFrame()).toContain('1 selected');
     expect(onSubmit).toHaveBeenCalledWith(['a/b@tailwind']);
+  });
+
+  it('keeps expansion and collapse current throughout a burst of keys', async () => {
+    const onSubmit = vi.fn();
+    const { stdin } = render(<TreeSelect themes={themes} skills={skills} onSubmit={onSubmit} onCancel={() => {}} />);
+    await tick();
+    for (const key of [KEY.right, KEY.down, KEY.down, KEY.left, KEY.down, KEY.right, KEY.down, ' ', KEY.enter]) stdin.write(key);
+    await tick();
+    expect(onSubmit).toHaveBeenCalledWith(['c/d@pentest']);
+  });
+
+  it('does not rescan collapsed skills when moving or hovering over themes', async () => {
+    let idReads = 0;
+    const manySkills = Array.from({ length: 400 }, (_, i) => {
+      const id = `a/b@skill-${i}`;
+      return Object.defineProperty(skill(id, [i % 2 ? 'frontend' : 'security']), 'id', {
+        get: () => { idReads++; return id; },
+      });
+    });
+    const { stdin, unmount } = render(<TreeSelect themes={themes} skills={manySkills} onSubmit={() => {}} onCancel={() => {}} />);
+    await tick();
+    idReads = 0;
+    await press(stdin, KEY.down, mouse(35, 20, LIST_Y));
+    expect(idReads).toBe(0);
+    unmount();
+  });
+
+  it('opens the focused skill repository with g, including during rapid navigation', async () => {
+    const onOpenGitHub = vi.fn();
+    const { stdin, lastFrame } = render(
+      <TreeSelect themes={themes} skills={skills} onSubmit={() => {}} onCancel={() => {}} onOpenGitHub={onOpenGitHub} />,
+    );
+    await tick();
+    for (const key of [KEY.right, KEY.down, KEY.down, 'g']) stdin.write(key);
+    await tick();
+    expect(onOpenGitHub).toHaveBeenCalledExactlyOnceWith(skills[1]);
+    expect(lastFrame()).toContain('g GitHub');
+  });
+
+  it.each(['s', 'o'])('uses the updated view when %s and navigation arrive before redraw', async (action) => {
+    const ranked = [
+      { ...skill('z/repo@zeta', ['frontend']), installs: 1000 },
+      { ...skill('a/repo@alpha', ['frontend']), installs: 10, official: true },
+    ];
+    const onSubmit = vi.fn();
+    const onOpenGitHub = vi.fn();
+    const { stdin } = render(
+      <TreeSelect themes={themes} skills={ranked} onSubmit={onSubmit} onCancel={() => {}} onOpenGitHub={onOpenGitHub} />,
+    );
+    await tick();
+    for (const key of [action, KEY.right, KEY.down, ' ', 'g', KEY.enter]) stdin.write(key);
+    await tick();
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith(['a/repo@alpha']);
+    expect(onOpenGitHub).toHaveBeenCalledExactlyOnceWith(ranked[1]);
+  });
+
+  it('enters search before handling the next key in the same input burst', async () => {
+    const onOpenGitHub = vi.fn();
+    const { stdin, lastFrame } = render(
+      <TreeSelect themes={themes} skills={skills} onSubmit={() => {}} onCancel={() => {}} onOpenGitHub={onOpenGitHub} />,
+    );
+    await tick();
+    for (const key of [KEY.right, KEY.down, '/', 'g']) stdin.write(key);
+    await tick();
+    expect(onOpenGitHub).not.toHaveBeenCalled();
+    expect(lastFrame()).toContain('search: g');
+  });
+
+  it('uses the completed search for navigation and actions before redraw', async () => {
+    const ranked = [
+      { ...skill('z/repo@zeta', ['frontend']), installs: 1000 },
+      { ...skill('a/repo@alpha', ['frontend']), installs: 10 },
+    ];
+    const onSubmit = vi.fn();
+    const onOpenGitHub = vi.fn();
+    const { stdin } = render(
+      <TreeSelect themes={themes} skills={ranked} onSubmit={onSubmit} onCancel={() => {}} onOpenGitHub={onOpenGitHub} />,
+    );
+    await tick();
+    for (const key of ['/', 'a', 'l', 'p', 'h', 'a', KEY.enter, KEY.down, ' ', 'g', KEY.enter]) stdin.write(key);
+    await tick();
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith(['a/repo@alpha']);
+    expect(onOpenGitHub).toHaveBeenCalledExactlyOnceWith(ranked[1]);
+  });
+
+  it('does not open GitHub from headers, local skills, or while entering a search', async () => {
+    const onOpenGitHub = vi.fn();
+    const localSkills = [skill('local@notes', ['frontend']), skill('https://evil.test@unsafe', ['frontend']), skill('a/b@github', ['frontend'])];
+    const { stdin } = render(
+      <TreeSelect themes={themes} skills={localSkills} onSubmit={() => {}} onCancel={() => {}} onOpenGitHub={onOpenGitHub} />,
+    );
+    await press(stdin, 'g', KEY.right, KEY.down, 'g', KEY.down, 'g', KEY.down, '/', 'g', KEY.enter);
+    expect(onOpenGitHub).not.toHaveBeenCalled();
+  });
+
+  it('marks recommended themes and skills with a star and explains the recommendation', async () => {
+    const recommended = {
+      ...skills[0]!,
+      themes: ['recommended', 'frontend'],
+      recommendation: { repository: 'a/b', reason: 'A practical starting point for reliable React patterns.' },
+    };
+    const { stdin, lastFrame } = render(
+      <TreeSelect themes={[{ id: 'recommended', label: 'Recommended' }, ...themes]} skills={[recommended]} onSubmit={() => {}} onCancel={() => {}} />,
+    );
+    await tick();
+    expect(lastFrame()).toContain('★ Recommended');
+    await press(stdin, KEY.right, KEY.down);
+    expect(lastFrame()).toContain('★ react-hooks');
+    expect(lastFrame()).toContain('A practical starting point for reliable React patterns.');
   });
 
   it('selects a whole theme with space on its header', async () => {

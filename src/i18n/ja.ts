@@ -9,6 +9,7 @@ export const ja: Messages = {
   keyNames: { enter: '↵', space: '␣', esc: 'Esc' },
 
   keys: {
+    github: 'GitHub',
     move: '移動',
     toggle: '選択',
     search: '検索',
@@ -45,6 +46,7 @@ export const ja: Messages = {
     noDescription: '説明はありません。',
     noMatch: 'この検索に一致するスキルはありません。',
     groupHint: 'スペースキーでグループ全体を選択します。',
+    recommendedHint: '個人的に選んだおすすめスキルです。',
     installed: 'インストール済み',
     toRemove: 'アンインストール予定',
     position: (a, b) => `${a} / ${b}`,
@@ -112,6 +114,8 @@ export const ja: Messages = {
   },
 
   web: {
+    github: 'GitHub リポジトリを開く',
+    recommendedHint: '個人的に選んだおすすめスキルです。',
     serving: 'Skills Atlas を開きました：',
     stop: 'Ctrl+C で停止します。',
     needAgent: 'エージェントを 1 つ以上選んでください。',
@@ -235,6 +239,7 @@ export const ja: Messages = {
   },
 
   themes: {
+    recommended: 'おすすめ',
     installed: 'インストール済み',
     frontend: 'フロントエンド・Web',
     backend: 'バックエンド・API',

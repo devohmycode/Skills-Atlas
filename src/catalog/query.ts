@@ -47,7 +47,7 @@ export function matchesSearch(s: Skill, search: string): boolean {
 export function querySkills(catalog: Catalog, q: QueryOptions = {}): Skill[] {
   const found = catalog.skills.filter((s) => {
     if (q.official && !s.official) return false;
-    if (!q.all && !s.installs && !s.stars && s.rank === undefined) return false;
+    if (!q.all && !s.recommendation && !s.installs && !s.stars && s.rank === undefined) return false;
     if (q.minInstalls && (s.installs ?? 0) < q.minInstalls) return false;
     if (q.themes?.length && !s.themes.some((t) => q.themes!.includes(t))) return false;
     if (q.search && !matchesSearch(s, q.search)) return false;
