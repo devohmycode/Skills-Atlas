@@ -1,8 +1,12 @@
-<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/logo.png" alt="skills-atlas" width="600"></h1>
+<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/logo.png?v=0.7.0" alt="skills-atlas" width="600"></h1>
 
-Browse **every public Agent Skill** (`SKILL.md` format) grouped by theme in a collapsible tree, tick several and install them in one go through [`npx skills add`](https://github.com/vercel-labs/skills), without its interactive prompts. Skills already installed come pre-ticked: untick one to uninstall it.
+Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible terminal tree or a local web interface. Tick several and install them together through [`npx skills add`](https://github.com/vercel-labs/skills). Installed skills start ticked: untick one to uninstall it.
 
-![The skills-atlas tree: themes with their skill counts, installed skills ticked, keys at the bottom](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png)
+**★ Recommended** highlights a personal selection, starting with [Ponytail](https://github.com/DietrichGebert/ponytail). Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
+
+![Skills Atlas terminal tree showing pink selections, gold Recommended stars and keyboard controls](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.0)
+
+*Terminal: candy-pink selections, gold Recommended stars and keyboard controls.*
 
 ## Installation
 
@@ -27,9 +31,11 @@ skills-atlas ui                               # the same in your browser, with t
 
 ### Web interface
 
-![The skills-atlas web interface: themes as a colour-coded legend on the left, the catalog sorted by installs, installed skills ticked](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg)
+![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg?v=0.7.0)
 
-`skills-atlas ui` serves a local page and opens it in your browser: themes on the left, a search over the whole catalog, skills to tick (installed ones are ticked; untick to uninstall), then scope, agents and method on the right with the exact `npx skills` commands, and a live progress window once you apply. It runs the same code as the terminal (catalog, detection of installed skills, install commands) and remembers the same choices.
+*Web: the same catalog and selection workflow, with light, dark and system appearance.*
+
+`skills-atlas ui` opens a local page with themes and **★ Recommended**, catalog search and skills to tick. Installed skills start ticked; untick one to uninstall it. The changes panel shows scope, agents, method and the exact `npx skills` commands, with live progress when you apply. It shares the terminal's catalog, installation logic and remembered choices.
 
 The server listens on `127.0.0.1` only. The address carries a random token (after the `#`, so it never leaves your browser) that every request must present, and requests from any other host name are refused, so no other web page can drive installs. Stop it with Ctrl+C.
 
@@ -171,7 +177,7 @@ The snapshot is built from:
    - otherwise the crawl tries the usual locations.
 4. **Ordering**: skills ranked by skills.sh first, in rank order; then the others by installs and stars.
 
-**Themes**: each skill gets 1 or 2 of 17 themes (see `src/catalog/taxonomy.ts`), from:
+**Themes**: each skill gets one or two themes (see `src/catalog/taxonomy.ts`), from:
 
 - keywords found in its name (weight 3) and description (weight 1), including Chinese and Japanese ones;
 - the Smithery or SkillsMP categories it carries, mapped to these themes.
