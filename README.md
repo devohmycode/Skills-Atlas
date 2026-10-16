@@ -1,4 +1,4 @@
-<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/logo.png?v=0.7.0" alt="skills-atlas" width="600"></h1>
+<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/logo.png?v=0.7.1" alt="skills-atlas" width="600"></h1>
 
 Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible terminal tree or a local web interface. Tick several and install them together through [`npx skills add`](https://github.com/vercel-labs/skills). Installed skills start ticked: untick one to uninstall it.
 
