@@ -4,7 +4,7 @@ Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible ter
 
 **★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
 
-![Skills Atlas terminal tree showing pink selections, gold Recommended stars and keyboard controls](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.0)
+![Skills Atlas terminal tree showing pink selections, gold Recommended stars and keyboard controls](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.1)
 
 *Terminal: candy-pink selections, gold Recommended stars and keyboard controls.*
 
@@ -31,7 +31,7 @@ skills-atlas ui                               # the same in your browser, with t
 
 ### Web interface
 
-![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg?v=0.7.0)
+![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg?v=0.7.1)
 
 *Web: the same catalog and selection workflow, with light, dark and system appearance.*
 
