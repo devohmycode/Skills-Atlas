@@ -154,20 +154,29 @@ describe('TreeSelect', () => {
     expect(onOpenGitHub).not.toHaveBeenCalled();
   });
 
-  it('marks recommended themes and skills with a star and explains the recommendation', async () => {
-    const recommended = {
-      ...skills[0]!,
-      themes: ['recommended', 'frontend'],
-      recommendation: { repository: 'a/b', reason: 'A practical starting point for reliable React patterns.' },
-    };
+  it('groups recommended skills under their repository, which opens and ticks as a whole', async () => {
+    const recommendation = { repository: 'https://github.com/a/b', reason: 'A practical starting point for reliable React patterns.', order: 1 };
+    const picked = skills.filter((s) => s.source === 'a/b').map((s) => ({ ...s, themes: ['recommended', ...s.themes], recommendation }));
+    const other = { ...skills[2]!, themes: ['recommended', ...skills[2]!.themes], recommendation: { ...recommendation, reason: 'First.', order: 0 } };
+    const onSubmit = vi.fn();
     const { stdin, lastFrame } = render(
-      <TreeSelect themes={[{ id: 'recommended', label: 'Recommended' }, ...themes]} skills={[recommended]} onSubmit={() => {}} onCancel={() => {}} />,
+      <TreeSelect themes={[{ id: 'recommended', label: 'Recommended' }, ...themes]} skills={[...picked, other]} onSubmit={onSubmit} onCancel={() => {}} />,
     );
     await tick();
     expect(lastFrame()).toContain('★ Recommended');
-    await press(stdin, KEY.right, KEY.down);
-    expect(lastFrame()).toContain('★ react-hooks');
+    await press(stdin, KEY.right);
+    const frame = lastFrame()!;
+    // Curated order, not popularity: the repository picked first comes first.
+    expect(frame.indexOf(`★ ${other.source}`)).toBeLessThan(frame.indexOf('★ a/b'));
+    expect(frame).not.toContain('react-hooks');
+    await press(stdin, KEY.down, KEY.down);
     expect(lastFrame()).toContain('A practical starting point for reliable React patterns.');
+    await press(stdin, KEY.right);
+    expect(lastFrame()).toContain('react-hooks');
+    await press(stdin, KEY.down, KEY.left);
+    expect(lastFrame()).not.toContain('react-hooks');
+    await press(stdin, ' ', KEY.enter);
+    expect(onSubmit).toHaveBeenCalledWith(picked.map((s) => s.id));
   });
 
   it('selects a whole theme with space on its header', async () => {

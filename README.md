@@ -30,7 +30,7 @@ The catalog updates on its own, without a new version: the CLI checks for a newe
 ## Usage
 
 ```bash
-skills-atlas                                  # interactive: tree → scope → options → confirm
+skills-atlas                                  # interactive: tree → scope → options → confirm, then back to the tree
 skills-atlas browse -t security -q audit      # tree pre-filtered by theme and text
 skills-atlas browse -a claude-code cursor -g  # options given as flags are not asked; -g/-p also limits the tree to that scope
 skills-atlas themes                           # themes and their skill counts
@@ -76,7 +76,7 @@ Translations live in `src/i18n/`. Adding a language takes one file implementing 
 
 ### Recommended skills
 
-**★ Recommended** appears just below **Already installed** in the terminal tree and web sidebar. It is a personal, curated selection, independent of install counts and official publisher status. It lists whole repositories: [Ponytail](https://github.com/DietrichGebert/ponytail), [mattpocock/skills](https://github.com/mattpocock/skills), [obra/superpowers](https://github.com/obra/superpowers) and [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); the reason for each is shown with its details. Installing one runs `npx skills add <repository>` attached to the terminal, so the skills CLI asks which of its skills to install. The web interface cannot show that prompt and gives the command to run instead. A recommended skill can also appear in its usual theme, with the same checkbox and installation identity.
+**★ Recommended** appears just below **Already installed** in the terminal tree and web sidebar. It is a personal, curated selection, independent of install counts and official publisher status. It lists repositories: [Ponytail](https://github.com/DietrichGebert/ponytail), [mattpocock/skills](https://github.com/mattpocock/skills), [obra/superpowers](https://github.com/obra/superpowers) and [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills), each with the reason for the pick. Open a repository (→ in the terminal, a click on the web) to see its skills and tick the ones you want, or tick the repository itself to take them all. They are the catalog's own skills: installed ones are detected and ticked, and each also appears in its usual theme, with the same checkbox.
 
 Press **`g`** on a skill to open its GitHub repository in your default browser. In the web interface, focus a skill row first. The key remains ordinary text while searching; local skills without a repository have no GitHub action.
 
@@ -99,7 +99,7 @@ The shared selection is maintained in [`data/recommended.json`](data/recommended
 ]
 ```
 
-Only `repository` (a GitHub repository URL) and `reason` are required. Without `name`, the entry recommends the whole repository and its skills are picked at install time; with `name` (the skill's frontmatter name), it recommends that single skill. `description`, `themes` (ids from `skills-atlas themes --all`) and the skill directory `path` are optional. Existing catalog metadata is preserved. Add a pick after reviewing its `SKILL.md`, installation source and usefulness; keep `reason` specific enough to explain your choice. The list ships in the built CLI and is merged after every catalog refresh, including offline use. Changes to the shared JSON take effect after `npm run build`; personal JSON needs no build.
+Only `repository` (a GitHub repository URL) and `reason` are required. Without `name`, the entry recommends every catalog skill of the repository; with `name` (the skill's frontmatter name), it recommends that single skill. `description`, `themes` (ids from `skills-atlas themes --all`) and the skill directory `path` are optional. Existing catalog metadata is preserved. Add a pick after reviewing its `SKILL.md`, installation source and usefulness; keep `reason` specific enough to explain your choice. The list ships in the built CLI and is merged after every catalog refresh, including offline use. Changes to the shared JSON take effect after `npm run build`; personal JSON needs no build.
 
 ### Installed skills
 

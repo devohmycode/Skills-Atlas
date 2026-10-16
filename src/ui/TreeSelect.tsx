@@ -12,7 +12,10 @@ import { fit, padStart, width } from './width.js';
 
 type Row =
   | { kind: 'theme'; theme: Theme; skills: Skill[]; expanded: boolean }
-  | { kind: 'skill'; skill: Skill; themeId: string };
+  /** A recommended repository, under the Recommended theme. */
+  | { kind: 'repo'; key: string; source: string; reason: string; skills: Skill[]; expanded: boolean; themeId: string }
+  /** `parent` is the key of the repository row the skill sits under, if any. */
+  | { kind: 'skill'; skill: Skill; themeId: string; parent?: string };
 
 interface ViewCache {
   skills: Skill[];
@@ -52,7 +55,19 @@ const THEME_BOX_COLUMN = 7;
 /** Marks official skills in the list and the details panel. */
 const OFFICIAL_MARK = '◆';
 const RECOMMENDED_MARK = '★';
+const RECOMMENDED = 'recommended';
 const EMPTY_INSTALLED = new Map<string, InstalledEntry>();
+
+/** Recommended skills by repository, in the curated order; each keeps the list's order. */
+function byRepository(skills: Skill[]): { key: string; skills: Skill[] }[] {
+  const repos = new Map<string, Skill[]>();
+  for (const s of skills) {
+    const key = `${RECOMMENDED}/${s.source.toLowerCase()}`;
+    repos.set(key, [...(repos.get(key) ?? []), s]);
+  }
+  const order = (list: Skill[]) => list[0]!.recommendation?.order ?? 0;
+  return [...repos].map(([key, list]) => ({ key, skills: list })).sort((a, b) => order(a.skills) - order(b.skills));
+}
 
 /** Theme headers, each followed by its skills when open (always open during a search). */
 function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<string>, filter: string): Row[] {
@@ -60,7 +75,17 @@ function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<st
   for (const g of groups) {
     const isOpen = filter !== '' || expanded.has(g.theme.id);
     out.push({ kind: 'theme', theme: g.theme, skills: g.skills, expanded: isOpen });
-    if (isOpen) for (const skill of g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
+    if (!isOpen) continue;
+    if (g.theme.id !== RECOMMENDED) {
+      for (const skill of g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
+      continue;
+    }
+    for (const repo of byRepository(g.skills)) {
+      const open = filter !== '' || expanded.has(repo.key);
+      const first = repo.skills[0]!;
+      out.push({ kind: 'repo', key: repo.key, source: first.source, reason: first.recommendation?.reason ?? '', skills: repo.skills, expanded: open, themeId: g.theme.id });
+      if (open) for (const skill of repo.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id, parent: repo.key });
+    }
   }
   return out;
 }
@@ -227,7 +252,8 @@ export function TreeSelect({
     setCursor(0);
   };
   const toggleAll = () =>
-    setExpanded(live.current.expanded.size ? new Set() : new Set(liveView().groups.map((g) => g.theme.id)));
+    setExpanded(live.current.expanded.size ? new Set() : new Set(liveView().groups.flatMap((g) =>
+      [g.theme.id, ...(g.theme.id === RECOMMENDED ? byRepository(g.skills).map((r) => r.key) : [])])));
   const openFocusedGitHub = () => {
     const list = liveRows();
     const focused = list[liveCurrent(list)];
@@ -246,8 +272,8 @@ export function TreeSelect({
     setEditingFilter(false);
     setCursor(index);
     if (r.kind === 'skill') toggle([r.skill.id]);
-    else if (e.x <= THEME_BOX_COLUMN) toggle(r.skills.map((s) => s.id));
-    else setOpen(r.theme.id, !r.expanded);
+    else if (e.x <= THEME_BOX_COLUMN + (r.kind === 'repo' ? 2 : 0)) toggle(r.skills.map((s) => s.id));
+    else setOpen(r.kind === 'repo' ? r.key : r.theme.id, !r.expanded);
   });
 
   useInput((input, key) => {
@@ -267,12 +293,18 @@ export function TreeSelect({
     else if (key.pageUp) move(-height);
     else if (key.pageDown) move(height);
     else if (key.rightArrow && row?.kind === 'theme') setOpen(row.theme.id, true);
-    else if (key.leftArrow && row) {
+    else if (key.rightArrow && row?.kind === 'repo') setOpen(row.key, true);
+    else if (key.leftArrow && row?.kind === 'skill' && row.parent) {
+      // A skill under a repository closes that repository, not the whole theme.
+      const parent = row.parent;
+      setOpen(parent, false);
+      setCursor(liveRows().findIndex((r) => r.kind === 'repo' && r.key === parent));
+    } else if (key.leftArrow && row) {
       const themeId = row.kind === 'theme' ? row.theme.id : row.themeId;
       setOpen(themeId, false);
       setCursor(liveRows().findIndex((r) => r.kind === 'theme' && r.theme.id === themeId));
     } else if (input === ' ' && row) {
-      toggle(row.kind === 'theme' ? row.skills.map((s) => s.id) : [row.skill.id]);
+      toggle(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
     } else if (input === '/') startSearch();
     else if (input === 's') cycleSort();
     else if (input === 'o') toggleOfficial();
@@ -281,6 +313,7 @@ export function TreeSelect({
     else if (key.escape && live.current.filter) setFilter('');
     else if (key.return && changes(live.current.selected)) submit();
     else if (key.return && row?.kind === 'theme') setOpen(row.theme.id, !row.expanded);
+    else if (key.return && row?.kind === 'repo') setOpen(row.key, !row.expanded);
     else if (input === 'q' || key.escape) onCancel();
   });
 
@@ -359,7 +392,31 @@ export function TreeSelect({
               </Box>
             );
           }
+          if (r.kind === 'repo') {
+            const n = r.skills.reduce((k, s) => k + Number(selected.has(s.id)), 0);
+            const box = n === 0 ? BOX.off : n === r.skills.length ? BOX.on : BOX.some;
+            return (
+              <Box key={`r:${r.key}`} justifyContent="space-between">
+                <Text wrap="truncate-end">
+                  {pointer}
+                  {'  '}
+                  <Text dimColor>{r.expanded ? '▾ ' : '▸ '}</Text>
+                  <Text color={n ? PALETTE.success : undefined}>{box} </Text>
+                  <Text bold underline={hovered} color={focused || hovered ? ACCENT : undefined}>
+                    <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>
+                    {r.source}
+                  </Text>
+                </Text>
+                <Text>
+                  {n > 0 && <Text color={PALETTE.success}>{`${formatNumber(n)} ✓   `}</Text>}
+                  <Text dimColor>{padStart(formatNumber(r.skills.length), 7)}</Text>
+                </Text>
+              </Box>
+            );
+          }
           const s = r.skill;
+          // Under its repository the star is already on the repository row.
+          const star = s.recommendation !== undefined && !r.parent;
           const isOn = selected.has(s.id);
           const entry = installed.get(s.id);
           const isInstalled = entry !== undefined;
@@ -367,12 +424,12 @@ export function TreeSelect({
           return (
             <Text key={`s:${r.themeId}:${s.id}`} wrap="truncate-end">
               {pointer}
-              {'  '}
+              {r.parent ? '    ' : '  '}
               <Text color={PALETTE.lavender}>{s.official ? OFFICIAL_MARK : ' '} </Text>
               <Text color={isInstalled && !isOn ? PALETTE.danger : isOn ? PALETTE.success : PALETTE.muted}>{isOn ? BOX.on : BOX.off} </Text>
               <Text bold={focused} underline={hovered} color={focused || hovered ? ACCENT : undefined}>
-                {s.recommendation && <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>}
-                {fit(s.name, nameW - (s.recommendation ? 2 : 0))}
+                {star && <Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>}
+                {fit(s.name, nameW - (star ? 2 : 0) - (r.parent ? 2 : 0))}
               </Text>
               <Text dimColor>{`  ${fit(s.source, sourceW)}`}</Text>
               <Text color={isInstalled && !isOn ? PALETTE.danger : PALETTE.accent}>{`  ${fit(status, statusW)}`}</Text>
@@ -397,7 +454,17 @@ export function TreeSelect({
               <Text dimColor>{popularityLong(row.skill)}</Text>
             </Box>
             <Box height={2} overflow="hidden">
-              <Text wrap="wrap">{row.skill.recommendation?.reason ?? row.skill.description ?? m.tree.noDescription}</Text>
+              <Text wrap="wrap">{row.skill.description ?? row.skill.recommendation?.reason ?? m.tree.noDescription}</Text>
+            </Box>
+          </>
+        ) : row?.kind === 'repo' ? (
+          <>
+            <Text>
+              <Text bold><Text color={PALETTE.gold}>{RECOMMENDED_MARK} </Text>{row.source}</Text>
+              <Text dimColor>{`  ${m.tree.skills(formatNumber(row.skills.length))}`}</Text>
+            </Text>
+            <Box height={2} overflow="hidden">
+              <Text wrap="wrap">{row.reason}</Text>
             </Box>
           </>
         ) : row ? (

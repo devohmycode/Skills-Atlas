@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.2 — 2026-10-16
+
+- **★ Recommended** groups its skills by repository: Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Open a repository to tick the skills you want, or tick the repository to take them all. These are the catalog's own skills, so installed ones are detected and ticked, and each installs on its own.
+- After installing or uninstalling, `skills-atlas` returns to the skill list with the run's summary, until you quit.
+- Replace the interactive whole-repository install of 0.7.1.
+
+Validation: 113 tests and TypeScript checks.
+
 ## 0.7.1 — 2026-10-16
 
 - **★ Recommended** now lists four whole repositories: [Ponytail](https://github.com/DietrichGebert/ponytail), [mattpocock/skills](https://github.com/mattpocock/skills), [obra/superpowers](https://github.com/obra/superpowers) and [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills).

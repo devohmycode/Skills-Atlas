@@ -1,26 +1,18 @@
 [
   {
     "repository": "https://github.com/DietrichGebert/ponytail",
-    "description": "Helps agents make smaller, maintainable changes with appropriate verification.",
-    "reason": "A useful reminder to keep solutions simple and focused on the task.",
-    "themes": ["code"]
+    "reason": "A useful reminder to keep solutions simple and focused on the task."
   },
   {
     "repository": "https://github.com/mattpocock/skills",
-    "description": "Matt Pocock's skills for real engineering: grilling plans, TDD, architecture, specs and tickets.",
-    "reason": "Sharp, battle-tested workflows that make agents plan before they code.",
-    "themes": ["productivity"]
+    "reason": "Sharp, battle-tested workflows that make agents plan before they code."
   },
   {
     "repository": "https://github.com/obra/superpowers",
-    "description": "Superpowers: brainstorming, plans, test-driven development, debugging and code review.",
-    "reason": "A complete development method that agents follow from idea to merged branch.",
-    "themes": ["productivity"]
+    "reason": "A complete development method that agents follow from idea to merged branch."
   },
   {
     "repository": "https://github.com/addyosmani/agent-skills",
-    "description": "Addy Osmani's production-grade engineering skills, from spec to shipping.",
-    "reason": "Covers the whole lifecycle: specs, quality, security, performance and launch.",
-    "themes": ["code"]
+    "reason": "Covers the whole lifecycle: specs, quality, security, performance and launch."
   }
 ]

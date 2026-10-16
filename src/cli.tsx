@@ -11,7 +11,7 @@ import { groupByTheme, popularityLabel, querySkills, resolveTheme, SORT_ORDERS, 
 import { readConfig, writeConfig } from './config.js';
 import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, systemLang, t, themeLabel, type Lang } from './i18n/index.js';
 import { formatCommand, parseSkillId, planInstall, planRemovals, type InstallCommand } from './install/plan.js';
-import { isSuccess, listInstalled, runAll, runCommand, type CommandOutcome } from './install/run.js';
+import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import type { Catalog, InstallMethod, InstallOptions, Removal, Scope } from './types.js';
 import { App, type WizardResult } from './ui/App.js';
 import { Progress } from './ui/Progress.js';
@@ -139,44 +139,34 @@ function presetFromFlags(flags: InstallFlags): Partial<Pick<InstallOptions, 'age
 }
 
 /** Uninstalls `remove` (from each of their scopes), then installs `ids`, reporting each skill. */
-async function apply(ids: string[], remove: Removal[], options: InstallOptions, flags: InstallFlags): Promise<void> {
+/** Returns the summary line it printed (empty for a dry run). */
+async function apply(ids: string[], remove: Removal[], options: InstallOptions, flags: InstallFlags): Promise<string> {
   const r = t().run;
   const commands = [...planRemovals(remove, options.skillsVersion), ...(ids.length ? planInstall(ids, options) : [])];
   if (flags.dryRun) {
     for (const c of commands) console.log(formatCommand(c));
-    return;
+    return '';
   }
   const config = readConfig();
   // Removals only: nothing was asked, so there is nothing to remember.
   if (ids.length) writeConfig({ ...config, agents: options.agents, scope: options.scope, method: options.method });
-  const batch = commands.filter((c) => !c.interactive);
-  const repositories = commands.filter((c) => c.interactive);
-  if (repositories.length && !process.stdin.isTTY) fail(r.needTerminal(repositories.map(formatCommand).join('\n')));
   const started = Date.now();
-  const outcomes = !batch.length
-    ? []
-    : process.stdout.isTTY && !flags.verbose
-      ? await runWithProgress(batch)
-      : await runPlain(batch, options, flags);
-  // The skills CLI asks which skills of the repository to install, so it needs the terminal to itself.
-  for (const c of repositories) {
-    console.log(`\n${paint('bold', r.installing)} ${paint('dim', c.source)}`);
-    outcomes.push(await runCommand(c));
-  }
+  const outcomes =
+    process.stdout.isTTY && !flags.verbose ? await runWithProgress(commands) : await runPlain(commands, options, flags);
   const results = outcomes.flatMap((o) => o.results);
   const installed = results.filter((x) => x.status === 'installed').length;
   const removed = results.filter((x) => x.status === 'removed').length;
   const failed = outcomes.filter((o) => !isSuccess(o)).length;
-  // A whole repository counts the skills the user picked in it.
-  const expected = outcomes.reduce((n, o) => n + (o.command.kind !== 'add' ? 0 : o.command.interactive ? o.results.length : o.command.skills.length), 0);
   const parts = [
-    ids.length ? paint(installed === expected ? 'pink' : 'yellow', r.summaryInstalled(installed, expected)) : '',
+    ids.length ? paint(installed === ids.length ? 'pink' : 'yellow', r.summaryInstalled(installed, ids.length)) : '',
     remove.length ? paint(removed === remove.length ? 'pink' : 'yellow', r.summaryRemoved(removed, remove.length)) : '',
     failed ? paint('red', r.summaryFailed(failed)) : '',
     paint('dim', t().progress.finished(`${((Date.now() - started) / 1000).toFixed(1)}s`)),
   ].filter(Boolean);
-  console.log(parts.join(paint('dim', '  ·  ')));
+  const summary = parts.join(paint('dim', '  ·  '));
+  console.log(summary);
   if (failed) process.exitCode = 1;
+  return summary;
 }
 
 /** Stacked progress bars (Ink), for an interactive terminal. */
@@ -290,31 +280,36 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
     const skills = querySkills(catalog, toQuery(catalog, opts));
     if (!skills.length) fail(m.errors.noMatch);
     const preset = presetFromFlags(opts);
-    const { defaults, detected } = resolveDefaults();
     const loadInstalled = async (scopes: Scope[]) =>
       mergeInstalled(catalog.skills, skills, (await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat());
-    let result: WizardResult | null = null;
-    const restoreScreen = opts.mouse ? enableMouse() : () => {};
-    const app = render(
-      <App
-        themes={catalog.themes}
-        skills={skills}
-        preset={preset}
-        defaults={defaults}
-        detectedAgents={detected}
-        skillsVersion={opts.skillsVersion}
-        loadInstalled={loadInstalled}
-        sort={opts.sort}
-        official={opts.official}
-        onDone={(r) => (result = r)}
-      />,
-    );
-    await app.waitUntilExit();
-    restoreScreen();
-    releaseStdin();
-    const chosen = result as WizardResult | null;
-    if (!chosen) return console.log(paint('dim', m.run.noChange));
-    await apply(chosen.ids, chosen.remove, chosen.options, opts);
+    // Back to the tree after each run, with what is installed now, until the user quits.
+    for (let runs = 0, notice = ''; ; runs++) {
+      const { defaults, detected } = resolveDefaults();
+      let result: WizardResult | null = null;
+      const restoreScreen = opts.mouse ? enableMouse() : () => {};
+      const app = render(
+        <App
+          themes={catalog.themes}
+          skills={skills}
+          preset={preset}
+          defaults={defaults}
+          detectedAgents={detected}
+          skillsVersion={opts.skillsVersion}
+          loadInstalled={loadInstalled}
+          sort={opts.sort}
+          official={opts.official}
+          notice={notice}
+          onDone={(r) => (result = r)}
+        />,
+      );
+      await app.waitUntilExit();
+      restoreScreen();
+      releaseStdin();
+      const chosen = result as WizardResult | null;
+      if (!chosen) return runs ? undefined : console.log(paint('dim', m.run.noChange));
+      notice = await apply(chosen.ids, chosen.remove, chosen.options, opts);
+      if (opts.dryRun) return;
+    }
   });
 
 filterOptions(program.command('list'))

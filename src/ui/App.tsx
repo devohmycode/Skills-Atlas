@@ -38,6 +38,8 @@ export interface AppProps {
   official?: boolean;
   /** Detects what is installed in these scopes, to pre-tick it in the tree. */
   loadInstalled?: (scopes: Scope[]) => Promise<TreeData>;
+  /** Summary of the previous run, shown above the tree. */
+  notice?: string;
   onDone: (result: WizardResult | null) => void;
 }
 
@@ -79,7 +81,7 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, onDone } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, onDone } = props;
   const m = t();
   const { exit } = useApp();
   const { rows } = useTerminalSize();
@@ -156,6 +158,7 @@ export function App(props: AppProps) {
     return screen(
       <Box flexDirection="column">
         {error && <Text color={PALETTE.danger}>{error}</Text>}
+        {notice && <Text>{notice}</Text>}
         <TreeSelect
           themes={tree.installed.size ? [INSTALLED_THEME, ...themes] : themes}
           skills={tree.skills}

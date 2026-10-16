@@ -50,10 +50,16 @@ describe('recommendations', () => {
     expect(() => withRecommendations(catalog, [{ ...pick, themes: ['unknown'] }])).toThrow(/theme/i);
   });
 
-  it('turns a pick without a name into the whole repository', () => {
-    const { name: _, ...repo } = pick;
-    const [skill] = querySkills(withRecommendations(catalog, [repo]));
-    expect(skill).toMatchObject({ id: 'DietrichGebert/ponytail@*', name: 'ponytail', source: 'DietrichGebert/ponytail' });
+  it('recommends every catalog skill of a repository picked without a name', () => {
+    const own = (name: string, source = 'obra/superpowers') => ({
+      id: `${source}@${name}`, name, source, installs: 1, labels: [], origins: ['skills.sh'] as ['skills.sh'], themes: ['coding'],
+    });
+    const enriched = withRecommendations({ ...catalog, skills: [own('brainstorming'), own('tdd'), own('pdf', 'anthropics/skills')] }, [
+      { repository: 'https://github.com/Obra/superpowers', reason: 'A complete method.' },
+    ]);
+    expect(querySkills(enriched, { themes: ['recommended'] }).map((s) => s.id)).toEqual(['obra/superpowers@brainstorming', 'obra/superpowers@tdd']);
+    expect(enriched.skills.find((s) => s.name === 'tdd')).toMatchObject({ recommendation: { reason: 'A complete method.', order: 0 }, themes: ['recommended', 'coding'] });
+    expect(enriched.skills.find((s) => s.name === 'pdf')?.recommendation).toBeUndefined();
   });
 
   it('adds a known curated theme missing from an alternative catalog', () => {

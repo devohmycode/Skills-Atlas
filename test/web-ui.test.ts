@@ -24,7 +24,7 @@ function browser() {
   };
   const script = [...PAGE_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)![1]!;
   new Script(script.replace(/\}\)\(\);\s*$/, `
-    globalThis.ui = { view, renderRows, renderThemes, rowHtml, toggle, githubUrl,
+    globalThis.ui = { view, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl,
       init: function (state, messages) { M = messages; setState(state); } };
   })();`)).runInNewContext(context);
   context.ui.init({
@@ -44,9 +44,13 @@ function browser() {
 describe('web interface', () => {
   it('escapes curated reasons and keeps Recommended ahead of regular themes', () => {
     const { ui, skill, element } = browser();
-    const html = ui.rowHtml({ ...skill, recommendation: { reason: '<script>bad</script>' } });
-    expect(html).toContain('class="tag recommended"');
+    const picked = { ...skill, recommendation: { reason: '<script>bad</script>', order: 0 } };
+    expect(ui.rowHtml(picked)).toContain('class="tag recommended"');
+    const html = ui.groupsHtml([picked, { ...picked, id: 'other/repo@x', source: 'other/repo', recommendation: { reason: 'first', order: -1 } }]);
     expect(html).toContain('&lt;script&gt;bad&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
+    // One group per repository, in the curated order.
+    expect(html.indexOf('data-repo="other/repo"')).toBeLessThan(html.indexOf('data-repo="owner/repo"'));
     ui.renderThemes();
     expect(element('themes').innerHTML.indexOf('data-theme="recommended"')).toBeLessThan(element('themes').innerHTML.indexOf('data-theme="code"'));
   });

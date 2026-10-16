@@ -3,7 +3,6 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import bundled from '../../data/recommended.json' with { type: 'json' };
 import { configPath } from '../config.js';
-import { WHOLE_REPOSITORY } from '../install/plan.js';
 import type { Catalog, Skill, Theme } from '../types.js';
 import { allThemes } from './taxonomy.js';
 import { isValidSource } from './normalize.js';
@@ -12,7 +11,7 @@ export const RECOMMENDED_THEME: Theme = { id: 'recommended', label: 'Recommended
 
 const repositoryPattern = /^https:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9_.-]*)\/([A-Za-z0-9_.-]+?)\/?$/i;
 const Recommendations = z.array(z.object({
-  /** Without a name, the pick is the whole repository: the user chooses its skills at install time. */
+  /** Without a name, the pick is the whole repository: every catalog skill it holds. */
   name: z.string().regex(/^(?!-)[A-Za-z0-9_.-]+$/).optional(),
   repository: z.string().regex(repositoryPattern),
   reason: z.string().trim().min(1),
@@ -45,7 +44,7 @@ export function withRecommendations(catalog: Catalog, raw: unknown = readRecomme
   const byId = new Map(catalog.skills.map((s) => [s.id.toLowerCase(), s]));
   const themes = new Map(catalog.themes.map((th) => [th.id, th]));
   const knownThemes = new Map(allThemes().map((th) => [th.id, th]));
-  for (const pick of picks) {
+  for (const [order, pick] of picks.entries()) {
     const match = repositoryPattern.exec(pick.repository)!;
     const source = `${match[1]}/${match[2]!.replace(/\.git$/i, '')}`;
     if (!isValidSource(source) || source.split('/').some((part) => part === '.' || part === '..')) throw new Error('Invalid recommendation repository');
@@ -55,17 +54,26 @@ export function withRecommendations(catalog: Catalog, raw: unknown = readRecomme
       if (!theme) throw new Error(`Unknown recommendation theme for ${pick.name}: ${id}`);
       themes.set(id, theme);
     }
-    const id = `${source}@${pick.name ?? WHOLE_REPOSITORY}`;
+    const recommendation = { repository: `https://github.com/${source}`, reason: pick.reason, order };
+    if (!pick.name) {
+      // The real catalog skills, so installed ones are detected and each installs on its own.
+      for (const [key, skill] of byId) {
+        if (skill.source.toLowerCase() !== source.toLowerCase() || skill.recommendation) continue;
+        byId.set(key, { ...skill, recommendation, themes: [...new Set(['recommended', ...skill.themes])] });
+      }
+      continue;
+    }
+    const id = `${source}@${pick.name}`;
     const existing = byId.get(id.toLowerCase());
     const base: Skill = existing ?? {
-      id, name: pick.name ?? source.split('/')[1]!, source, description: pick.description, path: pick.path,
+      id, name: pick.name, source, description: pick.description, path: pick.path,
       labels: [], origins: [], themes: pick.themes ?? [],
     };
     byId.set(id.toLowerCase(), {
       ...base,
       description: base.description || pick.description,
       path: base.path ?? pick.path,
-      recommendation: { repository: `https://github.com/${source}`, reason: pick.reason },
+      recommendation,
       themes: [...new Set(['recommended', ...base.themes, ...(pick.themes ?? [])])],
     });
   }

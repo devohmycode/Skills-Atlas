@@ -32,7 +32,8 @@ export interface Skill {
   /** Published by the vendor itself (its GitHub owner is listed on officialskills.sh). */
   official?: boolean;
   /** Personal editorial selection, independent of popularity or official status. */
-  recommendation?: { repository: string; reason: string };
+  /** `order` is the pick's position in the curated list, which orders its repository group. */
+  recommendation?: { repository: string; reason: string; order: number };
   labels: string[];
   origins: Origin[];
   /** Theme ids, 1 or 2, the first being the primary theme. */

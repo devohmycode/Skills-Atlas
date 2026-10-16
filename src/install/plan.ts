@@ -9,8 +9,6 @@ export interface InstallCommand {
   args: string[];
   /** Scope the command works on, used to check removals afterwards. */
   scope: Scope;
-  /** Runs attached to the terminal so the skills CLI can ask which skills to install. */
-  interactive?: boolean;
 }
 
 /** Splits `owner/repo@skill` into its source and skill name. */
@@ -41,25 +39,14 @@ export function planInstall(ids: string[], opts: InstallOptions): InstallCommand
     if (!list.includes(name)) list.push(name);
     bySource.set(source, list);
   }
-  return [...bySource.entries()].flatMap(([source, names]) => {
-    const flags = [...(opts.scope === 'global' ? ['-g'] : []), ...(opts.method === 'copy' ? ['--copy'] : [])];
-    const commands: InstallCommand[] = [];
-    // `@*` stands for the whole repository: without `-s`, `-y` nor `--json`, the skills CLI lets the user pick.
-    if (names.includes(WHOLE_REPOSITORY)) {
-      const args = ['-y', `skills@${opts.skillsVersion}`, 'add', source, '-a', ...opts.agents, ...flags];
-      commands.push({ kind: 'add', source, skills: [WHOLE_REPOSITORY], args, scope: opts.scope, interactive: true });
-    }
-    const skills = names.filter((n) => n !== WHOLE_REPOSITORY);
-    if (skills.length) {
-      const args = ['-y', `skills@${opts.skillsVersion}`, 'add', source, '-s', ...skills, '-a', ...opts.agents, ...flags, '-y', '--json'];
-      commands.push({ kind: 'add', source, skills, args, scope: opts.scope });
-    }
-    return commands;
+  return [...bySource.entries()].map(([source, skills]) => {
+    const args = ['-y', `skills@${opts.skillsVersion}`, 'add', source, '-s', ...skills, '-a', ...opts.agents];
+    if (opts.scope === 'global') args.push('-g');
+    if (opts.method === 'copy') args.push('--copy');
+    args.push('-y', '--json');
+    return { kind: 'add' as const, source, skills, args, scope: opts.scope };
   });
 }
-
-/** Skill name of a recommendation that installs a whole repository (`owner/repo@*`). */
-export const WHOLE_REPOSITORY = '*';
 
 /**
  * One `npx skills remove` call for every skill to uninstall. Without `-a` the

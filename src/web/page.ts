@@ -180,6 +180,20 @@ a.source:hover { color: var(--accent); text-decoration: underline; }
 }
 .more:hover { border-color: var(--accent); color: var(--accent); }
 .empty { padding: 56px 24px; text-align: center; color: var(--ink-2); }
+.repo { border-top: 1px solid var(--rule); }
+.repo:first-child { border-top: 0; }
+.repo-head {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 14px; align-items: baseline;
+  padding: 14px 18px 14px 22px; cursor: pointer; list-style: none; outline: none; background: var(--sheet-2);
+}
+.repo-head::-webkit-details-marker { display: none; }
+.repo-head:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.repo-head .name::before { content: '★ '; color: var(--gold); }
+.repo-head .reason::before { content: none; }
+.repo-head .fold { grid-column: 3; color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.repo-head .fold::after { content: ' ▸'; }
+.repo[open] .repo-head .fold::after { content: ' ▾'; }
+.repo .row { padding-left: 40px; }
 
 /* ---- changes panel ----------------------------------------------------------------------- */
 aside { background: var(--sheet); border-left: 1px solid var(--rule); display: flex; flex-direction: column; overflow: hidden; }
@@ -396,7 +410,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     else if (adds.has(skill.id)) adds.delete(skill.id);
     else adds.set(skill.id, skill);
     updateRow(skill.id); renderPanel();
+    if (grouped()) updateRepoPin(repoKey(skill));
   }
+  function grouped() { return view.theme === 'recommended'; }
 
   // ---- list ------------------------------------------------------------------------------
   function hueStyle(themeId) {
@@ -430,8 +446,49 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       '<input class="pin" type="checkbox" tabindex="-1"' + (on ? ' checked' : '') + ' aria-label="' + esc(s.name) + '">' +
       '<div class="title"><span class="name">' + esc(s.name) + '</span>' + source + tags + '</div>' +
       '<div class="pop">' + popularity(s) + '</div>' +
-      '<p class="desc">' + esc(s.description || M.noDescription) + '</p>' +
-      (s.recommendation ? '<p class="reason">' + esc(s.recommendation.reason) + '</p>' : '') + '</div>';
+      '<p class="desc">' + esc(s.description || M.noDescription) + '</p></div>';
+  }
+
+  // ---- recommended repositories ------------------------------------------------------------
+  /** Opened repository groups, kept across reloads of the list. */
+  var openRepos = new Set();
+  function repoKey(s) { return s.source.toLowerCase(); }
+  /** Recommended skills by repository, in the curated order; each keeps the list's order. */
+  function byRepository(items) {
+    var groups = new Map();
+    items.forEach(function (s) {
+      var key = repoKey(s);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    });
+    var order = function (list) { return list[0].recommendation ? list[0].recommendation.order : 0; };
+    return Array.from(groups.entries()).sort(function (a, b) { return order(a[1]) - order(b[1]); });
+  }
+  function repoChecked(list) { return list.every(function (s) { return isChecked(s.id); }); }
+  function groupsHtml(items) {
+    return byRepository(items).map(function (g) {
+      var key = g[0], list = g[1], first = list[0];
+      return '<details class="repo" data-repo="' + esc(key) + '"' + (openRepos.has(key) ? ' open' : '') + '>' +
+        '<summary class="repo-head" role="listitem"><input class="pin" type="checkbox" tabindex="-1" data-repo-pin' +
+        (repoChecked(list) ? ' checked' : '') + ' aria-label="' + esc(first.source) + '">' +
+        '<div class="title"><span class="name">' + esc(first.source) + '</span></div>' +
+        '<span class="fold">' + esc(tr('repoSkills', { n: fmt.format(list.length) })) + '</span>' +
+        (first.recommendation ? '<p class="reason">' + esc(first.recommendation.reason) + '</p>' : '') +
+        '</summary>' + list.map(rowHtml).join('') + '</details>';
+    }).join('');
+  }
+  function repoSkills(key) {
+    return Array.from(shown.values()).filter(function (s) { return repoKey(s) === key; });
+  }
+  function updateRepoPin(key) {
+    var pin = $('rows').querySelector('[data-repo="' + CSS.escape(key) + '"] [data-repo-pin]');
+    if (pin) pin.checked = repoChecked(repoSkills(key));
+  }
+  /** Ticks every skill of the repository, or unticks them all when they all are. */
+  function toggleRepo(key) {
+    var list = repoSkills(key), on = repoChecked(list);
+    list.forEach(function (s) { if (isChecked(s.id) === on) toggle(s); });
+    updateRepoPin(key);
   }
 
   var shown = new Map();
@@ -455,7 +512,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       $('rows').insertAdjacentHTML('beforeend', newItems.map(rowHtml).join(''));
     } else {
       shown = new Map(view.items.map(function (s) { return [s.id, s]; }));
-      $('rows').innerHTML = view.items.length ? view.items.map(rowHtml).join('') : '<div class="empty">' + esc(M.noMatch) + '</div>';
+      $('rows').innerHTML = !view.items.length ? '<div class="empty">' + esc(M.noMatch) + '</div>'
+        : grouped() ? groupsHtml(view.items) : view.items.map(rowHtml).join('');
     }
     $('rows').hidden = false;
     $('count').textContent = fmt.format(view.total);
@@ -468,10 +526,27 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   }
   $('rows').addEventListener('click', function (e) {
     if (e.target.closest('a')) return;
+    var pin = e.target.closest('[data-repo-pin]');
+    // The checkbox of a repository ticks its skills instead of opening the group.
+    if (pin) {
+      e.preventDefault();
+      var key = pin.closest('.repo').dataset.repo;
+      toggleRepo(key);
+      // The browser restores a checkbox whose click was cancelled, after this handler.
+      setTimeout(function () { updateRepoPin(key); });
+      return;
+    }
     var row = e.target.closest('.row');
     if (row) toggle(shown.get(row.dataset.id));
   });
+  $('rows').addEventListener('toggle', function (e) {
+    var key = e.target.dataset && e.target.dataset.repo;
+    if (!key) return;
+    if (e.target.open) openRepos.add(key); else openRepos.delete(key);
+  }, true);
   $('rows').addEventListener('keydown', function (e) {
+    var head = e.target.closest('.repo-head');
+    if (head && e.key === ' ') { e.preventDefault(); toggleRepo(head.parentElement.dataset.repo); return; }
     var row = e.target.closest('.row');
     if (!row) return;
     if (e.target.closest('a') && (e.key === 'Enter' || e.key === ' ')) return;
@@ -498,7 +573,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     $('more').disabled = true;
     // For installed skills the server only gives the theme counts of the search.
     var p = new URLSearchParams({ q: view.q, sort: view.sort, official: view.official ? '1' : '0', theme: local ? '' : view.theme,
-      offset: String(append ? view.items.length : 0), limit: String(local ? 1 : PAGE) });
+      offset: String(append ? view.items.length : 0), limit: String(local ? 1 : grouped() ? 500 : PAGE) });
     return apiJson('/api/skills?' + p).then(function (r) {
       if (seq !== querySeq) return;
       view.counts = r.counts; view.all = r.all;
