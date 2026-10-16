@@ -2,7 +2,7 @@
 
 Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible terminal tree or a local web interface. Tick several and install them together through [`npx skills add`](https://github.com/vercel-labs/skills). Installed skills start ticked: untick one to uninstall it.
 
-**★ Recommended** highlights a personal selection, starting with [Ponytail](https://github.com/DietrichGebert/ponytail). Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
+**★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
 
 ![Skills Atlas terminal tree showing pink selections, gold Recommended stars and keyboard controls](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.0)
 
@@ -65,7 +65,7 @@ Translations live in `src/i18n/`. Adding a language takes one file implementing 
 
 ### Recommended skills
 
-**★ Recommended** appears just below **Already installed** in the terminal tree and web sidebar. It is a personal, curated selection, independent of install counts and official publisher status. The initial pick is [Ponytail](https://github.com/DietrichGebert/ponytail); its reason for inclusion is shown with its details. A recommended skill can also appear in its usual theme, with the same checkbox and installation identity.
+**★ Recommended** appears just below **Already installed** in the terminal tree and web sidebar. It is a personal, curated selection, independent of install counts and official publisher status. It lists whole repositories: [Ponytail](https://github.com/DietrichGebert/ponytail), [mattpocock/skills](https://github.com/mattpocock/skills), [obra/superpowers](https://github.com/obra/superpowers) and [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills); the reason for each is shown with its details. Installing one runs `npx skills add <repository>` attached to the terminal, so the skills CLI asks which of its skills to install. The web interface cannot show that prompt and gives the command to run instead. A recommended skill can also appear in its usual theme, with the same checkbox and installation identity.
 
 Press **`g`** on a skill to open its GitHub repository in your default browser. In the web interface, focus a skill row first. The key remains ordinary text while searching; local skills without a repository have no GitHub action.
 
@@ -73,6 +73,10 @@ The shared selection is maintained in [`data/recommended.json`](data/recommended
 
 ```json
 [
+  {
+    "repository": "https://github.com/obra/superpowers",
+    "reason": "A complete development method that agents follow from idea to merged branch."
+  },
   {
     "name": "ponytail",
     "repository": "https://github.com/DietrichGebert/ponytail",
@@ -84,7 +88,7 @@ The shared selection is maintained in [`data/recommended.json`](data/recommended
 ]
 ```
 
-Only `name` (the skill's frontmatter name), `repository` and `reason` are required. Use a GitHub repository URL, with a separate entry for each skill you recommend from it. `description`, `themes` (ids from `skills-atlas themes --all`) and the skill directory `path` are optional. Existing catalog metadata is preserved. Add a pick after reviewing its `SKILL.md`, installation source and usefulness; keep `reason` specific enough to explain your choice. The list ships in the built CLI and is merged after every catalog refresh, including offline use. Changes to the shared JSON take effect after `npm run build`; personal JSON needs no build.
+Only `repository` (a GitHub repository URL) and `reason` are required. Without `name`, the entry recommends the whole repository and its skills are picked at install time; with `name` (the skill's frontmatter name), it recommends that single skill. `description`, `themes` (ids from `skills-atlas themes --all`) and the skill directory `path` are optional. Existing catalog metadata is preserved. Add a pick after reviewing its `SKILL.md`, installation source and usefulness; keep `reason` specific enough to explain your choice. The list ships in the built CLI and is merged after every catalog refresh, including offline use. Changes to the shared JSON take effect after `npm run build`; personal JSON needs no build.
 
 ### Installed skills
 
