@@ -108,6 +108,7 @@ export const ja: Messages = {
     removed: 'アンインストール済み',
     failed: '失敗',
     summaryInstalled: (a, b) => `${a}/${b} 件インストール`,
+    needTerminal: (c) => `リポジトリ全体のインストールではスキルを選択します。ターミナルで実行するか、直接実行してください:\n${c}`,
     summaryRemoved: (a, b) => `${a}/${b} 件アンインストール`,
     summaryFailed: (n) => `${n} 件のコマンドが失敗`,
     noChange: '変更はありません。',

@@ -108,6 +108,7 @@ export const ko: Messages = {
     removed: '제거됨',
     failed: '실패',
     summaryInstalled: (a, b) => `${a}/${b} 설치됨`,
+    needTerminal: (c) => `저장소 전체를 설치하면 설치할 스킬을 묻습니다. 터미널에서 실행하거나 직접 실행하세요:\n${c}`,
     summaryRemoved: (a, b) => `${a}/${b} 제거됨`,
     summaryFailed: (n) => `명령 ${n}개 실패`,
     noChange: '변경 사항이 없습니다.',

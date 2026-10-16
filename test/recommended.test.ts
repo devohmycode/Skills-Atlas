@@ -50,6 +50,12 @@ describe('recommendations', () => {
     expect(() => withRecommendations(catalog, [{ ...pick, themes: ['unknown'] }])).toThrow(/theme/i);
   });
 
+  it('turns a pick without a name into the whole repository', () => {
+    const { name: _, ...repo } = pick;
+    const [skill] = querySkills(withRecommendations(catalog, [repo]));
+    expect(skill).toMatchObject({ id: 'DietrichGebert/ponytail@*', name: 'ponytail', source: 'DietrichGebert/ponytail' });
+  });
+
   it('adds a known curated theme missing from an alternative catalog', () => {
     const enriched = withRecommendations({ ...catalog, themes: [] }, [{ ...pick, themes: ['code'] }]);
     expect(enriched.themes.map((th) => th.id)).toEqual(['recommended', 'code']);
@@ -60,7 +66,7 @@ describe('recommendations', () => {
     const dir = mkdtempSync(join(tmpdir(), 'atlas-curation-'));
     const path = join(dir, 'recommended.json');
     try {
-      expect(readRecommendations(path)).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'ponytail' })]));
+      expect(readRecommendations(path)).toEqual(expect.arrayContaining([expect.objectContaining({ repository: 'https://github.com/DietrichGebert/ponytail' })]));
       writeFileSync(path, JSON.stringify([pick]));
       expect(readRecommendations(path)).toEqual([pick]);
       writeFileSync(path, '[]');

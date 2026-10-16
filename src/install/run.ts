@@ -59,7 +59,7 @@ export interface NpxRun {
 /** Runs `npx <args>` without a shell, capturing its output. */
 export function runNpx(
   npxArgs: string[],
-  opts: { cwd?: string; verbose?: boolean; onStderr?: (text: string) => void } = {},
+  opts: { cwd?: string; verbose?: boolean; onStderr?: (text: string) => void; inherit?: boolean } = {},
 ): Promise<NpxRun> {
   const { file, prefix, shell } = npxLauncher();
   const args = [...prefix, ...npxArgs];
@@ -67,13 +67,13 @@ export function runNpx(
     const child = spawn(file, shell ? args.map((a) => `"${a}"`) : args, {
       cwd: opts.cwd,
       shell,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0' },
+      stdio: opts.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+      env: opts.inherit ? process.env : { ...process.env, FORCE_COLOR: '0' },
     });
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
-    child.stderr.on('data', (d: Buffer) => {
+    child.stdout?.on('data', (d: Buffer) => (stdout += d.toString()));
+    child.stderr?.on('data', (d: Buffer) => {
       stderr = (stderr + d.toString()).slice(-4000);
       if (opts.verbose) process.stderr.write(d);
       opts.onStderr?.(d.toString());
@@ -110,7 +110,16 @@ export async function runCommand(
   command: InstallCommand,
   opts: { cwd?: string; verbose?: boolean; onStderr?: (text: string) => void } = {},
 ): Promise<CommandOutcome> {
-  const run = await runNpx(command.args, opts);
+  const run = await runNpx(command.args, { ...opts, inherit: command.interactive });
+  if (command.interactive) {
+    // The skills CLI printed its own summary: report what the repository now has installed.
+    const source = command.source.toLowerCase();
+    const installed = run.exitCode === 0 ? await listInstalled(command.scope, opts.cwd).catch(() => []) : [];
+    const results: SkillResult[] = installed
+      .filter((s) => s.source?.toLowerCase() === source)
+      .map((s) => ({ name: s.name, status: 'installed', source: s.source, agents: s.agents }));
+    return { command, exitCode: run.exitCode, results, stderr: '' };
+  }
   if (command.kind === 'add') {
     return { command, exitCode: run.exitCode, results: parseResults(run.stdout), stderr: run.stderr };
   }
@@ -157,6 +166,7 @@ export async function runAll(
 /** A command failed if it exited non-zero or reported a skill not installed/removed as asked. */
 export function isSuccess(o: CommandOutcome): boolean {
   const expected = o.command.kind === 'remove' ? 'removed' : 'installed';
+  if (o.command.interactive) return o.exitCode === 0;
   return o.exitCode === 0 && o.results.length > 0 && o.results.every((r) => r.status === expected);
 }
 

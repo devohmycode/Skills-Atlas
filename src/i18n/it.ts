@@ -110,6 +110,7 @@ export const it: Messages = {
     removed: 'disinstallata',
     failed: 'non riuscito',
     summaryInstalled: (a, b) => `${a}/${b} ${s(a, 'installata', 'installate')}`,
+    needTerminal: (c) => `Installare un intero repository chiede quali skill installare: eseguilo da un terminale, o direttamente:\n${c}`,
     summaryRemoved: (a, b) => `${a}/${b} ${s(a, 'disinstallata', 'disinstallate')}`,
     summaryFailed: (n) => `${n} ${s(n, 'comando non riuscito', 'comandi non riusciti')}`,
     noChange: 'Nessuna modifica.',

@@ -108,6 +108,7 @@ export const zh: Messages = {
     removed: '已卸载',
     failed: '失败',
     summaryInstalled: (a, b) => `已安装 ${a}/${b}`,
+    needTerminal: (c) => `安装整个仓库时会询问要安装哪些技能：请在终端中运行，或直接运行：\n${c}`,
     summaryRemoved: (a, b) => `已卸载 ${a}/${b}`,
     summaryFailed: (n) => `${n} 条命令失败`,
     noChange: '没有任何更改。',

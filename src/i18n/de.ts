@@ -110,6 +110,7 @@ export const de: Messages = {
     removed: 'deinstalliert',
     failed: 'fehlgeschlagen',
     summaryInstalled: (a, b) => `${a}/${b} installiert`,
+    needTerminal: (c) => `Ein ganzes Repository fragt, welche Skills installiert werden: im Terminal ausführen oder direkt:\n${c}`,
     summaryRemoved: (a, b) => `${a}/${b} deinstalliert`,
     summaryFailed: (n) => `${n} ${s(n, 'Befehl', 'Befehle')} fehlgeschlagen`,
     noChange: 'Keine Änderungen.',

@@ -11,7 +11,7 @@ import { groupByTheme, popularityLabel, querySkills, resolveTheme, SORT_ORDERS, 
 import { readConfig, writeConfig } from './config.js';
 import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, systemLang, t, themeLabel, type Lang } from './i18n/index.js';
 import { formatCommand, parseSkillId, planInstall, planRemovals, type InstallCommand } from './install/plan.js';
-import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
+import { isSuccess, listInstalled, runAll, runCommand, type CommandOutcome } from './install/run.js';
 import type { Catalog, InstallMethod, InstallOptions, Removal, Scope } from './types.js';
 import { App, type WizardResult } from './ui/App.js';
 import { Progress } from './ui/Progress.js';
@@ -149,15 +149,28 @@ async function apply(ids: string[], remove: Removal[], options: InstallOptions, 
   const config = readConfig();
   // Removals only: nothing was asked, so there is nothing to remember.
   if (ids.length) writeConfig({ ...config, agents: options.agents, scope: options.scope, method: options.method });
+  const batch = commands.filter((c) => !c.interactive);
+  const repositories = commands.filter((c) => c.interactive);
+  if (repositories.length && !process.stdin.isTTY) fail(r.needTerminal(repositories.map(formatCommand).join('\n')));
   const started = Date.now();
-  const outcomes =
-    process.stdout.isTTY && !flags.verbose ? await runWithProgress(commands) : await runPlain(commands, options, flags);
+  const outcomes = !batch.length
+    ? []
+    : process.stdout.isTTY && !flags.verbose
+      ? await runWithProgress(batch)
+      : await runPlain(batch, options, flags);
+  // The skills CLI asks which skills of the repository to install, so it needs the terminal to itself.
+  for (const c of repositories) {
+    console.log(`\n${paint('bold', r.installing)} ${paint('dim', c.source)}`);
+    outcomes.push(await runCommand(c));
+  }
   const results = outcomes.flatMap((o) => o.results);
   const installed = results.filter((x) => x.status === 'installed').length;
   const removed = results.filter((x) => x.status === 'removed').length;
   const failed = outcomes.filter((o) => !isSuccess(o)).length;
+  // A whole repository counts the skills the user picked in it.
+  const expected = outcomes.reduce((n, o) => n + (o.command.kind !== 'add' ? 0 : o.command.interactive ? o.results.length : o.command.skills.length), 0);
   const parts = [
-    ids.length ? paint(installed === ids.length ? 'pink' : 'yellow', r.summaryInstalled(installed, ids.length)) : '',
+    ids.length ? paint(installed === expected ? 'pink' : 'yellow', r.summaryInstalled(installed, expected)) : '',
     remove.length ? paint(removed === remove.length ? 'pink' : 'yellow', r.summaryRemoved(removed, remove.length)) : '',
     failed ? paint('red', r.summaryFailed(failed)) : '',
     paint('dim', t().progress.finished(`${((Date.now() - started) / 1000).toFixed(1)}s`)),

@@ -166,6 +166,9 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       ...planRemovals(removals, opts.skillsVersion),
       ...(install.length ? planInstall([...new Set(install)], full) : []),
     ];
+    // The skills CLI asks in the terminal which skills of a whole repository to install.
+    const repositories = commands.filter((c) => c.interactive);
+    if (repositories.length) throw new HttpError(400, t().run.needTerminal(repositories.map(formatCommand).join('\n')));
     return { commands, options: full, installs: install.length };
   }
 

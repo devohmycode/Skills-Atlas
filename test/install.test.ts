@@ -37,6 +37,15 @@ describe('planInstall', () => {
     expect(cmd!.args.slice(3)).toEqual(['o/r', '-s', 'x', '-a', 'cursor', 'codex', '-g', '--copy', '-y', '--json']);
   });
 
+  it('lets the skills CLI ask which skills of a whole repository to install', () => {
+    const cmds = planInstall(['o/r@*', 'o/r@x'], { ...base, scope: 'global' });
+    expect(cmds.map((c) => [c.interactive ?? false, c.args.slice(3)])).toEqual([
+      [true, ['o/r', '-a', 'claude-code', '-g']],
+      [false, ['o/r', '-s', 'x', '-a', 'claude-code', '-g', '-y', '--json']],
+    ]);
+    expect(isSuccess({ command: cmds[0]!, exitCode: 0, stderr: '', results: [] })).toBe(true);
+  });
+
   it('never builds a command without agents', () => {
     expect(() => planInstall(['o/r@x'], { ...base, agents: [] })).toThrow(/agent/);
   });

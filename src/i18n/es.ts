@@ -110,6 +110,7 @@ export const es: Messages = {
     removed: 'desinstalado',
     failed: 'error',
     summaryInstalled: (a, b) => `${a}/${b} ${s(b, 'instalado', 'instalados')}`,
+    needTerminal: (c) => `Instalar un repositorio completo pregunta qué skills instalar: ejecútalo en una terminal, o directamente:\n${c}`,
     summaryRemoved: (a, b) => `${a}/${b} ${s(b, 'desinstalado', 'desinstalados')}`,
     summaryFailed: (n) => `${n} ${s(n, 'comando falló', 'comandos fallaron')}`,
     noChange: 'Sin cambios.',

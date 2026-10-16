@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import bundled from '../../data/recommended.json' with { type: 'json' };
 import { configPath } from '../config.js';
+import { WHOLE_REPOSITORY } from '../install/plan.js';
 import type { Catalog, Skill, Theme } from '../types.js';
 import { allThemes } from './taxonomy.js';
 import { isValidSource } from './normalize.js';
@@ -11,7 +12,8 @@ export const RECOMMENDED_THEME: Theme = { id: 'recommended', label: 'Recommended
 
 const repositoryPattern = /^https:\/\/github\.com\/([A-Za-z0-9][A-Za-z0-9_.-]*)\/([A-Za-z0-9_.-]+?)\/?$/i;
 const Recommendations = z.array(z.object({
-  name: z.string().regex(/^(?!-)[A-Za-z0-9_.-]+$/),
+  /** Without a name, the pick is the whole repository: the user chooses its skills at install time. */
+  name: z.string().regex(/^(?!-)[A-Za-z0-9_.-]+$/).optional(),
   repository: z.string().regex(repositoryPattern),
   reason: z.string().trim().min(1),
   description: z.string().optional(),
@@ -53,10 +55,10 @@ export function withRecommendations(catalog: Catalog, raw: unknown = readRecomme
       if (!theme) throw new Error(`Unknown recommendation theme for ${pick.name}: ${id}`);
       themes.set(id, theme);
     }
-    const id = `${source}@${pick.name}`;
+    const id = `${source}@${pick.name ?? WHOLE_REPOSITORY}`;
     const existing = byId.get(id.toLowerCase());
     const base: Skill = existing ?? {
-      id, name: pick.name, source, description: pick.description, path: pick.path,
+      id, name: pick.name ?? source.split('/')[1]!, source, description: pick.description, path: pick.path,
       labels: [], origins: [], themes: pick.themes ?? [],
     };
     byId.set(id.toLowerCase(), {
