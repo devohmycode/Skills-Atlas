@@ -4,9 +4,9 @@ Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible ter
 
 **★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
 
-![Skills Atlas terminal tree showing pink selections, gold Recommended stars and keyboard controls](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.1)
+![Skills Atlas terminal tree with installed skills, Recommended grouped by repository and two superpowers skills ticked](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.2)
 
-*Terminal: candy-pink selections, gold Recommended stars and keyboard controls.*
+*Terminal: installed skills ticked, ★ Recommended opened by repository, candy-pink selections.*
 
 ## Installation
 
@@ -42,7 +42,7 @@ skills-atlas ui                               # the same in your browser, with t
 
 ### Web interface
 
-![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg?v=0.7.1)
+![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg?v=0.7.2)
 
 *Web: the same catalog and selection workflow, with light, dark and system appearance.*
 
@@ -110,6 +110,10 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 - **Uninstall**: unticking an installed skill marks it `✗ will be uninstalled`. On confirmation it is removed from every agent of every scope it was found in, with one `npx skills remove -s … -y [-g]` per scope, then checked on disk.
 - **Install**: ticking a skill that is not installed installs it. The scope is asked after the tree, pre-filled with your last choice, unless `-p`/`-g` sets it.
 - **Questions**: the status line shows the balance `+N −M`. Scope, agents and method are only asked when there is something to install.
+
+![Skills Atlas agent step listing every supported agent, with the agents detected on this machine flagged and two of them ticked](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/agents.png?v=0.7.2)
+
+*Agents step: every agent the skills CLI supports, with those detected on this machine flagged `· detected`.*
 
 ### Keys (tree)
 
