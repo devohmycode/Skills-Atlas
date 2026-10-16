@@ -16,6 +16,17 @@ npx skills-atlas            # or: npm i -g skills-atlas
 
 Node ≥ 20. A catalog snapshot ships inside the package, so it works offline; online, the CLI fetches the latest snapshot, rebuilt every other day (see [The catalog](#the-catalog)).
 
+### Updating
+
+```bash
+npm i -g skills-atlas@latest   # global install
+skills-atlas --version         # check the installed version
+npx skills-atlas@latest        # with npx, which may otherwise run a cached older version
+npx clear-npx-cache            # if npx still runs the old version
+```
+
+The catalog updates on its own, without a new version: the CLI checks for a newer snapshot at most every 12 hours. `skills-atlas --refresh` checks now.
+
 ## Usage
 
 ```bash
