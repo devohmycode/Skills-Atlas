@@ -78,10 +78,12 @@ export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
     }
   });
   if (settled.every((r) => r.status === 'rejected')) throw new Error('every catalog source failed');
-  const merged = dedupe(Object.values(raw).flat());
+  let merged = dedupe(Object.values(raw).flat());
   if (opts.enrich) {
-    const filled = await enrichDescriptions(merged, { max: opts.enrich, githubToken: opts.githubToken, log });
-    log(`enrich: ${filled} descriptions filled`);
+    const { filled, missing } = await enrichDescriptions(merged, { max: opts.enrich, githubToken: opts.githubToken, log });
+    // Installing a skill its repository no longer has can only fail.
+    merged = merged.filter((s) => !missing.has(s));
+    log(`enrich: ${filled} descriptions filled, ${missing.size} skills gone from their repository dropped`);
   }
   return assemble(raw, merged, await officialOwners);
 }

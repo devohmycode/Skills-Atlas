@@ -31,13 +31,21 @@ export interface EnrichOptions {
   log?: (msg: string) => void;
 }
 
+export interface EnrichResult {
+  /** Descriptions filled. */
+  filled: number;
+  /** Skills absent from their repository's tree: renamed or deleted since the registries listed them. */
+  missing: Set<Skill>;
+}
+
 /**
  * Fills missing descriptions (and paths) from each skill's SKILL.md on GitHub.
  * With a token, one Trees API call per repository locates every SKILL.md;
  * the files themselves come from raw.githubusercontent.com, which is not
- * subject to the API rate limit. Mutates the skills and returns how many were filled.
+ * subject to the API rate limit. Mutates the skills; the same tree reveals
+ * the skills that no longer exist.
  */
-export async function enrichDescriptions(skills: Skill[], opts: EnrichOptions): Promise<number> {
+export async function enrichDescriptions(skills: Skill[], opts: EnrichOptions): Promise<EnrichResult> {
   const log = opts.log ?? (() => {});
   const targets = skills.filter((s) => !s.description).sort(compareSkills).slice(0, opts.max);
   const bySource = new Map<string, Skill[]>();
@@ -45,6 +53,7 @@ export async function enrichDescriptions(skills: Skill[], opts: EnrichOptions): 
 
   const limit = pLimit(8);
   let filled = 0;
+  const missing = new Set<Skill>();
   let repos = 0;
   let stopped = false;
 
@@ -76,9 +85,14 @@ export async function enrichDescriptions(skills: Skill[], opts: EnrichOptions): 
               }),
             );
             const paths = tree.tree.filter((e) => e.type === 'blob').map((e) => e.path);
+            // A truncated tree may simply not list the skill: only a complete one proves it gone.
+            const complete = !tree.truncated && paths.some((p) => /(^|\/)SKILL\.md$/i.test(p));
             for (const skill of list) {
               const dir = skill.path ?? findSkillDir(paths, skill.name);
-              if (dir !== undefined) await readSkill(skill, dir);
+              // shortcut: matches the directory name, not the frontmatter name; a skill whose
+              // directory is named otherwise is dropped too. Read the frontmatters if that shows up.
+              if (dir === undefined && complete) missing.add(skill);
+              else if (dir !== undefined) await readSkill(skill, dir);
             }
           } else {
             for (const skill of list) {
@@ -98,5 +112,5 @@ export async function enrichDescriptions(skills: Skill[], opts: EnrichOptions): 
       }),
     ),
   );
-  return filled;
+  return { filled, missing };
 }

@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assemble } from '../src/catalog/build.js';
 import { classify } from '../src/catalog/classify.js';
 import { compareSkills, dedupe } from '../src/catalog/dedupe.js';
-import { findSkillDir, guessPaths } from '../src/catalog/enrich.js';
+import { enrichDescriptions, findSkillDir, guessPaths } from '../src/catalog/enrich.js';
 import { INSTALLED_THEME, mergeInstalled } from '../src/catalog/installed.js';
 import {
   cleanDescription,
@@ -251,6 +251,28 @@ describe('enrich', () => {
     expect(findSkillDir(paths, 'PDF')).toBe('skills/pdf');
     expect(findSkillDir(paths, 'xlsx')).toBeUndefined();
     expect(findSkillDir(['SKILL.md', 'README.md'], 'solo')).toBe('');
+  });
+
+  it('flags the skills a complete repository tree no longer holds', async () => {
+    const skill = (name: string, source = 'o/r') => ({ id: `${source}@${name}`, name, source, labels: [], origins: [], themes: [] });
+    const [kept, gone, unknown] = [skill('pdf'), skill('to-prd'), skill('x', 'o/truncated')];
+    const trees: Record<string, object> = {
+      'o/r': { tree: [{ path: 'skills/pdf/SKILL.md', type: 'blob' }] },
+      'o/truncated': { tree: [{ path: 'skills/pdf/SKILL.md', type: 'blob' }], truncated: true },
+    };
+    vi.stubGlobal('fetch', async (url: string) => {
+      const repo = /repos\/(.+?)\/git\/trees/.exec(url)?.[1];
+      return new Response(repo ? JSON.stringify(trees[repo]) : '---\nname: pdf\ndescription: PDF tools\n---\n');
+    });
+    try {
+      const { filled, missing } = await enrichDescriptions([kept, gone, unknown], { max: 10, githubToken: 't' });
+      expect(filled).toBe(1);
+      expect(kept).toMatchObject({ description: 'PDF tools', path: 'skills/pdf' });
+      // Gone from a complete tree; a truncated one proves nothing.
+      expect([...missing]).toEqual([gone]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('guesses the usual layouts first', () => {
