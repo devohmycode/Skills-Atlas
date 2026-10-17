@@ -26,6 +26,7 @@ export const it: Messages = {
     apply: 'applica',
     done: 'conferma',
     clear: 'cancella',
+    update: 'aggiorna',
   },
 
   scope: {
@@ -61,6 +62,9 @@ export const it: Messages = {
     sort: { installs: 'installazioni', name: 'nome' },
     official: 'ufficiale',
     officialOnly: 'solo ufficiali',
+    updateAvailable: 'aggiornamento disponibile',
+    toUpdate: 'sarà aggiornata',
+    updates: (n) => `${n} ${s(n, 'aggiornamento', 'aggiornamenti')} (u)`,
   },
 
   agents: {
@@ -86,6 +90,7 @@ export const it: Messages = {
     agents: 'Agenti',
     method: 'Metodo',
     commands: 'Comandi',
+    update: (n) => `Aggiorna ${n} skill (globale)`,
   },
 
   progress: {

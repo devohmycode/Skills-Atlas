@@ -24,6 +24,7 @@ export const ko: Messages = {
     apply: '적용',
     done: '완료',
     clear: '지우기',
+    update: '업데이트',
   },
 
   scope: {
@@ -59,6 +60,9 @@ export const ko: Messages = {
     sort: { installs: '설치 수', name: '이름' },
     official: '공식',
     officialOnly: '공식만',
+    updateAvailable: '업데이트 가능',
+    toUpdate: '업데이트 예정',
+    updates: (n) => `업데이트 ${n}개 (u)`,
   },
 
   agents: {
@@ -84,6 +88,7 @@ export const ko: Messages = {
     agents: '에이전트',
     method: '방식',
     commands: '명령',
+    update: (n) => `스킬 ${n}개 업데이트 (전역)`,
   },
 
   progress: {

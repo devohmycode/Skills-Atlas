@@ -22,6 +22,7 @@ export const en = {
     apply: 'apply',
     done: 'done',
     clear: 'clear',
+    update: 'update',
   },
 
   scope: {
@@ -57,6 +58,9 @@ export const en = {
     sort: { installs: 'installs', name: 'name' },
     official: 'official',
     officialOnly: 'official only',
+    updateAvailable: 'update available',
+    toUpdate: 'will be updated',
+    updates: (n: number) => `${n} update${n === 1 ? '' : 's'} (u)`,
   },
 
   agents: {
@@ -82,6 +86,7 @@ export const en = {
     agents: 'Agents',
     method: 'Method',
     commands: 'Commands',
+    update: (n: number) => `Update ${n} skill${n === 1 ? '' : 's'} to the latest version (global)`,
   },
 
   progress: {

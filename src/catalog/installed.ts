@@ -7,6 +7,8 @@ export const INSTALLED_THEME: Theme = { id: 'installed', label: 'Already install
 export interface InstalledEntry {
   name: string;
   scopes: Scope[];
+  /** Display names of the agents it is installed for, all scopes together. */
+  agents: string[];
 }
 
 export interface TreeData {
@@ -44,9 +46,10 @@ export function mergeInstalled(catalogSkills: Skill[], visible: Skill[], install
     const entry = entries.get(base.id);
     if (entry) {
       if (!entry.scopes.includes(inst.scope)) entry.scopes.push(inst.scope);
+      for (const a of inst.agents) if (!entry.agents.includes(a)) entry.agents.push(a);
       continue;
     }
-    entries.set(base.id, { name: inst.name, scopes: [inst.scope] });
+    entries.set(base.id, { name: inst.name, scopes: [inst.scope], agents: [...inst.agents] });
     shown.set(base.id, { ...base, themes: [INSTALLED_THEME.id, ...base.themes] });
   }
   for (const e of entries.values()) e.scopes.sort((a, b) => (a === 'project' ? -1 : b === 'project' ? 1 : 0));

@@ -1,4 +1,12 @@
+import { AGENTS } from '../agents.js';
 import { SCOPES, type InstallOptions, type Removal, type Scope } from '../types.js';
+
+/** An installed skill to reinstall at its latest version, for the agents that have it. */
+export interface Update {
+  id: string;
+  /** Agent display names, as the installed-skill scan reports them. */
+  agents: string[];
+}
 
 export interface InstallCommand {
   kind: 'add' | 'remove';
@@ -46,6 +54,22 @@ export function planInstall(ids: string[], opts: InstallOptions): InstallCommand
     args.push('-y', '--json');
     return { kind: 'add' as const, source, skills, args, scope: opts.scope };
   });
+}
+
+/**
+ * Updates are reinstalls: `skills add` again, in the global scope (the only
+ * one whose lock lets updates be detected), for the agents that have each
+ * skill. `skills update` is not used: it can exit 0 having skipped the skill.
+ * Agents unknown to the list fall back to the options' agents.
+ */
+export function planUpdates(updates: Update[], opts: InstallOptions): InstallCommand[] {
+  const byAgents = new Map<string, string[]>();
+  for (const u of updates) {
+    const ids = u.agents.map((name) => AGENTS.find((a) => a.displayName === name)?.id).filter((id): id is string => !!id);
+    const key = [...new Set(ids.length ? ids : opts.agents)].sort().join(' ');
+    byAgents.set(key, [...(byAgents.get(key) ?? []), u.id]);
+  }
+  return [...byAgents].flatMap(([agents, ids]) => planInstall(ids, { ...opts, agents: agents.split(' '), scope: 'global' }));
 }
 
 /**

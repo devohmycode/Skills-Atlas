@@ -10,7 +10,8 @@ import pkg from '../package.json' with { type: 'json' };
 import { groupByTheme, popularityLabel, querySkills, resolveTheme, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
 import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, systemLang, t, themeLabel, type Lang } from './i18n/index.js';
-import { formatCommand, parseSkillId, planInstall, planRemovals, type InstallCommand } from './install/plan.js';
+import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
+import { findUpdates } from './install/updates.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import type { Catalog, InstallMethod, InstallOptions, Removal, Scope } from './types.js';
 import { App, type WizardResult } from './ui/App.js';
@@ -139,11 +140,17 @@ function presetFromFlags(flags: InstallFlags): Partial<Pick<InstallOptions, 'age
   return { agents: flags.agent, scope, method };
 }
 
-/** Uninstalls `remove` (from each of their scopes), then installs `ids`, reporting each skill. */
-/** Returns the summary line it printed (empty for a dry run). */
-async function apply(ids: string[], remove: Removal[], options: InstallOptions, flags: InstallFlags): Promise<string> {
+/**
+ * Uninstalls `remove` (from each of their scopes), installs `ids` and reinstalls
+ * `update`, reporting each skill. Returns the summary line it printed (empty for a dry run).
+ */
+async function apply(ids: string[], remove: Removal[], options: InstallOptions, flags: InstallFlags, update: Update[] = []): Promise<string> {
   const r = t().run;
-  const commands = [...planRemovals(remove, options.skillsVersion), ...(ids.length ? planInstall(ids, options) : [])];
+  const commands = [
+    ...planRemovals(remove, options.skillsVersion),
+    ...(ids.length ? planInstall(ids, options) : []),
+    ...planUpdates(update, options),
+  ];
   if (flags.dryRun) {
     for (const c of commands) console.log(formatCommand(c));
     return '';
@@ -159,7 +166,9 @@ async function apply(ids: string[], remove: Removal[], options: InstallOptions, 
   const removed = results.filter((x) => x.status === 'removed').length;
   const failed = outcomes.filter((o) => !isSuccess(o)).length;
   const parts = [
-    ids.length ? paint(installed === ids.length ? 'pink' : 'yellow', r.summaryInstalled(installed, ids.length)) : '',
+    ids.length || update.length
+      ? paint(installed === ids.length + update.length ? 'pink' : 'yellow', r.summaryInstalled(installed, ids.length + update.length))
+      : '',
     remove.length ? paint(removed === remove.length ? 'pink' : 'yellow', r.summaryRemoved(removed, remove.length)) : '',
     failed ? paint('red', r.summaryFailed(failed)) : '',
     paint('dim', t().progress.finished(`${((Date.now() - started) / 1000).toFixed(1)}s`)),
@@ -302,6 +311,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           official={opts.official}
           notice={notice}
           treeMemory={treeMemory}
+          findUpdates={opts.offline ? undefined : () => findUpdates()}
           onDone={(r) => (result = r)}
         />,
       );
@@ -310,7 +320,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
       releaseStdin();
       const chosen = result as WizardResult | null;
       if (!chosen) return runs ? undefined : console.log(paint('dim', m.run.noChange));
-      notice = await apply(chosen.ids, chosen.remove, chosen.options, opts);
+      notice = await apply(chosen.ids, chosen.remove, chosen.options, opts, chosen.update);
       if (opts.dryRun) return;
     }
   });

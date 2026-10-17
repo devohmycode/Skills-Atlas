@@ -24,6 +24,7 @@ export const zh: Messages = {
     apply: '应用',
     done: '完成',
     clear: '清除',
+    update: '更新',
   },
 
   scope: {
@@ -59,6 +60,9 @@ export const zh: Messages = {
     sort: { installs: '安装量', name: '名称' },
     official: '官方',
     officialOnly: '仅官方',
+    updateAvailable: '有更新',
+    toUpdate: '将更新',
+    updates: (n) => `${n} 个更新 (u)`,
   },
 
   agents: {
@@ -84,6 +88,7 @@ export const zh: Messages = {
     agents: '智能体',
     method: '方式',
     commands: '命令',
+    update: (n) => `更新 ${n} 个技能（全局）`,
   },
 
   progress: {

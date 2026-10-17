@@ -382,6 +382,7 @@ describe('App wizard', () => {
     expect(result).toEqual({
       ids: ['a/b@react-hooks', 'a/b@tailwind'],
       remove: [],
+      update: [],
       options: { agents: ['claude-code'], scope: 'global', method: 'symlink', skillsVersion: '1.7.0' },
     });
   });
@@ -458,6 +459,28 @@ describe('installed skills in the wizard', () => {
     expect(lastFrame()).toContain('npx -y skills@1.7.0 remove -s pentest -y -g');
     await press(stdin, KEY.enter);
     expect(result).toMatchObject({ ids: [], remove: [{ name: 'pentest', scopes: ['project', 'global'] }] });
+  });
+
+  it('flags an outdated skill, marks it with u and reinstalls it for its agents', async () => {
+    let result: WizardResult | null = null;
+    const findUpdates = vi.fn(async () => new Set(['c/d@pentest']));
+    const { lastFrame, stdin } = render(
+      <App themes={themes} skills={skills} preset={{}} defaults={defaults} skillsVersion="1.7.0"
+        loadInstalled={loadInstalled} findUpdates={findUpdates} onDone={(r) => (result = r)} />,
+    );
+    await tick();
+    await tick();
+    expect(lastFrame()).toContain('↑ 1 update (u)');
+    await press(stdin, KEY.right, KEY.down);
+    expect(lastFrame()).toContain('↑ update available');
+    await press(stdin, 'u');
+    expect(lastFrame()).toContain('↑ will be updated');
+    // An update alone asks nothing: straight to the review.
+    await press(stdin, KEY.enter);
+    expect(lastFrame()).toContain('Update 1 skill to the latest version (global)');
+    expect(lastFrame()).toContain('npx -y skills@1.7.0 add c/d -s pentest -a claude-code -g -y --json');
+    await press(stdin, KEY.enter);
+    expect(result).toMatchObject({ ids: [], remove: [], update: [{ id: 'c/d@pentest', agents: ['Claude Code'] }] });
   });
 
   it('reads only the scope given as a flag', async () => {

@@ -26,6 +26,7 @@ export const es: Messages = {
     apply: 'aplicar',
     done: 'listo',
     clear: 'borrar',
+    update: 'actualizar',
   },
 
   scope: {
@@ -61,6 +62,9 @@ export const es: Messages = {
     sort: { installs: 'instalaciones', name: 'nombre' },
     official: 'oficial',
     officialOnly: 'solo oficiales',
+    updateAvailable: 'actualización disponible',
+    toUpdate: 'se actualizará',
+    updates: (n) => `${n} ${s(n, 'actualización', 'actualizaciones')} (u)`,
   },
 
   agents: {
@@ -86,6 +90,7 @@ export const es: Messages = {
     agents: 'Agentes',
     method: 'Método',
     commands: 'Comandos',
+    update: (n) => `Actualizar ${n} ${s(n, 'skill', 'skills')} (global)`,
   },
 
   progress: {

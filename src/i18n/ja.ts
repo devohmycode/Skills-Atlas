@@ -24,6 +24,7 @@ export const ja: Messages = {
     apply: '適用',
     done: '完了',
     clear: 'クリア',
+    update: '更新',
   },
 
   scope: {
@@ -59,6 +60,9 @@ export const ja: Messages = {
     sort: { installs: 'インストール数', name: '名前' },
     official: '公式',
     officialOnly: '公式のみ',
+    updateAvailable: '更新あり',
+    toUpdate: '更新予定',
+    updates: (n) => `更新 ${n} 件 (u)`,
   },
 
   agents: {
@@ -84,6 +88,7 @@ export const ja: Messages = {
     agents: 'エージェント',
     method: '方式',
     commands: 'コマンド',
+    update: (n) => `${n} 件のスキルを更新 (グローバル)`,
   },
 
   progress: {

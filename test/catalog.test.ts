@@ -293,9 +293,9 @@ describe('installed skills', () => {
       { name: 'homemade', scope: 'project', agents: ['Codex'] },
     ]);
     expect([...tree.installed.entries()]).toEqual([
-      ['anthropics/skills@pdf', { name: 'PDF', scopes: ['project'] }],
-      ['a/b@rare', { name: 'rare', scopes: ['project'] }],
-      ['local@homemade', { name: 'homemade', scopes: ['project'] }],
+      ['anthropics/skills@pdf', { name: 'PDF', scopes: ['project'], agents: ['Claude Code'] }],
+      ['a/b@rare', { name: 'rare', scopes: ['project'], agents: [] }],
+      ['local@homemade', { name: 'homemade', scopes: ['project'], agents: ['Codex'] }],
     ]);
     const byId = new Map(tree.skills.map((s) => [s.id, s]));
     expect(byId.get('anthropics/skills@pdf')!.themes).toEqual([INSTALLED_THEME.id, 'documents']);
@@ -308,10 +308,11 @@ describe('installed skills', () => {
 
   it('merges a skill installed in both scopes into one entry, project first', () => {
     const tree = mergeInstalled(catalogSkills, [pdf], [
-      { name: 'pdf', source: 'anthropics/skills', scope: 'global', agents: [] },
-      { name: 'pdf', source: 'anthropics/skills', scope: 'project', agents: [] },
+      { name: 'pdf', source: 'anthropics/skills', scope: 'global', agents: ['Codex'] },
+      { name: 'pdf', source: 'anthropics/skills', scope: 'project', agents: ['Claude Code', 'Codex'] },
     ]);
-    expect([...tree.installed.values()]).toEqual([{ name: 'pdf', scopes: ['project', 'global'] }]);
+    // Agents of both scopes together, each once.
+    expect([...tree.installed.values()]).toEqual([{ name: 'pdf', scopes: ['project', 'global'], agents: ['Codex', 'Claude Code'] }]);
     expect(tree.skills).toHaveLength(1);
   });
 });

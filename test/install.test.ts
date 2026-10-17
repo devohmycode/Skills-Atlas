@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { detectAgents, expandHome, unknownAgents } from '../src/agents.js';
-import { formatCommand, parseSkillId, planInstall, planRemove, planRemovals } from '../src/install/plan.js';
+import { formatCommand, parseSkillId, planInstall, planRemove, planRemovals, planUpdates } from '../src/install/plan.js';
 import { isSuccess, parseResults, phaseOf } from '../src/install/run.js';
 import { barFraction } from '../src/ui/Progress.js';
 import { frontmatterName, lockPath, readLockSources, scanInstalled } from '../src/install/scan.js';
@@ -35,6 +35,20 @@ describe('planInstall', () => {
   it('adds -g and --copy when asked', () => {
     const [cmd] = planInstall(['o/r@x'], { ...base, agents: ['cursor', 'codex'], scope: 'global', method: 'copy' });
     expect(cmd!.args.slice(3)).toEqual(['o/r', '-s', 'x', '-a', 'cursor', 'codex', '-g', '--copy', '-y', '--json']);
+  });
+
+  it('reinstalls updates globally, grouped by the agents that have each skill', () => {
+    const cmds = planUpdates([
+      { id: 'o/r@a', agents: ['Claude Code', 'Codex'] },
+      { id: 'o/r@b', agents: ['Codex', 'Claude Code'] },
+      { id: 'p/q@c', agents: ['Cursor'] },
+      { id: 'p/q@d', agents: ['Unknown agent'] },
+    ], { ...base, method: 'copy' });
+    expect(cmds.map((c) => c.args.slice(3).join(' '))).toEqual([
+      'o/r -s a b -a claude-code codex -g --copy -y --json',
+      'p/q -s c -a cursor -g --copy -y --json',
+      'p/q -s d -a claude-code -g --copy -y --json',
+    ]);
   });
 
   it('never builds a command without agents', () => {

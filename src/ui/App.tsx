@@ -4,7 +4,7 @@ import { AGENTS, getAgent } from '../agents.js';
 import { INSTALLED_THEME, type TreeData } from '../catalog/installed.js';
 import type { SortOrder } from '../catalog/query.js';
 import { t } from '../i18n/index.js';
-import { formatCommand, planInstall, planRemovals } from '../install/plan.js';
+import { formatCommand, planInstall, planRemovals, planUpdates, type Update } from '../install/plan.js';
 import { SCOPES, type InstallMethod, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
 import { Banner, Header, Hints, Panel, useTerminalSize, type StepId } from './Layout.js';
 import { ListSelect } from './ListSelect.js';
@@ -18,6 +18,8 @@ export interface WizardResult {
   ids: string[];
   /** Installed skills to uninstall, from every scope they are in. */
   remove: Removal[];
+  /** Installed skills to reinstall at their latest version. */
+  update: Update[];
   options: InstallOptions;
 }
 
@@ -42,6 +44,8 @@ export interface AppProps {
   notice?: string;
   /** Shared by the successive trees of one session: open groups and focused row. */
   treeMemory?: TreeMemory;
+  /** `owner/repo@name` (lower case) of the installed skills with a newer version; checked in the background. */
+  findUpdates?: () => Promise<Set<string>>;
   onDone: (result: WizardResult | null) => void;
 }
 
@@ -83,13 +87,15 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, treeMemory, onDone } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, treeMemory, findUpdates, onDone } = props;
   const m = t();
   const { exit } = useApp();
   const { rows } = useTerminalSize();
   const hasTree = !initialIds;
   const [ids, setIds] = useState<string[]>(initialIds ?? []);
   const [removals, setRemovals] = useState<Removal[]>([]);
+  const [updates, setUpdates] = useState<Update[]>([]);
+  const [outdated, setOutdated] = useState<Set<string>>(new Set());
   const [agents, setAgents] = useState<string[] | undefined>(preset.agents);
   const [scope, setScope] = useState<Scope | undefined>(preset.scope);
   const [method, setMethod] = useState<InstallMethod | undefined>(preset.method);
@@ -141,6 +147,22 @@ export function App(props: AppProps) {
     };
   }, [step]);
 
+  // Asks GitHub for newer versions once the tree is shown, without holding it up.
+  useEffect(() => {
+    if (step !== 'tree' || !findUpdates || !tree.installed.size) return;
+    let live = true;
+    findUpdates()
+      .then((found) => {
+        if (!live) return;
+        const global = [...tree.installed].filter(([, e]) => e.scopes.includes('global'));
+        setOutdated(new Set(global.map(([id]) => id).filter((id) => found.has(id.toLowerCase()))));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [step === 'tree', tree]);
+
   /** Every screen: header with the steps, the logo on the first ones, then the content. */
   const screen = (content: ReactNode) => (
     <Box flexDirection="column" paddingX={1} paddingTop={1}>
@@ -169,13 +191,15 @@ export function App(props: AppProps) {
           initialSort={sort}
           initialOfficial={official}
           memory={treeMemory}
+          updates={outdated}
           initialSelected={[...ids, ...installedIds.filter((id) => !removedIds.has(id))]}
-          onSubmit={(sel) => {
+          onSubmit={(sel, update = []) => {
             const chosen = new Set(sel);
             const toInstall = sel.filter((id) => !tree.installed.has(id));
             const toRemove = installedIds.filter((id) => !chosen.has(id)).map((id) => tree.installed.get(id)!);
-            if (!toInstall.length && !toRemove.length) return finish(null);
+            if (!toInstall.length && !toRemove.length && !update.length) return finish(null);
             setIds(toInstall);
+            setUpdates(update.map((id) => ({ id, agents: tree.installed.get(id)?.agents ?? [] })));
             // An unticked skill is uninstalled from every scope it was found in.
             setRemovals(toRemove.map((e) => ({ name: e.name, scopes: [...e.scopes] })));
             next('tree', { installs: toInstall.length });
@@ -261,8 +285,9 @@ export function App(props: AppProps) {
     <Confirm
       ids={ids}
       remove={removals}
+      update={updates}
       options={options}
-      onConfirm={() => finish({ ids, remove: removals, options })}
+      onConfirm={() => finish({ ids, remove: removals, update: updates, options })}
       onBack={back}
     />,
   );
@@ -271,12 +296,13 @@ export function App(props: AppProps) {
 interface ConfirmProps {
   ids: string[];
   remove: Removal[];
+  update: Update[];
   options: InstallOptions;
   onConfirm: () => void;
   onBack: () => void;
 }
 
-function Confirm({ ids, remove, options, onConfirm, onBack }: ConfirmProps) {
+function Confirm({ ids, remove, update, options, onConfirm, onBack }: ConfirmProps) {
   const m = t();
   useInput((input, key) => {
     if (isMouseInput(input)) return;
@@ -284,7 +310,8 @@ function Confirm({ ids, remove, options, onConfirm, onBack }: ConfirmProps) {
     else if (key.escape || input === 'n') onBack();
   });
   const removeCommands = planRemovals(remove, options.skillsVersion);
-  const addCommands = ids.length ? planInstall(ids, options) : [];
+  const addCommands = [...(ids.length ? planInstall(ids, options) : []), ...planUpdates(update, options)];
+  const installCommands = ids.length ? planInstall(ids, options) : [];
   const row = (label: string, value: string) => (
     <Text>
       <Text dimColor>{padEnd(label, 10)}</Text>
@@ -300,13 +327,18 @@ function Confirm({ ids, remove, options, onConfirm, onBack }: ConfirmProps) {
         </Panel>
       )}
       {ids.length > 0 && (
-        <Panel color={PALETTE.success} title={`+ ${m.confirm.install(ids.length, addCommands.length)}`}>
-          {addCommands.map((c) => (
+        <Panel color={PALETTE.success} title={`+ ${m.confirm.install(ids.length, installCommands.length)}`}>
+          {installCommands.map((c) => (
             <Text key={c.source} wrap="truncate-end">
               <Text dimColor>{c.source}</Text>
               {`  ${c.skills.join(', ')}`}
             </Text>
           ))}
+        </Panel>
+      )}
+      {update.length > 0 && (
+        <Panel color={PALETTE.gold} title={`↑ ${m.confirm.update(update.length)}`}>
+          <Text wrap="wrap">{update.map((u) => u.id).join('  ·  ')}</Text>
         </Panel>
       )}
       <Box flexDirection="column">

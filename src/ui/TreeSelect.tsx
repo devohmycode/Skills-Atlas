@@ -54,7 +54,10 @@ export interface TreeSelectProps {
   initialSort?: SortOrder;
   /** Start with only official skills, toggled with `o`. */
   initialOfficial?: boolean;
-  onSubmit: (ids: string[]) => void;
+  /** Installed skill ids with a newer version upstream, marked for update with `u`. */
+  updates?: Set<string>;
+  /** `update`: installed skills to reinstall at their latest version. */
+  onSubmit: (ids: string[], update?: string[]) => void;
   onCancel: () => void;
   /** Opens the focused skill's validated GitHub repository. */
   onOpenGitHub?: (skill: Skill) => void;
@@ -73,6 +76,8 @@ const OFFICIAL_MARK = '◆';
 const RECOMMENDED_MARK = '★';
 const RECOMMENDED = 'recommended';
 const EMPTY_INSTALLED = new Map<string, InstalledEntry>();
+const NO_UPDATES = new Set<string>();
+const UPDATE_MARK = '↑';
 
 /** Recommended skills by repository, in the curated order; each keeps the list's order. */
 function byRepository(skills: Skill[]): { key: string; skills: Skill[] }[] {
@@ -131,11 +136,13 @@ export function TreeSelect({
   onCancel,
   onOpenGitHub = openGitHub,
   memory,
+  updates = NO_UPDATES,
 }: TreeSelectProps) {
   const m = t();
   const { columns, rows: termRows } = useTerminalSize();
   const [expanded, setExpandedState] = useState<Set<string>>(() => new Set(memory?.expanded));
   const [selected, setSelectedState] = useState<Set<string>>(new Set(initialSelected));
+  const [toUpdate, setToUpdateState] = useState<Set<string>>(new Set());
   const [cursor, setCursorState] = useState(0);
   const [filter, setFilterState] = useState('');
   const [editingFilter, setEditingFilterState] = useState(false);
@@ -143,7 +150,7 @@ export function TreeSelect({
   const [officialOnly, setOfficialOnly] = useState(initialOfficial);
   // Keys can arrive faster than renders (held arrows, pasted input, a slow terminal): the
   // handlers read and write these through a ref, so that each key sees the previous one.
-  const live = useRef({ expanded, selected, cursor, filter, editingFilter, sort, officialOnly });
+  const live = useRef({ expanded, selected, toUpdate, cursor, filter, editingFilter, sort, officialOnly });
   const setExpanded = (next: Set<string>) => {
     live.current.expanded = next;
     setExpandedState(next);
@@ -151,6 +158,10 @@ export function TreeSelect({
   const setSelected = (next: Set<string>) => {
     live.current.selected = next;
     setSelectedState(next);
+  };
+  const setToUpdate = (next: Set<string>) => {
+    live.current.toUpdate = next;
+    setToUpdateState(next);
   };
   const setCursor = (next: number) => {
     live.current.cursor = next;
@@ -224,7 +235,7 @@ export function TreeSelect({
 
   // Column widths of skill rows: cursor+indent+box (8), name, source, status, popularity.
   const popW = 8;
-  const statusW = Math.max(width(scopesLabel(['project', 'global'])), width(m.tree.toRemove)) + 3;
+  const statusW = Math.max(width(scopesLabel(['project', 'global'])), width(m.tree.toRemove), width(m.tree.toUpdate)) + 3;
   const nameW = Math.max(18, Math.min(40, Math.floor(columns * 0.3)));
   // The screen has a 1-column padding on each side.
   const sourceW = Math.max(0, columns - 2 - 8 - nameW - 2 - statusW - 2 - popW - 1);
@@ -244,6 +255,18 @@ export function TreeSelect({
     else next.delete(themeId);
     setExpanded(next);
   };
+  /** Marks the outdated ones among `ids` for update, or unmarks them all when they all are. */
+  const toggleUpdate = (ids: string[]) => {
+    const outdated = ids.filter((id) => updates.has(id));
+    if (!outdated.length) return;
+    const next = new Set(live.current.toUpdate);
+    const allOn = outdated.every((id) => next.has(id));
+    for (const id of outdated) {
+      if (allOn) next.delete(id);
+      else next.add(id);
+    }
+    setToUpdate(next);
+  };
   const toggle = (ids: string[]) => {
     const next = new Set(live.current.selected);
     const allOn = ids.every((id) => next.has(id));
@@ -255,9 +278,12 @@ export function TreeSelect({
   };
 
   // Actions shared by the keys and the buttons of the hint bar.
+  // An update only counts for a skill that stays installed.
+  const updating = (sel: Set<string>) => [...live.current.toUpdate].filter((id) => sel.has(id));
   const changes = (sel: Set<string>) =>
-    [...sel].some((id) => !installed.has(id)) || [...installed.keys()].some((id) => !sel.has(id));
-  const canSubmit = toInstall > 0 || toRemove > 0;
+    [...sel].some((id) => !installed.has(id)) || [...installed.keys()].some((id) => !sel.has(id)) || updating(sel).length > 0;
+  const toUpdateCount = [...toUpdate].filter((id) => selected.has(id)).length;
+  const canSubmit = toInstall > 0 || toRemove > 0 || toUpdateCount > 0;
   const submit = () => {
     if (memory) {
       const list = liveRows();
@@ -265,7 +291,9 @@ export function TreeSelect({
       memory.expanded = live.current.expanded;
       memory.focus = focused && rowKey(focused);
     }
-    onSubmit([...live.current.selected]);
+    const update = updating(live.current.selected);
+    if (update.length) onSubmit([...live.current.selected], update);
+    else onSubmit([...live.current.selected]);
   };
   const startSearch = () => setEditingFilter(true);
   const endSearch = () => setEditingFilter(false);
@@ -345,6 +373,7 @@ export function TreeSelect({
     else if (input === 'o') toggleOfficial();
     else if (input === 'a') toggleAll();
     else if (input === 'g') openFocusedGitHub();
+    else if (input === 'u' && row) toggleUpdate(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
     else if (key.escape && live.current.filter) setFilter('');
     else if (key.return && changes(live.current.selected)) submit();
     else if (key.return && row?.kind === 'theme') setOpen(row.theme.id, !row.expanded);
@@ -366,6 +395,7 @@ export function TreeSelect({
         ['s', m.keys.sort, cycleSort],
         ['o', m.keys.official, toggleOfficial],
         ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint] : []),
+        ...(updates.size ? [['u', m.keys.update] as Hint] : []),
         [m.keyNames.enter, m.keys.continue, canSubmit ? submit : undefined],
         ['q', m.keys.quit, onCancel],
       ];
@@ -386,6 +416,8 @@ export function TreeSelect({
               <Text color={PALETTE.success}>+{toInstall}</Text> <Text color={PALETTE.danger}>−{toRemove}</Text>
             </Text>
           )}
+          {toUpdateCount > 0 && <Text color={PALETTE.gold}>{` ${UPDATE_MARK}${toUpdateCount}`}</Text>}
+          {updates.size > 0 && <Text color={PALETTE.gold}>{`   ${UPDATE_MARK} ${m.tree.updates(updates.size)}`}</Text>}
           {scopes && <Text dimColor>{`   ${m.tree.scope(scopesLabel(scopes))}`}</Text>}
           <Text dimColor>{`   ${m.tree.sortedBy(m.tree.sort[sort])}`}</Text>
           {officialOnly && <Text color={PALETTE.lavender}>{`   ${OFFICIAL_MARK} ${m.tree.officialOnly}`}</Text>}
@@ -455,7 +487,14 @@ export function TreeSelect({
           const isOn = selected.has(s.id);
           const entry = installed.get(s.id);
           const isInstalled = entry !== undefined;
-          const status = entry ? (isOn ? `● ${scopesLabel(entry.scopes)}` : `✗ ${m.tree.toRemove}`) : '';
+          const outdated = isOn && updates.has(s.id);
+          const status = !entry
+            ? ''
+            : !isOn
+              ? `✗ ${m.tree.toRemove}`
+              : outdated
+                ? `${UPDATE_MARK} ${toUpdate.has(s.id) ? m.tree.toUpdate : m.tree.updateAvailable}`
+                : `● ${scopesLabel(entry.scopes)}`;
           return (
             <Text key={rowKey(r)} wrap="truncate-end">
               {pointer}
@@ -467,7 +506,7 @@ export function TreeSelect({
                 {fit(s.name, nameW - (star ? 2 : 0) - (r.parent ? 2 : 0))}
               </Text>
               <Text dimColor>{`  ${fit(s.source, sourceW)}`}</Text>
-              <Text color={isInstalled && !isOn ? PALETTE.danger : PALETTE.accent}>{`  ${fit(status, statusW)}`}</Text>
+              <Text color={isInstalled && !isOn ? PALETTE.danger : outdated ? PALETTE.gold : PALETTE.accent}>{`  ${fit(status, statusW)}`}</Text>
               <Text dimColor>{padStart(popularityLabel(s), popW)}</Text>
             </Text>
           );
