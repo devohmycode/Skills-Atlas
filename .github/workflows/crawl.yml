@@ -47,5 +47,12 @@ jobs:
             echo 'catalog unchanged'
           else
             git commit -m "chore(catalog): refresh snapshot $(date -u +%F)"
-            git push
+            # main may have moved during the ~25-minute crawl: replay the snapshot on top of it.
+            # On a conflict over the generated files, this run's fresh version wins (-X theirs).
+            for attempt in 1 2 3; do
+              git pull --rebase -X theirs origin main && git push origin HEAD:main && exit 0
+              echo "push attempt $attempt failed, retrying"
+              sleep $((attempt * 10))
+            done
+            exit 1
           fi
