@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 — 2026-10-17
+
+- **Skill updates.** Globally installed skills with a newer version on GitHub read `↑ update available`, and the status line counts them. Press **`u`** to mark the focused skill, or the outdated skills of a group, then continue: each one is reinstalled at its latest version for the agents that already have it. The check compares the folder hash in the skills lock file with GitHub, one request per repository, in the background; it uses `GITHUB_TOKEN`, `GH_TOKEN` or the GitHub CLI's token when there is one. Project skills are not checked, as their lock records a hash GitHub cannot be compared with.
+- **Back where you were.** After an install, the tree reopens the same groups and focuses the same row, even when the new installs moved it.
+- **Recommended on the web.** A repository whose skills are only partly ticked shows a partial checkbox instead of an empty one.
+- **Catalog.** The crawl drops skills that their repository no longer holds, such as renamed or deleted ones still listed by the registries; installing them could only fail. They leave the catalog with the next snapshot.
+
+Validation: 120 tests and TypeScript checks.
+
 ## 0.7.2 — 2026-10-16
 
 - **★ Recommended** groups its skills by repository: Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Open a repository to tick the skills you want, or tick the repository to take them all. These are the catalog's own skills, so installed ones are detected and ticked, and each installs on its own.
