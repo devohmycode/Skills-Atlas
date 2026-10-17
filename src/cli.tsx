@@ -14,6 +14,7 @@ import { formatCommand, parseSkillId, planInstall, planRemovals, type InstallCom
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import type { Catalog, InstallMethod, InstallOptions, Removal, Scope } from './types.js';
 import { App, type WizardResult } from './ui/App.js';
+import type { TreeMemory } from './ui/TreeSelect.js';
 import { Progress } from './ui/Progress.js';
 import { colorDepth, logo } from './ui/logo.js';
 import { TERMINAL_PALETTE } from './ui/palette.js';
@@ -283,6 +284,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
     const loadInstalled = async (scopes: Scope[]) =>
       mergeInstalled(catalog.skills, skills, (await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat());
     // Back to the tree after each run, with what is installed now, until the user quits.
+    const treeMemory: TreeMemory = {};
     for (let runs = 0, notice = ''; ; runs++) {
       const { defaults, detected } = resolveDefaults();
       let result: WizardResult | null = null;
@@ -299,6 +301,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           sort={opts.sort}
           official={opts.official}
           notice={notice}
+          treeMemory={treeMemory}
           onDone={(r) => (result = r)}
         />,
       );

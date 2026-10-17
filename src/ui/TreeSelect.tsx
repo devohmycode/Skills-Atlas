@@ -28,6 +28,20 @@ interface ViewCache {
   groups: ReturnType<typeof groupByTheme>;
 }
 
+/** What the tree leaves behind when it submits, so that the next one opens where this one was. */
+export interface TreeMemory {
+  expanded?: Set<string>;
+  /** Key of the focused row. */
+  focus?: string;
+}
+
+/** Stable across renders and runs: the same skill, repository or theme keeps its key. */
+function rowKey(r: Row): string {
+  if (r.kind === 'theme') return `t:${r.theme.id}`;
+  if (r.kind === 'repo') return `r:${r.key}`;
+  return `s:${r.themeId}:${r.skill.id}`;
+}
+
 export interface TreeSelectProps {
   themes: Theme[];
   skills: Skill[];
@@ -44,6 +58,8 @@ export interface TreeSelectProps {
   onCancel: () => void;
   /** Opens the focused skill's validated GitHub repository. */
   onOpenGitHub?: (skill: Skill) => void;
+  /** Read at start and written on submit: the open groups and the focused row. */
+  memory?: TreeMemory;
 }
 
 /** Lines used around the list: header, status, search, details panel, hints (may wrap). */
@@ -114,10 +130,11 @@ export function TreeSelect({
   onSubmit,
   onCancel,
   onOpenGitHub = openGitHub,
+  memory,
 }: TreeSelectProps) {
   const m = t();
   const { columns, rows: termRows } = useTerminalSize();
-  const [expanded, setExpandedState] = useState<Set<string>>(new Set());
+  const [expanded, setExpandedState] = useState<Set<string>>(() => new Set(memory?.expanded));
   const [selected, setSelectedState] = useState<Set<string>>(new Set(initialSelected));
   const [cursor, setCursorState] = useState(0);
   const [filter, setFilterState] = useState('');
@@ -180,6 +197,16 @@ export function TreeSelect({
     return rows;
   };
   const rows = getRows(expanded, groups, filter);
+  // Back from a run: focus the row that was focused, wherever the list now puts it.
+  const restored = useRef(false);
+  if (!restored.current) {
+    restored.current = true;
+    const index = memory?.focus ? rows.findIndex((r) => rowKey(r) === memory.focus) : -1;
+    if (index > 0) {
+      live.current.cursor = index;
+      setCursorState(index);
+    }
+  }
 
   const { toInstall, toRemove, checkedByTheme } = useMemo(() => {
     let toInstall = 0;
@@ -231,7 +258,15 @@ export function TreeSelect({
   const changes = (sel: Set<string>) =>
     [...sel].some((id) => !installed.has(id)) || [...installed.keys()].some((id) => !sel.has(id));
   const canSubmit = toInstall > 0 || toRemove > 0;
-  const submit = () => onSubmit([...live.current.selected]);
+  const submit = () => {
+    if (memory) {
+      const list = liveRows();
+      const focused = list[liveCurrent(list)];
+      memory.expanded = live.current.expanded;
+      memory.focus = focused && rowKey(focused);
+    }
+    onSubmit([...live.current.selected]);
+  };
   const startSearch = () => setEditingFilter(true);
   const endSearch = () => setEditingFilter(false);
   const clearSearch = () => {
@@ -375,7 +410,7 @@ export function TreeSelect({
             const n = checkedByTheme.get(r.theme.id) ?? 0;
             const box = n === 0 ? BOX.off : n === r.skills.length ? BOX.on : BOX.some;
             return (
-              <Box key={`t:${r.theme.id}`} justifyContent="space-between">
+              <Box key={rowKey(r)} justifyContent="space-between">
                 <Text wrap="truncate-end">
                   {pointer}
                   <Text dimColor>{r.expanded ? '▾ ' : '▸ '}</Text>
@@ -396,7 +431,7 @@ export function TreeSelect({
             const n = r.skills.reduce((k, s) => k + Number(selected.has(s.id)), 0);
             const box = n === 0 ? BOX.off : n === r.skills.length ? BOX.on : BOX.some;
             return (
-              <Box key={`r:${r.key}`} justifyContent="space-between">
+              <Box key={rowKey(r)} justifyContent="space-between">
                 <Text wrap="truncate-end">
                   {pointer}
                   {'  '}
@@ -422,7 +457,7 @@ export function TreeSelect({
           const isInstalled = entry !== undefined;
           const status = entry ? (isOn ? `● ${scopesLabel(entry.scopes)}` : `✗ ${m.tree.toRemove}`) : '';
           return (
-            <Text key={`s:${r.themeId}:${s.id}`} wrap="truncate-end">
+            <Text key={rowKey(r)} wrap="truncate-end">
               {pointer}
               {r.parent ? '    ' : '  '}
               <Text color={PALETTE.lavender}>{s.official ? OFFICIAL_MARK : ' '} </Text>

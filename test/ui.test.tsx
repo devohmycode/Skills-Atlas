@@ -8,7 +8,7 @@ import { ListSelect } from '../src/ui/ListSelect.js';
 import { parseMouse } from '../src/ui/mouse.js';
 import { fit, padEnd, width } from '../src/ui/width.js';
 import stringWidth from 'string-width';
-import { TreeSelect } from '../src/ui/TreeSelect.js';
+import { TreeSelect, type TreeMemory } from '../src/ui/TreeSelect.js';
 
 afterEach(cleanup);
 
@@ -177,6 +177,20 @@ describe('TreeSelect', () => {
     expect(lastFrame()).not.toContain('react-hooks');
     await press(stdin, ' ', KEY.enter);
     expect(onSubmit).toHaveBeenCalledWith(picked.map((s) => s.id));
+  });
+
+  it('reopens where the previous tree was submitted, even when rows moved', async () => {
+    const memory: TreeMemory = {};
+    const first = render(<TreeSelect themes={themes} skills={skills} memory={memory} onSubmit={() => {}} onCancel={() => {}} />);
+    await press(first.stdin, KEY.right, KEY.down, KEY.down, ' ', KEY.enter);
+    first.unmount();
+    expect(memory).toMatchObject({ focus: 's:frontend:a/b@tailwind' });
+    // A new skill now sorts first in the theme: the focus follows tailwind, not its old position.
+    const newcomer = { ...skills[0]!, id: 'a/b@astro', name: 'astro', installs: 99 };
+    const second = render(<TreeSelect themes={themes} skills={[newcomer, ...skills]} memory={memory} onSubmit={() => {}} onCancel={() => {}} />);
+    await tick();
+    expect(second.lastFrame()).toContain('astro');
+    expect(second.lastFrame()).toMatch(/❯\s+○\s+tailwind/);
   });
 
   it('selects a whole theme with space on its header', async () => {

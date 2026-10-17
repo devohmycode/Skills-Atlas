@@ -10,7 +10,7 @@ import { Banner, Header, Hints, Panel, useTerminalSize, type StepId } from './La
 import { ListSelect } from './ListSelect.js';
 import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
-import { scopesLabel, TreeSelect } from './TreeSelect.js';
+import { scopesLabel, TreeSelect, type TreeMemory } from './TreeSelect.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 
 export interface WizardResult {
@@ -40,6 +40,8 @@ export interface AppProps {
   loadInstalled?: (scopes: Scope[]) => Promise<TreeData>;
   /** Summary of the previous run, shown above the tree. */
   notice?: string;
+  /** Shared by the successive trees of one session: open groups and focused row. */
+  treeMemory?: TreeMemory;
   onDone: (result: WizardResult | null) => void;
 }
 
@@ -81,7 +83,7 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, onDone } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, treeMemory, onDone } = props;
   const m = t();
   const { exit } = useApp();
   const { rows } = useTerminalSize();
@@ -166,6 +168,7 @@ export function App(props: AppProps) {
           scopes={loadInstalled ? readScopes : undefined}
           initialSort={sort}
           initialOfficial={official}
+          memory={treeMemory}
           initialSelected={[...ids, ...installedIds.filter((id) => !removedIds.has(id))]}
           onSubmit={(sel) => {
             const chosen = new Set(sel);
