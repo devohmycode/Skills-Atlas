@@ -1,6 +1,6 @@
 {
   "name": "skills-atlas",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Browse every public Agent Skill grouped by theme, multi-select and install them through `npx skills add`.",
   "type": "module",
   "bin": {

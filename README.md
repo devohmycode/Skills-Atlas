@@ -11,7 +11,7 @@ Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible ter
 
 **★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
 
-![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/demo.gif?v=0.8.1)
+![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/demo.gif?v=0.9.0)
 
 *A session: tick skills in ★ Recommended, read a `SKILL.md` with `p`, then review the `npx skills` command. [Try the web interface online](https://devohmycode.github.io/skills-atlas/demo/), nothing installs there.*
 

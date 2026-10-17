@@ -1,14 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 — 2026-10-17
 
+- **Preview a skill before installing it.** Press **`p`** on a skill to read its `SKILL.md`, fetched from GitHub, in place of the list; ↑↓, PgUp/PgDn or the wheel scroll it, esc goes back. A skill runs with your agent's permissions, so reading it first is worth it. The text is shown without its escape sequences, so that it cannot drive the terminal.
 - **Export and import a selection.** `skills-atlas export > my-skills.json` writes the installed skills; `skills-atlas import my-skills.json` installs them on another machine or in another project, with the same options as `install`. The file is checked first: a malformed id, or a skill name that could pass for a flag, stops the import.
 - **New version notice.** A dim line tells when a newer skills-atlas is published, above the tree and under the `ui` address. npm is asked at most once a day, in the background.
 - **Web demo.** A read-only copy of the web interface, with the 3,000 most installed skills, rebuilt with each catalog: https://devohmycode.github.io/skills-atlas/demo/ (`npm run demo`).
 - **README.** An animated terminal session and npm badges.
 - **Internals.** The terminal and the web page share one grouping by repository for Recommended, and the return to the list after a run is tested.
 
-- **Preview a skill before installing it.** Press **`p`** on a skill to read its `SKILL.md`, fetched from GitHub, in place of the list; ↑↓, PgUp/PgDn or the wheel scroll it, esc goes back. A skill runs with your agent's permissions, so reading it first is worth it. The text is shown without its escape sequences, so that it cannot drive the terminal.
+Validation: 134 tests and TypeScript checks.
 
 ## 0.8.0 — 2026-10-17
 
