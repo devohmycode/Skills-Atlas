@@ -153,6 +153,8 @@ nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 .pin::after { content: ""; width: 8px; height: 8px; border-radius: 50%; transform: scale(0); transition: transform .12s; background: var(--accent); }
 .pin:checked { border-color: var(--accent); }
 .pin:checked::after { transform: scale(1); }
+.pin:indeterminate { border-color: var(--accent); }
+.pin:indeterminate::after { transform: scale(1); height: 2px; border-radius: 1px; }
 .row.add .pin { border-color: var(--add); }
 .row.add .pin::after { background: var(--add); }
 .row.drop .pin { border-color: var(--remove); border-style: dashed; }
@@ -482,7 +484,11 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   }
   function updateRepoPin(key) {
     var pin = $('rows').querySelector('[data-repo="' + CSS.escape(key) + '"] [data-repo-pin]');
-    if (pin) pin.checked = repoChecked(repoSkills(key));
+    if (!pin) return;
+    var list = repoSkills(key), on = list.filter(function (s) { return isChecked(s.id); }).length;
+    pin.checked = on === list.length;
+    // Some of its skills only: neither ticked nor empty, like ◐ in the terminal.
+    pin.indeterminate = on > 0 && on < list.length;
   }
   /** Ticks every skill of the repository, or unticks them all when they all are. */
   function toggleRepo(key) {
@@ -514,6 +520,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       shown = new Map(view.items.map(function (s) { return [s.id, s]; }));
       $('rows').innerHTML = !view.items.length ? '<div class="empty">' + esc(M.noMatch) + '</div>'
         : grouped() ? groupsHtml(view.items) : view.items.map(rowHtml).join('');
+      // Markup cannot set the partial state: it is a property.
+      if (grouped()) byRepository(view.items).forEach(function (g) { updateRepoPin(g[0]); });
     }
     $('rows').hidden = false;
     $('count').textContent = fmt.format(view.total);
