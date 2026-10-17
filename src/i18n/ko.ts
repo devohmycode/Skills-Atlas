@@ -25,6 +25,7 @@ export const ko: Messages = {
     done: '완료',
     clear: '지우기',
     update: '업데이트',
+    preview: '미리보기',
   },
 
   scope: {
@@ -63,6 +64,8 @@ export const ko: Messages = {
     updateAvailable: '업데이트 가능',
     toUpdate: '업데이트 예정',
     updates: (n) => `업데이트 ${n}개 (u)`,
+    previewLoading: 'SKILL.md 불러오는 중…',
+    previewFailed: (msg) => `SKILL.md를 불러올 수 없습니다: ${msg}`,
   },
 
   agents: {

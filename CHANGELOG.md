@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Preview a skill before installing it.** Press **`p`** on a skill to read its `SKILL.md`, fetched from GitHub, in place of the list; ↑↓, PgUp/PgDn or the wheel scroll it, esc goes back. A skill runs with your agent's permissions, so reading it first is worth it. The text is shown without its escape sequences, so that it cannot drive the terminal.
+
 ## 0.8.0 — 2026-10-17
 
 - **Skill updates.** Globally installed skills with a newer version on GitHub read `↑ update available`, and the status line counts them. Press **`u`** to mark the focused skill, or the outdated skills of a group, then continue: each one is reinstalled at its latest version for the agents that already have it. The check compares the folder hash in the skills lock file with GitHub, one request per repository, in the background; it uses `GITHUB_TOKEN`, `GH_TOKEN` or the GitHub CLI's token when there is one. Project skills are not checked, as their lock records a hash GitHub cannot be compared with.

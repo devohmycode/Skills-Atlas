@@ -1,14 +1,14 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByTheme, haystack, popularityLabel, SORT_ORDERS, sortSkills, type SortOrder } from '../catalog/query.js';
-import { githubUrl, openGitHub } from '../github.js';
+import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
 import type { InstalledEntry } from '../catalog/installed.js';
 import type { Scope, Skill, Theme } from '../types.js';
 import { ACCENT, BOX, Hints, Panel, useTerminalSize, type Hint } from './Layout.js';
 import { isMouseInput, useListMouse } from './mouse.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
-import { fit, padStart, width } from './width.js';
+import { fit, padStart, width, wrapLines } from './width.js';
 
 type Row =
   | { kind: 'theme'; theme: Theme; skills: Skill[]; expanded: boolean }
@@ -63,6 +63,8 @@ export interface TreeSelectProps {
   onOpenGitHub?: (skill: Skill) => void;
   /** Read at start and written on submit: the open groups and the focused row. */
   memory?: TreeMemory;
+  /** The SKILL.md shown by `p`; fetched from GitHub by default. */
+  loadPreview?: (skill: Skill) => Promise<string>;
 }
 
 /** Lines used around the list: header, status, search, details panel, hints (may wrap). */
@@ -137,12 +139,16 @@ export function TreeSelect({
   onOpenGitHub = openGitHub,
   memory,
   updates = NO_UPDATES,
+  loadPreview = fetchSkillMarkdown,
 }: TreeSelectProps) {
   const m = t();
   const { columns, rows: termRows } = useTerminalSize();
   const [expanded, setExpandedState] = useState<Set<string>>(() => new Set(memory?.expanded));
   const [selected, setSelectedState] = useState<Set<string>>(new Set(initialSelected));
   const [toUpdate, setToUpdateState] = useState<Set<string>>(new Set());
+  // SKILL.md of the skill being previewed, read before installing it.
+  const [preview, setPreview] = useState<{ skill: Skill; text?: string; error?: string; top: number } | null>(null);
+  const previews = useRef(new Map<string, string>());
   const [cursor, setCursorState] = useState(0);
   const [filter, setFilterState] = useState('');
   const [editingFilter, setEditingFilterState] = useState(false);
@@ -323,9 +329,38 @@ export function TreeSelect({
     if (focused?.kind === 'skill' && githubUrl(focused.skill)) onOpenGitHub(focused.skill);
   };
   const canOpenGitHub = row?.kind === 'skill' && githubUrl(row.skill) !== undefined;
+  const openPreview = () => {
+    const list = liveRows();
+    const focused = list[liveCurrent(list)];
+    if (focused?.kind !== 'skill' || !githubUrl(focused.skill)) return;
+    const skill = focused.skill;
+    const cached = previews.current.get(skill.id);
+    setPreview({ skill, text: cached, top: 0 });
+    if (cached !== undefined) return;
+    loadPreview(skill).then(
+      (text) => {
+        previews.current.set(skill.id, text);
+        setPreview((p) => (p?.skill === skill ? { ...p, text } : p));
+      },
+      (err: unknown) => {
+        const error = m.tree.previewFailed(err instanceof Error ? err.message : String(err));
+        setPreview((p) => (p?.skill === skill ? { ...p, error } : p));
+      },
+    );
+  };
+  // The preview fills the list's place: header, text, hints.
+  const previewHeight = Math.max(5, termRows - 8);
+  const previewLines = preview?.text !== undefined ? wrapLines(preview.text, Math.max(20, columns - 6)) : [];
+  const scrollPreview = (delta: number) =>
+    setPreview((p) => (p ? { ...p, top: Math.max(0, Math.min(p.top + delta, previewLines.length - previewHeight)) } : p));
 
   // Wheel moves the cursor; a click ticks a skill, or opens a theme (ticks it on its checkbox).
   const { ref: listRef, hover } = useListMouse(Math.min(height, rows.length - top), (e) => {
+    if (preview) {
+      if (e.kind === 'wheelUp') scrollPreview(-WHEEL_STEP);
+      else if (e.kind === 'wheelDown') scrollPreview(WHEEL_STEP);
+      return;
+    }
     if (e.kind === 'wheelUp') move(-WHEEL_STEP);
     else if (e.kind === 'wheelDown') move(WHEEL_STEP);
     if (e.kind !== 'click' || e.line < 0 || e.line >= height) return;
@@ -341,6 +376,14 @@ export function TreeSelect({
 
   useInput((input, key) => {
     if (isMouseInput(input)) return;
+    if (preview) {
+      if (key.upArrow || input === 'k') scrollPreview(-1);
+      else if (key.downArrow || input === 'j') scrollPreview(1);
+      else if (key.pageUp) scrollPreview(-previewHeight);
+      else if (key.pageDown || input === ' ') scrollPreview(previewHeight);
+      else if (key.escape || key.return || input === 'p' || input === 'q') setPreview(null);
+      return;
+    }
     if (live.current.editingFilter) {
       if (key.return) endSearch();
       else if (key.escape) clearSearch();
@@ -373,6 +416,7 @@ export function TreeSelect({
     else if (input === 'o') toggleOfficial();
     else if (input === 'a') toggleAll();
     else if (input === 'g') openFocusedGitHub();
+    else if (input === 'p') openPreview();
     else if (input === 'u' && row) toggleUpdate(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
     else if (key.escape && live.current.filter) setFilter('');
     else if (key.return && changes(live.current.selected)) submit();
@@ -394,11 +438,46 @@ export function TreeSelect({
         ['a', m.keys.expandAll, toggleAll],
         ['s', m.keys.sort, cycleSort],
         ['o', m.keys.official, toggleOfficial],
-        ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint] : []),
+        ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint, ['p', m.keys.preview, openPreview] as Hint] : []),
         ...(updates.size ? [['u', m.keys.update] as Hint] : []),
         [m.keyNames.enter, m.keys.continue, canSubmit ? submit : undefined],
         ['q', m.keys.quit, onCancel],
       ];
+
+  if (preview) {
+    const s = preview.skill;
+    const shown = previewLines.slice(preview.top, preview.top + previewHeight);
+    return (
+      <Box flexDirection="column">
+        <Box justifyContent="space-between">
+          <Text wrap="truncate-end">
+            <Text bold>{s.name}</Text>
+            <Text dimColor>{`  ${s.source}/${s.path ? `${s.path}/` : ''}SKILL.md`}</Text>
+          </Text>
+          {previewLines.length > previewHeight && (
+            <Text dimColor>{m.tree.position(formatNumber(preview.top + 1), formatNumber(previewLines.length))}</Text>
+          )}
+        </Box>
+        <Panel>
+          <Box ref={listRef} flexDirection="column" height={previewHeight}>
+            {preview.error ? (
+              <Text color={PALETTE.danger}>{preview.error}</Text>
+            ) : preview.text === undefined ? (
+              <Text color={PALETTE.gold}>{m.tree.previewLoading}</Text>
+            ) : (
+              shown.map((line, i) => <Text key={preview.top + i}>{line || ' '}</Text>)
+            )}
+          </Box>
+        </Panel>
+        <Hints
+          items={[
+            ['↑↓', m.keys.move],
+            [m.keyNames.esc, m.keys.back, () => setPreview(null)],
+          ]}
+        />
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">

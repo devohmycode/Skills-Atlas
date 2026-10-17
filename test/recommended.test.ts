@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { mergeInstalled } from '../src/catalog/installed.js';
 import { querySkills } from '../src/catalog/query.js';
 import { readRecommendations, withRecommendations } from '../src/catalog/recommended.js';
-import { githubUrl } from '../src/github.js';
+import { githubUrl, stripControls } from '../src/github.js';
+import { wrapLines } from '../src/ui/width.js';
 import type { Catalog } from '../src/types.js';
 
 const catalog: Catalog = {
@@ -80,6 +81,19 @@ describe('recommendations', () => {
       writeFileSync(path, '{');
       expect(() => readRecommendations(path)).toThrow(/recommended.json/);
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('SKILL.md preview', () => {
+  it('cannot drive the terminal it is shown in', () => {
+    const hostile = 'Title\u001b[2J\u001b[31mred\u001b[0m\u001b]0;evil title\u0007\u001b]8;;https://x\u001b\\link\r\nnext\tcol\u0007\u0000end';
+    expect(stripControls(hostile)).toBe('Titleredlink\nnext  colend');
+  });
+
+  it('wraps lines at the terminal width, wide characters included', () => {
+    expect(wrapLines('abcdef\n\n日本語', 4)).toEqual(['abcd', 'ef', '', '日本', '語']);
+    // At a space when one fits, so that words stay whole.
+    expect(wrapLines('one two three', 9)).toEqual(['one two', 'three']);
   });
 });
 

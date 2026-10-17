@@ -128,6 +128,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 | `s` | sort: installs (default) ↔ name |
 | `o` | only official skills (marked ◆) |
 | `g` | open the focused skill's GitHub repository |
+| `p` | preview the focused skill's `SKILL.md` before installing it (↑↓ scroll, esc back) |
 | `u` | mark the focused outdated skill, or the outdated skills of a group, for update |
 | enter | continue |
 | `q` | quit |

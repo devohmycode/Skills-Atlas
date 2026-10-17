@@ -25,6 +25,7 @@ export const zh: Messages = {
     done: '完成',
     clear: '清除',
     update: '更新',
+    preview: '预览',
   },
 
   scope: {
@@ -63,6 +64,8 @@ export const zh: Messages = {
     updateAvailable: '有更新',
     toUpdate: '将更新',
     updates: (n) => `${n} 个更新 (u)`,
+    previewLoading: '正在加载 SKILL.md…',
+    previewFailed: (msg) => `无法加载 SKILL.md：${msg}`,
   },
 
   agents: {

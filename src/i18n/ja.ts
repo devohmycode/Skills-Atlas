@@ -25,6 +25,7 @@ export const ja: Messages = {
     done: '完了',
     clear: 'クリア',
     update: '更新',
+    preview: 'プレビュー',
   },
 
   scope: {
@@ -63,6 +64,8 @@ export const ja: Messages = {
     updateAvailable: '更新あり',
     toUpdate: '更新予定',
     updates: (n) => `更新 ${n} 件 (u)`,
+    previewLoading: 'SKILL.md を読み込み中…',
+    previewFailed: (msg) => `SKILL.md を読み込めませんでした: ${msg}`,
   },
 
   agents: {

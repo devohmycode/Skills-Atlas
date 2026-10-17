@@ -28,3 +28,29 @@ export function fit(text: string, columns: number): string {
   }
   return `${out}…${' '.repeat(columns - 1 - used)}`;
 }
+
+/**
+ * Lines of at most `columns` terminal columns: each source line wrapped at its
+ * last space that fits, or cut when a word is longer than a line. Never splits a wide character.
+ */
+export function wrapLines(text: string, columns: number): string[] {
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    let current = '';
+    for (const char of line) {
+      if (current && width(current + char) > columns) {
+        const space = current.lastIndexOf(' ');
+        if (space > 0) {
+          out.push(current.slice(0, space));
+          current = current.slice(space + 1);
+        } else {
+          out.push(current);
+          current = '';
+        }
+      }
+      current += char;
+    }
+    out.push(current);
+  }
+  return out;
+}

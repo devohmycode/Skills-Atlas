@@ -27,6 +27,7 @@ export const de: Messages = {
     done: 'fertig',
     clear: 'leeren',
     update: 'aktualisieren',
+    preview: 'Vorschau',
   },
 
   scope: {
@@ -65,6 +66,8 @@ export const de: Messages = {
     updateAvailable: 'Update verfügbar',
     toUpdate: 'wird aktualisiert',
     updates: (n) => `${n} ${n === 1 ? 'Update' : 'Updates'} (u)`,
+    previewLoading: 'SKILL.md wird geladen…',
+    previewFailed: (msg) => `SKILL.md konnte nicht geladen werden: ${msg}`,
   },
 
   agents: {

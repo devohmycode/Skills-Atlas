@@ -23,6 +23,7 @@ export const en = {
     done: 'done',
     clear: 'clear',
     update: 'update',
+    preview: 'preview',
   },
 
   scope: {
@@ -61,6 +62,8 @@ export const en = {
     updateAvailable: 'update available',
     toUpdate: 'will be updated',
     updates: (n: number) => `${n} update${n === 1 ? '' : 's'} (u)`,
+    previewLoading: 'Loading SKILL.md…',
+    previewFailed: (msg: string) => `Could not load SKILL.md: ${msg}`,
   },
 
   agents: {

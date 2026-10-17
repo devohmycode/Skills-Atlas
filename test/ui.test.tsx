@@ -193,6 +193,34 @@ describe('TreeSelect', () => {
     expect(second.lastFrame()).toMatch(/❯\s+○\s+tailwind/);
   });
 
+  it('previews a SKILL.md with p, scrolls it and goes back to the list', async () => {
+    const text = ['---', 'name: tailwind', '---', ...Array.from({ length: 60 }, (_, i) => `line ${i + 1}`)].join('\n');
+    const loadPreview = vi.fn(async () => text);
+    const { lastFrame, stdin } = render(
+      <TreeSelect themes={themes} skills={skills} loadPreview={loadPreview} onSubmit={() => {}} onCancel={() => {}} />,
+    );
+    await press(stdin, KEY.right, KEY.down, 'p');
+    expect(loadPreview).toHaveBeenCalledWith(expect.objectContaining({ id: 'a/b@react-hooks' }));
+    expect(lastFrame()).toContain('a/b/SKILL.md');
+    expect(lastFrame()).toContain('name: tailwind');
+    expect(lastFrame()).not.toContain('line 60');
+    await press(stdin, KEY.down, KEY.down, KEY.down);
+    expect(lastFrame()).not.toContain('name: tailwind');
+    await press(stdin, KEY.escape);
+    expect(lastFrame()).toContain('Frontend & web');
+    // Opened again: from the cache, not GitHub.
+    await press(stdin, 'p');
+    expect(loadPreview).toHaveBeenCalledOnce();
+  });
+
+  it('shows why a preview could not be loaded', async () => {
+    const { lastFrame, stdin } = render(
+      <TreeSelect themes={themes} skills={skills} loadPreview={async () => { throw new Error('HTTP 404'); }} onSubmit={() => {}} onCancel={() => {}} />,
+    );
+    await press(stdin, KEY.right, KEY.down, 'p');
+    expect(lastFrame()).toContain('Could not load SKILL.md: HTTP 404');
+  });
+
   it('selects a whole theme with space on its header', async () => {
     const onSubmit = vi.fn();
     const { lastFrame, stdin } = render(<TreeSelect themes={themes} skills={skills} onSubmit={onSubmit} onCancel={() => {}} />);
