@@ -51,11 +51,34 @@ skills-atlas install anthropics/skills@pdf supabase/agent-skills@supabase -a cla
 skills-atlas ui                               # the same in your browser, with the mouse
 skills-atlas export > my-skills.json          # installed skills as a selection file (-g / -p for one scope)
 skills-atlas import my-skills.json -a claude-code -g  # install the same skills on another machine or project
+skills-atlas show obra/superpowers@brainstorming      # a skill's SKILL.md, read from GitHub (--json available)
+skills-atlas outdated                         # global skills with a newer version on GitHub (--json available)
+skills-atlas mcp                              # MCP server on stdio, for Claude and other agents
 ```
 
 `export` writes the installed skills that have a GitHub source as `{ "skillsAtlas": 1, "skills": ["owner/repo@skill", …] }`; home-made skills are listed on stderr and left out. `import` takes the same options as `install` and asks for what they leave open. A selection file is checked before anything runs: a malformed id, or a name that could pass for a flag, stops the import.
 
 When a newer skills-atlas is published, a dim line says so above the tree and under the `ui` address. npm is asked at most once a day, in the background, so it never slows the start; `--offline` skips it.
+
+### From Claude and other agents
+
+Three ways to let an agent find and install skills for you, from the lightest:
+
+- **The skill.** `npx skills add devohmycode/skills-atlas -s skills-atlas` teaches any agent the commands above (`list --json`, `show`, `install … -y`, `outdated --json`). Ask "find me a skill to draw diagrams": the agent searches, reads the candidates' `SKILL.md`, then installs the one you pick.
+- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill`, `list_installed`, `outdated_skills`, `install_skills` (with `dry_run`) and `remove_skills`. In Claude Code:
+
+  ```bash
+  claude mcp add skills-atlas -- npx -y skills-atlas@latest mcp
+  ```
+
+  In Claude Desktop, under `mcpServers` in `claude_desktop_config.json`: `"skills-atlas": { "command": "npx", "args": ["-y", "skills-atlas@latest", "mcp"] }`. On Windows, use `"command": "cmd", "args": ["/c", "npx", "-y", "skills-atlas@latest", "mcp"]`.
+- **The Claude Code plugin.** The skill, the MCP server and a `/skills-atlas <need>` command in one install:
+
+  ```
+  /plugin install skills-atlas --marketplace devohmycode/skills-atlas
+  ```
+
+The tools only change your machine through `install_skills` and `remove_skills`, which your agent asks you to approve. Skill ids and names are checked first, as for `import`, and every `SKILL.md` is shown without its escape sequences; it remains untrusted text, which the tools tell the agent to report rather than follow.
 
 ### Web interface
 

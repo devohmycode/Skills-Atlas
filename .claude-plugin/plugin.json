@@ -1,0 +1,19 @@
+{
+  "name": "skills-atlas",
+  "version": "0.9.1",
+  "description": "Find, read, install and update public Agent Skills from a catalog of about 75,000: a skill, MCP tools and a /skills-atlas command.",
+  "author": {
+    "name": "DevOhMyCode",
+    "url": "https://github.com/devohmycode"
+  },
+  "homepage": "https://github.com/devohmycode/skills-atlas",
+  "repository": "https://github.com/devohmycode/skills-atlas",
+  "license": "MIT",
+  "keywords": ["skills", "agent-skills", "SKILL.md", "catalog", "install", "mcp"],
+  "mcpServers": {
+    "skills-atlas": {
+      "command": "npx",
+      "args": ["-y", "skills-atlas@latest", "mcp"]
+    }
+  }
+}

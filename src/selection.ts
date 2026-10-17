@@ -35,11 +35,15 @@ export function parseSelection(text: string): string[] {
   }
   const file = File.safeParse(raw);
   if (!file.success) throw new Error('not a skills-atlas selection ({ "skillsAtlas": 1, "skills": [...] })');
-  for (const id of file.data.skills) {
-    const { name } = parseSkillId(id);
-    // A leading dash would reach `skills add` as a flag; a quote or control character could break
-    // the quoting of Windows's fallback shell. Real names have neither.
-    if (name.startsWith('-') || /["\u0000-\u001f\u007f]/.test(name) || name.length > 200) throw new Error(`invalid skill name in "${id}"`);
-  }
+  for (const id of file.data.skills) checkSkillName(parseSkillId(id).name, id);
   return [...new Set(file.data.skills)];
+}
+
+/**
+ * Throws on a skill name that is not safe to pass to `npx skills`, whoever wrote it (a file, a model):
+ * a leading dash would reach it as a flag, and a quote or control character could break the quoting
+ * of Windows's fallback shell. Real names have neither.
+ */
+export function checkSkillName(name: string, context = name): void {
+  if (name.startsWith('-') || /["\u0000-\u001f\u007f]/.test(name) || name.length > 200) throw new Error(`invalid skill name in "${context}"`);
 }

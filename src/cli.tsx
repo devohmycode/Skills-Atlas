@@ -15,6 +15,8 @@ import { findUpdates } from './install/updates.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
 import { readFileSync } from 'node:fs';
+import { outdatedSkills, showSkill } from './agent-api.js';
+import { serveMcp } from './mcp.js';
 import { browseLoop } from './browse.js';
 import { parseSelection, toSelection } from './selection.js';
 import { newerVersion } from './version.js';
@@ -477,6 +479,49 @@ installOptions(program.command('install'))
   .argument('<ids...>', c.ids)
   .description(c.install)
   .action((ids: string[], opts: InstallFlags) => installIds(ids, opts));
+
+program
+  .command('mcp')
+  .description(c.mcpCmd)
+  .option('--skills-version <version>', c.skillsVersion, SKILLS_VERSION)
+  .addOption(offlineOption())
+  .action((opts: { skillsVersion: string; offline?: boolean }) =>
+    serveMcp({
+      version: pkg.version,
+      skillsVersion: opts.skillsVersion,
+      // Silent: stdout carries the protocol, and nobody reads stderr.
+      loadCatalog: async () => withRecommendations(await loadLatestCatalog({ offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE) })),
+    }),
+  );
+
+program
+  .command('show')
+  .argument('<id>', c.ids)
+  .description(c.showCmd)
+  .option('--json', c.json)
+  .addOption(catalogOption())
+  .addOption(offlineOption())
+  .action(async (id: string, opts: CommonOptions & { json?: boolean }) => {
+    const catalog = await openCatalog({ ...opts, quiet: true });
+    try {
+      const { skill, markdown } = await showSkill(catalog, id);
+      process.stdout.write(opts.json ? `${JSON.stringify({ skill, markdown }, null, 2)}\n` : `${markdown.trimEnd()}\n`);
+    } catch (err) {
+      fail(c.showFailed(id, err instanceof Error ? err.message : String(err)));
+    }
+  });
+
+program
+  .command('outdated')
+  .description(c.outdatedCmd)
+  .option('--json', c.json)
+  .action(async (opts: { json?: boolean }) => {
+    const outdated = await outdatedSkills();
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(outdated, null, 2)}\n`);
+    if (!outdated.length) return console.log(paint('dim', c.upToDate));
+    for (const s of outdated) console.log(`  ${padEnd(s.id, 60)} ${paint('dim', s.agents.join(', '))}`);
+    console.log(paint('dim', `\n${c.outdatedHint}`));
+  });
 
 program
   .command('export')

@@ -1,0 +1,18 @@
+{
+  "name": "skills-atlas",
+  "owner": {
+    "name": "DevOhMyCode",
+    "url": "https://github.com/devohmycode"
+  },
+  "metadata": {
+    "description": "skills-atlas for Claude Code: browse and install public Agent Skills."
+  },
+  "plugins": [
+    {
+      "name": "skills-atlas",
+      "source": "./",
+      "description": "Find, read, install and update public Agent Skills from a catalog of about 75,000: a skill, MCP tools and a /skills-atlas command.",
+      "category": "productivity"
+    }
+  ]
+}
