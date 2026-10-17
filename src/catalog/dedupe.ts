@@ -1,5 +1,5 @@
 import type { Origin, RawSkill, Skill } from '../types.js';
-import { normalizeName } from './normalize.js';
+import { normalizeName, skillDir } from './normalize.js';
 
 const ORIGIN_ORDER: Origin[] = ['skills.sh', 'claude-plugins.dev', 'smithery'];
 
@@ -24,7 +24,7 @@ export function dedupe(raw: RawSkill[]): Skill[] {
         id: `${r.source}@${r.name}`,
         name: r.name,
         source: r.source,
-        path: r.path,
+        path: r.path === undefined ? undefined : skillDir(r.path),
         description: r.description,
         installs: r.installs,
         stars: r.stars,
@@ -35,7 +35,7 @@ export function dedupe(raw: RawSkill[]): Skill[] {
       });
       continue;
     }
-    existing.path ??= r.path;
+    existing.path ??= r.path === undefined ? undefined : skillDir(r.path);
     if (r.description && (!existing.description || r.description.length > existing.description.length)) {
       existing.description = r.description;
     }

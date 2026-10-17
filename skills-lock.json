@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "skills-atlas": {
+      "source": ".",
+      "sourceType": "local",
+      "computedHash": "f71e3fe944d51c6e55f0323c03cadabbfc22a3abe00758f3b1e77c5704154fa5"
+    }
+  }
+}

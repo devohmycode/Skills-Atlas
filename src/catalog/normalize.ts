@@ -9,8 +9,16 @@ export function parseGitHubUrl(url: string): { source: string; path?: string } |
   if (!m) return undefined;
   const owner = m[1]!;
   const repo = m[2]!.replace(/\.git$/i, '');
-  const path = m[3]?.replace(/\/SKILL\.md$/i, '').replace(/\/+$/, '') || undefined;
-  return { source: `${owner}/${repo}`, path };
+  // No tree/blob part: the path is unknown. A URL to the repository's root, or to its SKILL.md, is the root ('').
+  return { source: `${owner}/${repo}`, path: m[3] === undefined ? undefined : skillDir(m[3]) };
+}
+
+/**
+ * The skill's directory inside its repository, from a path that may name the
+ * SKILL.md itself: `skills/x/SKILL.md` → `skills/x`, `SKILL.md` → `` (the root).
+ */
+export function skillDir(path: string): string {
+  return path.replace(/\\/g, '/').replace(/(^|\/)SKILL\.md$/i, '').replace(/^\/+|\/+$/g, '');
 }
 
 /** Lower-cases and trims a skill name so that sources can be compared. */

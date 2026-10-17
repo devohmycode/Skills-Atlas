@@ -1,10 +1,16 @@
 # Changelog
 
+## 0.9.2 — 2026-10-17
+
+- **From Claude and other agents.** A `skills-atlas` skill (`npx skills add devohmycode/skills-atlas -s skills-atlas`), an MCP server (`skills-atlas mcp`: search, read, list, check updates, install and remove skills as tools) and a Claude Code plugin bundling both with a `/skills-atlas` command (`/plugin install skills-atlas --marketplace devohmycode/skills-atlas`).
+- **`show` and `outdated`.** `skills-atlas show <id>` prints a skill's `SKILL.md`; `skills-atlas outdated` lists the global skills with a newer version; both take `--json`.
+- **Skills at the root of their repository.** Their `SKILL.md` path was recorded as the skill's directory (`SKILL.md/SKILL.md`), so `show` and the `p` preview failed with a 404 for about 800 of them. Paths are now read as directories, the root included, and older snapshots are corrected on the fly.
+
+Validation: 138 tests and TypeScript checks.
+
 ## 0.9.1 — 2026-10-17
 
 - Published again with everything from 0.9.0: versions 0.6.0 to 0.9.0 were withdrawn from npm.
-- **From Claude and other agents.** A `skills-atlas` skill (`npx skills add devohmycode/skills-atlas -s skills-atlas`), an MCP server (`skills-atlas mcp`: search, read, list, check updates, install and remove skills as tools) and a Claude Code plugin bundling both with a `/skills-atlas` command (`/plugin install skills-atlas --marketplace devohmycode/skills-atlas`).
-- **`show` and `outdated`.** `skills-atlas show <id>` prints a skill's `SKILL.md`; `skills-atlas outdated` lists the global skills with a newer version; both take `--json`.
 - The catalog drops the skills their repository no longer holds (412 in this snapshot), and the crawl no longer fails when `main` moves while it runs.
 
 ## 0.9.0 — 2026-10-17

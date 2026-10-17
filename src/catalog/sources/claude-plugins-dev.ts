@@ -2,7 +2,7 @@ import pLimit from 'p-limit';
 import { z } from 'zod';
 import type { RawSkill } from '../../types.js';
 import { fetchJson } from '../http.js';
-import { cleanDescription, isValidSource, parseGitHubUrl } from '../normalize.js';
+import { cleanDescription, isValidSource, parseGitHubUrl, skillDir } from '../normalize.js';
 
 const BASE = 'https://claude-plugins.dev/api/skills';
 const PAGE_SIZE = 100;
@@ -40,7 +40,8 @@ export function mapEntry(value: unknown): RawSkill | undefined {
     origin: 'claude-plugins.dev',
     name: e.name.trim(),
     source,
-    path: path || undefined,
+    // An empty directoryPath says nothing; one that names the SKILL.md gives its directory.
+    path: path ? skillDir(path) : undefined,
     description: cleanDescription(e.description),
     installs: e.installs ?? undefined,
     stars: e.stars ?? undefined,

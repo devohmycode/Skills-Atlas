@@ -1,7 +1,7 @@
 import { openBrowser } from './browser.js';
 import { guessPaths } from './catalog/enrich.js';
 import { fetchText } from './catalog/http.js';
-import { isValidSource } from './catalog/normalize.js';
+import { isValidSource, skillDir } from './catalog/normalize.js';
 import type { Skill } from './types.js';
 
 /** Local skills do not have a repository to open. */
@@ -23,7 +23,8 @@ export function openGitHub(skill: Pick<Skill, 'source'>): void {
 export async function fetchSkillMarkdown(skill: Pick<Skill, 'source' | 'name' | 'path'>): Promise<string> {
   if (!githubUrl(skill)) throw new Error('no GitHub repository');
   let lastError: unknown = new Error('SKILL.md not found');
-  for (const dir of skill.path !== undefined ? [skill.path] : guessPaths(skill.name)) {
+  // skillDir: snapshots older than its fix may hold the SKILL.md's own path.
+  for (const dir of skill.path !== undefined ? [skillDir(skill.path)] : guessPaths(skill.name)) {
     try {
       const url = `https://raw.githubusercontent.com/${skill.source}/HEAD/${dir ? `${dir}/` : ''}SKILL.md`;
       return stripControls(await fetchText(url, { retries: 1, timeoutMs: 15_000 }));

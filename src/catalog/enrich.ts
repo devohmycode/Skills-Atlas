@@ -63,7 +63,8 @@ export async function enrichDescriptions(skills: Skill[], opts: EnrichOptions): 
       const description = frontmatterDescription(await fetchText(url, { retries: 1 }));
       if (!description) return false;
       skill.description = description;
-      skill.path ??= dir || undefined;
+      // '' is a skill at the repository root: a known path, not a missing one.
+      skill.path ??= dir;
       filled++;
       return true;
     } catch (err) {

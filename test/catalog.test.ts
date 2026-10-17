@@ -9,6 +9,7 @@ import {
   fixMojibake,
   frontmatterDescription,
   parseGitHubUrl,
+  skillDir,
 } from '../src/catalog/normalize.js';
 import { groupByTheme, querySkills, resolveTheme, sortSkills } from '../src/catalog/query.js';
 import { markOfficial, parseOfficialSitemap } from '../src/catalog/sources/official.js';
@@ -28,6 +29,18 @@ describe('normalize', () => {
     });
     expect(parseGitHubUrl('https://github.com/o/r.git')).toEqual({ source: 'o/r', path: undefined });
     expect(parseGitHubUrl('https://gitlab.com/o/r')).toBeUndefined();
+    // A link to the SKILL.md gives its directory; at the repository root, '' (not the file name).
+    expect(parseGitHubUrl('https://github.com/o/r/blob/main/skills/x/SKILL.md')?.path).toBe('skills/x');
+    expect(parseGitHubUrl('https://github.com/o/r/blob/main/SKILL.md')?.path).toBe('');
+    expect(parseGitHubUrl('https://github.com/o/r/tree/main/')?.path).toBe('');
+  });
+
+  it('turns a path to a SKILL.md into its directory', () => {
+    expect(skillDir('SKILL.md')).toBe('');
+    expect(skillDir('skills/x/SKILL.md')).toBe('skills/x');
+    expect(skillDir('skills\\x\\skill.md')).toBe('skills/x');
+    expect(skillDir('/skills/x/')).toBe('skills/x');
+    expect(skillDir('skills/SKILL.md-tools')).toBe('skills/SKILL.md-tools');
   });
 
   it('repairs double-encoded UTF-8', () => {
