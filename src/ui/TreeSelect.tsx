@@ -506,7 +506,10 @@ export function TreeSelect({
                 {fit(s.name, nameW - (star ? 2 : 0) - (r.parent ? 2 : 0))}
               </Text>
               <Text dimColor>{`  ${fit(s.source, sourceW)}`}</Text>
-              <Text color={isInstalled && !isOn ? PALETTE.danger : outdated ? PALETTE.gold : PALETTE.accent}>{`  ${fit(status, statusW)}`}</Text>
+              {/* Pink on the focused row, so that an available update stands out while scrolling. */}
+              <Text color={isInstalled && !isOn ? PALETTE.danger : outdated ? (focused ? PALETTE.success : PALETTE.gold) : PALETTE.accent}>
+                {`  ${fit(status, statusW)}`}
+              </Text>
               <Text dimColor>{padStart(popularityLabel(s), popW)}</Text>
             </Text>
           );
