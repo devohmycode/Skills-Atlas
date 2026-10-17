@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
+import { groupByRepository } from '../catalog/groups.js';
 import { groupByTheme, haystack, popularityLabel, SORT_ORDERS, sortSkills, type SortOrder } from '../catalog/query.js';
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
@@ -83,13 +84,7 @@ const UPDATE_MARK = '↑';
 
 /** Recommended skills by repository, in the curated order; each keeps the list's order. */
 function byRepository(skills: Skill[]): { key: string; skills: Skill[] }[] {
-  const repos = new Map<string, Skill[]>();
-  for (const s of skills) {
-    const key = `${RECOMMENDED}/${s.source.toLowerCase()}`;
-    repos.set(key, [...(repos.get(key) ?? []), s]);
-  }
-  const order = (list: Skill[]) => list[0]!.recommendation?.order ?? 0;
-  return [...repos].map(([key, list]) => ({ key, skills: list })).sort((a, b) => order(a.skills) - order(b.skills));
+  return groupByRepository(skills).map((g) => ({ key: `${RECOMMENDED}/${g.source}`, skills: g.skills }));
 }
 
 /** Theme headers, each followed by its skills when open (always open during a search). */

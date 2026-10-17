@@ -1,8 +1,19 @@
 <h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/logo.png?v=0.7.1" alt="skills-atlas" width="600"></h1>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/v/skills-atlas?color=FF8AD8" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/dm/skills-atlas?color=B69BFA" alt="npm downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/npm/l/skills-atlas?color=8BD5F5" alt="MIT license"></a>
+  <a href="https://devohmycode.github.io/skills-atlas/demo/"><img src="https://img.shields.io/badge/try%20it-web%20demo-E6BF68" alt="Web demo"></a>
+</p>
+
 Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible terminal tree or a local web interface. Tick several and install them together through [`npx skills add`](https://github.com/vercel-labs/skills). Installed skills start ticked: untick one to uninstall it.
 
 **★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
+
+![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/demo.gif?v=0.8.1)
+
+*A session: tick skills in ★ Recommended, read a `SKILL.md` with `p`, then review the `npx skills` command. [Try the web interface online](https://devohmycode.github.io/skills-atlas/demo/), nothing installs there.*
 
 ![Skills Atlas terminal tree with installed skills, Recommended grouped by repository and two superpowers skills ticked](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.2)
 
@@ -38,7 +49,13 @@ skills-atlas list -t databases -n 10          # non-interactive listing (--json 
 skills-atlas agents                           # ids accepted by --agent (★ = detected here)
 skills-atlas install anthropics/skills@pdf supabase/agent-skills@supabase -a claude-code -p -y
 skills-atlas ui                               # the same in your browser, with the mouse
+skills-atlas export > my-skills.json          # installed skills as a selection file (-g / -p for one scope)
+skills-atlas import my-skills.json -a claude-code -g  # install the same skills on another machine or project
 ```
+
+`export` writes the installed skills that have a GitHub source as `{ "skillsAtlas": 1, "skills": ["owner/repo@skill", …] }`; home-made skills are listed on stderr and left out. `import` takes the same options as `install` and asks for what they leave open. A selection file is checked before anything runs: a malformed id, or a name that could pass for a flag, stops the import.
+
+When a newer skills-atlas is published, a dim line says so above the tree and under the `ui` address. npm is asked at most once a day, in the background, so it never slows the start; `--offline` skips it.
 
 ### Web interface
 
@@ -219,6 +236,7 @@ npm test           # vitest
 npm run typecheck
 npm run dev        # run the CLI from sources
 npm run build      # dist/cli.js
+npm run demo       # docs/demo/index.html: the web interface with embedded data, for GitHub Pages
 ```
 
 The CLI defaults to React's production runtime (also with `npm run dev`) with a maximum of 60 frames per second. It uses Ink's standard renderer because the incremental renderer in Ink 6.8 can duplicate lines. Set `NODE_ENV=development` explicitly when debugging React. The compiled `dist/cli.js` launcher and its sibling chunks must stay together.

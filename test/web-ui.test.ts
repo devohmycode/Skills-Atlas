@@ -42,6 +42,12 @@ function browser() {
 }
 
 describe('web interface', () => {
+  it('embeds the shared repository grouping without bundler helpers', () => {
+    // esbuild's keepNames adds __name() calls, which the page does not define.
+    expect(PAGE_HTML).toContain('function groupByRepository');
+    expect(PAGE_HTML).not.toContain('__name(');
+  });
+
   it('escapes curated reasons and keeps Recommended ahead of regular themes', () => {
     const { ui, skill, element } = browser();
     const picked = { ...skill, recommendation: { reason: '<script>bad</script>', order: 0 } };

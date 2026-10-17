@@ -8,6 +8,7 @@
  * DIN (Bahnschrift on Windows, DIN Alternate on macOS), the typeface of maps and road signs,
  * sets titles and figures.
  */
+import { groupByRepository } from '../catalog/groups.js';
 import { PALETTE } from '../ui/palette.js';
 
 export const PAGE_HTML = String.raw`<!doctype html>
@@ -456,20 +457,12 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   var openRepos = new Set();
   function repoKey(s) { return s.source.toLowerCase(); }
   /** Recommended skills by repository, in the curated order; each keeps the list's order. */
-  function byRepository(items) {
-    var groups = new Map();
-    items.forEach(function (s) {
-      var key = repoKey(s);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(s);
-    });
-    var order = function (list) { return list[0].recommendation ? list[0].recommendation.order : 0; };
-    return Array.from(groups.entries()).sort(function (a, b) { return order(a[1]) - order(b[1]); });
-  }
+  // The terminal's own grouping, embedded: both interfaces group the same way.
+  ${groupByRepository}
   function repoChecked(list) { return list.every(function (s) { return isChecked(s.id); }); }
   function groupsHtml(items) {
-    return byRepository(items).map(function (g) {
-      var key = g[0], list = g[1], first = list[0];
+    return groupByRepository(items).map(function (g) {
+      var key = g.source, list = g.skills, first = list[0];
       return '<details class="repo" data-repo="' + esc(key) + '"' + (openRepos.has(key) ? ' open' : '') + '>' +
         '<summary class="repo-head" role="listitem"><input class="pin" type="checkbox" tabindex="-1" data-repo-pin' +
         (repoChecked(list) ? ' checked' : '') + ' aria-label="' + esc(first.source) + '">' +
@@ -521,7 +514,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       $('rows').innerHTML = !view.items.length ? '<div class="empty">' + esc(M.noMatch) + '</div>'
         : grouped() ? groupsHtml(view.items) : view.items.map(rowHtml).join('');
       // Markup cannot set the partial state: it is a property.
-      if (grouped()) byRepository(view.items).forEach(function (g) { updateRepoPin(g[0]); });
+      if (grouped()) groupByRepository(view.items).forEach(function (g) { updateRepoPin(g.source); });
     }
     $('rows').hidden = false;
     $('count').textContent = fmt.format(view.total);

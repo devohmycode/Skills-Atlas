@@ -13,7 +13,11 @@ import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, sys
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
 import { findUpdates } from './install/updates.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
-import type { Catalog, InstallMethod, InstallOptions, Removal, Scope } from './types.js';
+import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
+import { readFileSync } from 'node:fs';
+import { browseLoop } from './browse.js';
+import { parseSelection, toSelection } from './selection.js';
+import { newerVersion } from './version.js';
 import { App, type WizardResult } from './ui/App.js';
 import type { TreeMemory } from './ui/TreeSelect.js';
 import { Progress } from './ui/Progress.js';
@@ -294,7 +298,10 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
       mergeInstalled(catalog.skills, skills, (await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat());
     // Back to the tree after each run, with what is installed now, until the user quits.
     const treeMemory: TreeMemory = {};
-    for (let runs = 0, notice = ''; ; runs++) {
+    const newer = newerVersion(pkg.version, { offline: opts.offline });
+    // Until a run has its own summary to show, the line above the tree tells of a new version.
+    const versionNotice = newer ? paint('dim', c.newVersion(newer, pkg.version)) : '';
+    const wizard = async (notice: string) => {
       const { defaults, detected } = resolveDefaults();
       let result: WizardResult | null = null;
       const restoreScreen = opts.mouse ? enableMouse() : () => {};
@@ -309,7 +316,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           loadInstalled={loadInstalled}
           sort={opts.sort}
           official={opts.official}
-          notice={notice}
+          notice={notice || versionNotice}
           treeMemory={treeMemory}
           findUpdates={opts.offline ? undefined : () => findUpdates()}
           onDone={(r) => (result = r)}
@@ -318,11 +325,10 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
       await app.waitUntilExit();
       restoreScreen();
       releaseStdin();
-      const chosen = result as WizardResult | null;
-      if (!chosen) return runs ? undefined : console.log(paint('dim', m.run.noChange));
-      notice = await apply(chosen.ids, chosen.remove, chosen.options, opts, chosen.update);
-      if (opts.dryRun) return;
-    }
+      return result as WizardResult | null;
+    };
+    const runs = await browseLoop(wizard, (r) => apply(r.ids, r.remove, r.options, opts, r.update), opts);
+    if (!runs) console.log(paint('dim', m.run.noChange));
   });
 
 filterOptions(program.command('list'))
@@ -369,6 +375,8 @@ program
     }).catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
     const w = t().web;
     console.log(`\n  ${w.serving} ${paint(['bold', 'cyan'], server.url)}\n  ${paint('dim', w.stop)}\n`);
+    const newer = newerVersion(pkg.version, { offline: opts.offline });
+    if (newer) console.log(`  ${paint('dim', c.newVersion(newer, pkg.version))}\n`);
     if (opts.open) openBrowser(server.url);
     // Serves until Ctrl+C.
     await new Promise<void>((resolve) => process.once('SIGINT', () => resolve()));
@@ -419,52 +427,81 @@ program
     console.log(t().cli.langSet(lang));
   });
 
+/** Installs skills given by id, asking only for the options the flags left open (the tree is skipped). */
+async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
+  for (const id of ids) {
+    try {
+      parseSkillId(id);
+    } catch (err) {
+      fail((err as Error).message);
+    }
+  }
+  const preset = presetFromFlags(opts);
+  if (!preset.agents && (opts.yes || !process.stdin.isTTY)) fail(m.errors.agentRequired);
+  const { defaults, detected } = resolveDefaults();
+  let options: InstallOptions | undefined;
+  if (preset.agents && (opts.yes || (preset.scope && preset.method))) {
+    options = {
+      agents: preset.agents,
+      scope: preset.scope ?? defaults.scope,
+      method: preset.method ?? defaults.method,
+      skillsVersion: opts.skillsVersion,
+    };
+  } else {
+    // Ask only for what the flags left open; the tree is skipped.
+    let result: WizardResult | null = null;
+    const restoreScreen = opts.mouse ? enableMouse() : () => {};
+    const app = render(
+      <App
+        themes={[]}
+        skills={[]}
+        preset={preset}
+        defaults={defaults}
+        detectedAgents={detected}
+        skillsVersion={opts.skillsVersion}
+        initialIds={ids}
+        onDone={(r) => (result = r)}
+      />,
+    );
+    await app.waitUntilExit();
+    restoreScreen();
+    releaseStdin();
+    const chosen = result as WizardResult | null;
+    if (!chosen) return;
+    options = chosen.options;
+  }
+  await apply(ids, [], options, opts);
+}
+
 installOptions(program.command('install'))
   .argument('<ids...>', c.ids)
   .description(c.install)
-  .action(async (ids: string[], opts: InstallFlags) => {
-    for (const id of ids) {
-      try {
-        parseSkillId(id);
-      } catch (err) {
-        fail((err as Error).message);
-      }
+  .action((ids: string[], opts: InstallFlags) => installIds(ids, opts));
+
+program
+  .command('export')
+  .description(c.exportCmd)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .action(async (opts: { global?: boolean; project?: boolean }) => {
+    const scopes: Scope[] = opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
+    const { selection, skipped } = toSelection((await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat());
+    process.stdout.write(`${JSON.stringify(selection, null, 2)}\n`);
+    if (skipped.length) console.error(paint('yellow', c.exportSkipped(skipped.join(', '))));
+  });
+
+installOptions(program.command('import'))
+  .argument('<file>', c.fileArg)
+  .description(c.importCmd)
+  .action(async (file: string, opts: InstallFlags) => {
+    let ids: string[] = [];
+    try {
+      ids = parseSelection(readFileSync(file, 'utf8'));
+    } catch (err) {
+      fail(c.importFailed(file, err instanceof Error ? err.message : String(err)));
     }
-    const preset = presetFromFlags(opts);
-    if (!preset.agents && (opts.yes || !process.stdin.isTTY)) fail(m.errors.agentRequired);
-    const { defaults, detected } = resolveDefaults();
-    let options: InstallOptions | undefined;
-    if (preset.agents && (opts.yes || (preset.scope && preset.method))) {
-      options = {
-        agents: preset.agents,
-        scope: preset.scope ?? defaults.scope,
-        method: preset.method ?? defaults.method,
-        skillsVersion: opts.skillsVersion,
-      };
-    } else {
-      // Ask only for what the flags left open; the tree is skipped.
-      let result: WizardResult | null = null;
-      const restoreScreen = opts.mouse ? enableMouse() : () => {};
-      const app = render(
-        <App
-          themes={[]}
-          skills={[]}
-          preset={preset}
-          defaults={defaults}
-          detectedAgents={detected}
-          skillsVersion={opts.skillsVersion}
-          initialIds={ids}
-          onDone={(r) => (result = r)}
-        />,
-      );
-      await app.waitUntilExit();
-      restoreScreen();
-      releaseStdin();
-      const chosen = result as WizardResult | null;
-      if (!chosen) return;
-      options = chosen.options;
-    }
-    await apply(ids, [], options, opts);
+    if (!ids.length) return console.log(paint('dim', m.run.noChange));
+    await installIds(ids, opts);
   });
 
 await program.parseAsync();

@@ -36,11 +36,13 @@ jobs:
           VERCEL_OIDC_TOKEN: ${{ secrets.VERCEL_OIDC_TOKEN }}
           # Trees API quota (1 000 req/h in Actions) to locate SKILL.md files for descriptions.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rebuild the web demo from the new snapshot
+        run: npm run demo
       - name: Commit the new snapshot
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add data/catalog.json.gz
+          git add data/catalog.json.gz docs/demo/index.html
           if git diff --cached --quiet; then
             echo 'catalog unchanged'
           else

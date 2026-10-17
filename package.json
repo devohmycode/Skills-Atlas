@@ -18,6 +18,7 @@
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "dev": "tsx src/launch.ts",
     "crawl": "tsx scripts/crawl.ts",
+    "demo": "tsx scripts/build-demo.ts",
     "sync-agents": "tsx scripts/sync-agents.ts",
     "reclassify": "tsx scripts/reclassify.ts",
     "typecheck": "tsc --noEmit",
