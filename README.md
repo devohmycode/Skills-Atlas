@@ -9,6 +9,8 @@
 
 Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible terminal tree or a local web interface. Tick several and install them together through [`npx skills add`](https://github.com/vercel-labs/skills). Installed skills start ticked: untick one to uninstall it.
 
+🤖 Visit [Website](https://skillsatlas.replit.app/).
+
 **★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
 
 ![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/demo.gif?v=0.9.0)
