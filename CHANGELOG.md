@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.1 — 2026-10-17
+
+- Published again with everything from 0.9.0: versions 0.6.0 to 0.9.0 were withdrawn from npm.
+- The catalog drops the skills their repository no longer holds (412 in this snapshot), and the crawl no longer fails when `main` moves while it runs.
+
 ## 0.9.0 — 2026-10-17
 
 - **Preview a skill before installing it.** Press **`p`** on a skill to read its `SKILL.md`, fetched from GitHub, in place of the list; ↑↓, PgUp/PgDn or the wheel scroll it, esc goes back. A skill runs with your agent's permissions, so reading it first is worth it. The text is shown without its escape sequences, so that it cannot drive the terminal.
