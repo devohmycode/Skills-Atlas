@@ -150,6 +150,9 @@ export const de: Messages = {
   },
 
   web: {
+    catalogPartial: 'Unvollständiger Katalog: {sources} bei der Erfassung nicht verfügbar.',
+    packAvailability: '{available}/{total} Skills in diesem Katalog.',
+    packMissing: 'Nicht im Katalog (eventuell weiterhin installierbar): {ids}',
     github: 'GitHub-Repository öffnen',
     recommendedHint: 'Eine persönliche Auswahl an Skills.',
     serving: 'Skills Atlas ist geöffnet unter',

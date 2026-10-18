@@ -57,6 +57,22 @@ describe('web interface', () => {
     ui.view.q = 'cafe'; ui.view.sort = 'installs';
     expect(ui.installedMatches()[0].name).toBe('popular');
   });
+  it('shows partial catalog and incomplete pack diagnostics as text, and accepts legacy state', () => {
+    const { ui, element } = browser();
+    expect(element('catalog-health').hidden).toBe(true);
+    ui.init({ installed: [], agents: [], cwd: '.',
+      sources: { smithery: { status: 'error', count: 0, error: '<script>bad</script>' } },
+      themes: [{ id: 'pack:test', label: 'Test', pack: { available: 1, total: 2, missing: ['a/b@<script>bad</script>'] } }],
+    }, { catalogPartial: 'Partial: {sources}', packAvailability: '{available}/{total} available.', packMissing: 'Absent: {ids}' });
+    expect(element('catalog-health').textContent).toBe('Partial: smithery');
+    expect(element('catalog-health').hidden).toBe(false);
+    ui.view.theme = 'pack:test';
+    ui.renderRows(false);
+    expect(element('pack-health').textContent).toContain('1/2 available.');
+    expect(element('pack-health').textContent).toContain('a/b@<script>bad</script>');
+    expect(element('pack-health').innerHTML).toBe('');
+  });
+
   it('embeds the shared repository grouping without bundler helpers', () => {
     // esbuild's keepNames adds __name() calls, which the page does not define.
     expect(PAGE_HTML).toContain('function groupByRepository');

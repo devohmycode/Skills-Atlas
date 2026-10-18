@@ -148,6 +148,9 @@ export const ko: Messages = {
   },
 
   web: {
+    catalogPartial: '부분 카탈로그: 수집 중 {sources}에 접근할 수 없었습니다.',
+    packAvailability: '이 카탈로그의 스킬: {available}/{total}.',
+    packMissing: '카탈로그에 없음 (설치 가능할 수 있음): {ids}',
     github: 'GitHub 저장소 열기',
     recommendedHint: '개인적으로 선정한 스킬입니다.',
     serving: 'Skills Atlas가 열렸습니다:',

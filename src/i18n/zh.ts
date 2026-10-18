@@ -148,6 +148,9 @@ export const zh: Messages = {
   },
 
   web: {
+    catalogPartial: '目录不完整：采集时无法访问 {sources}。',
+    packAvailability: '此目录包含 {available}/{total} 个技能。',
+    packMissing: '目录中缺少（可能仍可安装）：{ids}',
     github: '打开 GitHub 仓库',
     recommendedHint: '个人精选的技能。',
     serving: 'Skills Atlas 已打开：',

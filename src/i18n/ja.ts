@@ -148,6 +148,9 @@ export const ja: Messages = {
   },
 
   web: {
+    catalogPartial: '一部のカタログのみ：収集時に {sources} を利用できませんでした。',
+    packAvailability: 'このカタログには {total} 件中 {available} 件のスキルがあります。',
+    packMissing: 'カタログにないスキル（インストール可能な場合があります）：{ids}',
     github: 'GitHub リポジトリを開く',
     recommendedHint: '個人的に選んだおすすめスキルです。',
     serving: 'Skills Atlas を開きました：',

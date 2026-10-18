@@ -11,7 +11,7 @@ import { readConfig, writeConfig } from '../config.js';
 import { getLang, locale, t, themeLabel } from '../i18n/index.js';
 import { formatCommand, planInstall, planRemovals, type InstallCommand } from '../install/plan.js';
 import { isSuccess, listInstalled, phaseOf, runAll, type CommandOutcome, type InstalledSkill, type Phase } from '../install/run.js';
-import { SCOPES, type InstallOptions, type Removal, type Skill, type Theme } from '../types.js';
+import { SCOPES, type Catalog, type InstallOptions, type Removal, type Skill, type Theme } from '../types.js';
 import { PAGE_HTML } from './page.js';
 export { openBrowser } from '../browser.js';
 
@@ -21,6 +21,7 @@ export interface ServerOptions {
   /** Every catalog skill, to recognise installed ones hidden by the filters. */
   catalogSkills: Skill[];
   themes: Theme[];
+  sources?: Catalog['stats']['sources'];
   skillsVersion: string;
   /** Default: DEFAULT_PORT, or a free one when it is taken; 0 always picks a free one. */
   port?: number;
@@ -110,9 +111,10 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       lang: getLang(),
       locale: locale(),
       messages: t().web,
+      sources: opts.sources,
       cwd,
       skillsVersion: opts.skillsVersion,
-      themes: [INSTALLED_THEME, ...opts.themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description })),
+      themes: [INSTALLED_THEME, ...opts.themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
       agents: AGENTS.map((a) => ({ id: a.id, name: a.displayName, detected: detected.has(a.id) })),
       defaults: {
         agents: config.agents?.length ? config.agents : detectedList,

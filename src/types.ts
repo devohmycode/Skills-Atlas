@@ -47,6 +47,8 @@ export interface Theme {
   label: string;
   /** What a curated theme (a pack) is for, shown with it. */
   description?: string;
+  /** Membership in this snapshot; absence does not prove a skill cannot install. */
+  pack?: { available: number; total: number; missing: string[] };
 }
 
 export interface Catalog {
@@ -55,6 +57,8 @@ export interface Catalog {
   themes: Theme[];
   skills: Skill[];
   stats: {
+    /** Absent in older snapshots, whose source health is unknown. */
+    sources?: Record<Origin, { status: 'ok' | 'error'; count: number; error?: string }>;
     raw: Record<Origin, number>;
     merged: number;
     /** Skills flagged `official` (absent from snapshots older than the flag). */

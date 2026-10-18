@@ -24,6 +24,7 @@ export function assemble(
   raw: Record<Origin, RawSkill[]>,
   merged = dedupe(Object.values(raw).flat()),
   officialOwners?: Set<string>,
+  sources?: Catalog['stats']['sources'],
 ): Catalog {
   const skills = classifyAll(merged);
   const official = officialOwners ? markOfficial(skills, officialOwners) : undefined;
@@ -36,6 +37,7 @@ export function assemble(
     themes: allThemes(),
     skills,
     stats: {
+      ...(sources ? { sources } : {}),
       raw: {
         'skills.sh': raw['skills.sh'].length,
         'claude-plugins.dev': raw['claude-plugins.dev'].length,
@@ -67,13 +69,16 @@ export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
   });
   const settled = await Promise.allSettled(origins.map((o) => jobs[o]()));
   const raw = {} as Record<Origin, RawSkill[]>;
+  const sources = {} as NonNullable<Catalog['stats']['sources']>;
   settled.forEach((r, i) => {
     const origin = origins[i]!;
     if (r.status === 'fulfilled') {
       raw[origin] = r.value;
+      sources[origin] = { status: 'ok', count: r.value.length };
       log(`${origin}: ${r.value.length} entries`);
     } else {
       raw[origin] = [];
+      sources[origin] = { status: 'error', count: 0, error: (r.reason instanceof Error ? r.reason.message : String(r.reason)).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').slice(0, 300) };
       log(`${origin}: FAILED — ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`);
     }
   });
@@ -85,5 +90,5 @@ export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
     merged = merged.filter((s) => !missing.has(s));
     log(`enrich: ${filled} descriptions filled, ${missing.size} skills gone from their repository dropped`);
   }
-  return assemble(raw, merged, await officialOwners);
+  return assemble(raw, merged, await officialOwners, sources);
 }
