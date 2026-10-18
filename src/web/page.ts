@@ -229,6 +229,7 @@ aside h2:first-child { margin-top: 0; }
 .chips button:hover .x { background: var(--rule); color: var(--ink); }
 .link { border: 0; background: none; color: var(--accent); padding: 0; font-size: 12.5px; }
 .link:hover { text-decoration: underline; }
+.details-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 45vh; overflow: auto; }
 .head-row { display: flex; justify-content: space-between; align-items: baseline; }
 .head-row h2 { margin-bottom: 10px; }
 .choice {
@@ -353,6 +354,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   <aside id="panel"><div class="panel-body" id="panel-body"></div><div class="panel-foot" id="panel-foot" hidden></div></aside>
 </main>
 <dialog id="progress" aria-live="polite"><div class="dlg" id="progress-body"></div></dialog>
+<dialog id="details" aria-labelledby="details-title"><div class="dlg"><h3 id="details-title"></h3><div id="details-body" aria-live="polite"></div><footer><button class="primary" id="details-close"></button></footer></div></dialog>
 <script>
 (function () {
   'use strict';
@@ -366,6 +368,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   var hues = {};              // theme id -> hue on the map
   var adds = new Map();       // id -> skill, to install
   var removes = new Set();    // installed ids to uninstall
+  var auditOverrides = new Set(), previewSeq = 0;
   var opts = { scope: 'project', method: 'symlink', agents: new Set() };
   var view = { q: '', sort: '', official: false, theme: '', items: [], total: 0, counts: {}, all: 0 };
   var showAllAgents = false, agentFilter = '', planTimer = 0, planSeq = 0, queryTimer = 0, querySeq = 0;
@@ -419,6 +422,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   function isChecked(id) { return installedById.has(id) ? !removes.has(id) : adds.has(id); }
   function toggle(skill) {
     if (!skill) return;
+    auditOverrides.delete(skill.id);
     if (installedById.has(skill.id)) { if (removes.has(skill.id)) removes.delete(skill.id); else removes.add(skill.id); }
     else if (adds.has(skill.id)) adds.delete(skill.id);
     else adds.set(skill.id, skill);
@@ -459,7 +463,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
                      : '<span class="source">' + esc(s.source) + '</span>';
     return '<div class="row' + cls + '" role="listitem" tabindex="0"' + (url ? ' aria-keyshortcuts="g"' : '') + ' data-id="' + esc(s.id) + '" style="' + hueStyle(s.themes && s.themes[0]) + '">' +
       '<input class="pin" type="checkbox" tabindex="-1"' + (on ? ' checked' : '') + ' aria-label="' + esc(s.name) + '">' +
-      '<div class="title"><span class="name">' + esc(s.name) + '</span>' + source + tags + '</div>' +
+      '<div class="title"><span class="name">' + esc(s.name) + '</span>' + source + tags +
+      '<button class="link" data-preview="' + esc(s.id) + '" aria-haspopup="dialog">' + esc(M.details) + '</button></div>' +
       '<div class="pop">' + popularity(s) + '</div>' +
       '<p class="desc">' + esc(s.description || M.noDescription) + '</p></div>';
   }
@@ -544,6 +549,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   }
   $('rows').addEventListener('click', function (e) {
     if (e.target.closest('a')) return;
+    var preview = e.target.closest('[data-preview]');
+    if (preview) { previewSkill(shown.get(preview.dataset.preview), preview); return; }
     var pin = e.target.closest('[data-repo-pin]');
     // The checkbox of a repository ticks its skills instead of opening the group.
     if (pin) {
@@ -567,9 +574,10 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     if (head && e.key === ' ') { e.preventDefault(); toggleRepo(head.parentElement.dataset.repo); return; }
     var row = e.target.closest('.row');
     if (!row) return;
-    if (e.target.closest('a') && (e.key === 'Enter' || e.key === ' ')) return;
+    if ((e.target.closest('a') || e.target.closest('button')) && (e.key === 'Enter' || e.key === ' ')) return;
     if ((e.target.tagName === 'INPUT' || e.target.isContentEditable) && e.key !== ' ' && e.key !== 'Enter') return;
-    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(shown.get(row.dataset.id)); }
+    if (e.key === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); previewSkill(shown.get(row.dataset.id), row); }
+    else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(shown.get(row.dataset.id)); }
     else if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       var url = githubUrl(shown.get(row.dataset.id));
       if (url) { e.preventDefault(); window.open(url, '_blank', 'noopener,noreferrer'); }
@@ -580,6 +588,32 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 
   function installedMatches() {
     return searchInstalled(view.q, view.sort || (view.q.trim() ? undefined : 'installs')).filter(function (s) { return !view.official || s.official; });
+  }
+
+  function riskHtml(result) {
+    if (result.error) return '<p class="warn">' + esc(M.auditUnread) + ': ' + esc(result.error) + '</p>';
+    if (!result.risks.length) return '<p>' + esc(M.noRisk) + '</p>';
+    return '<ul>' + result.risks.map(function (r) {
+      return '<li>' + esc((M.riskLevels || {})[r.level] || r.level) + ': ' + esc((M.risks || {})[r.rule] || r.label) +
+        ' (' + r.line + ')<pre class="details-text">' + esc(r.excerpt) + '</pre></li>';
+    }).join('') + '</ul>';
+  }
+  function previewSkill(skill, trigger) {
+    if (!skill) return;
+    var dlg = $('details'), seq = ++previewSeq;
+    $('details-title').textContent = skill.id;
+    $('details-body').textContent = M.previewLoading;
+    $('details-close').textContent = M.close;
+    dlg.onclose = function () { ++previewSeq; if (trigger) trigger.focus(); };
+    $('details-close').onclick = function () { dlg.close(); };
+    dlg.showModal();
+    return apiJson('/api/preview?id=' + encodeURIComponent(skill.id) + '&scope=' + opts.scope).then(function (r) {
+      if (seq !== previewSeq) return;
+      $('details-body').innerHTML = (r.collisions || []).map(function (c) { return '<p class="warn">' + esc(c.message) + '</p>'; }).join('') +
+        riskHtml(r) + (r.markdown == null ? '' : '<pre class="details-text">' + esc(r.markdown) + '</pre>');
+    }).catch(function (err) {
+      if (seq === previewSeq) $('details-body').textContent = M.previewUnavailable + ': ' + err.message;
+    });
   }
 
   /** Installed skills are few and known here; the catalog is searched by the server, a page at a time. */
@@ -686,7 +720,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       h += '<h2>' + esc(M.methodTitle) + '</h2>' +
         choice('method', 'symlink', M.symlink, M.symlinkHint) + choice('method', 'copy', M.copy, M.copyHint);
     }
-    h += '<h2>' + esc(M.commands) + '</h2><pre id="plan">…</pre>';
+    h += '<div id="audit"></div><h2>' + esc(M.commands) + '</h2><pre id="plan">…</pre>';
     var focusFilter = document.activeElement && document.activeElement.id === 'agent-filter';
     var scroll = $('panel-body').scrollTop;
     $('panel-body').innerHTML = h;
@@ -695,7 +729,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var blocked = nAdd && !opts.agents.size;
     $('panel-foot').hidden = false;
     $('panel-foot').innerHTML = (blocked ? '<p class="warn">' + esc(M.needAgent) + '</p>' : '') +
-      '<button class="primary" data-act="apply"' + (blocked ? ' disabled' : '') + '>' + esc(tr('applyN', { n: nAdd + nRm })) + '</button>';
+      '<button class="primary" id="apply" data-act="apply" disabled>' + esc(tr('applyN', { n: nAdd + nRm })) + '</button>';
     schedulePlan();
   }
   function choice(name, value, label, hint) {
@@ -703,19 +737,32 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       '<span><b>' + esc(label) + '</b><small>' + esc(hint) + '</small></span></label>';
   }
   function body() {
-    return { install: Array.from(adds.keys()), remove: Array.from(removes), options: { agents: selectedAgents(), scope: opts.scope, method: opts.method } };
+    return { install: Array.from(adds.keys()), remove: Array.from(removes), auditOverrides: Array.from(auditOverrides).filter(function (id) { return adds.has(id); }), options: { agents: selectedAgents(), scope: opts.scope, method: opts.method } };
   }
   /** Command preview, computed by the server with the same code as the terminal. */
   function schedulePlan() {
     clearTimeout(planTimer);
+    var seq = ++planSeq;
     if (!adds.size && !removes.size) return;
     if (adds.size && !opts.agents.size) { var p0 = $('plan'); if (p0) p0.textContent = '—'; return; }
-    var seq = ++planSeq;
     planTimer = setTimeout(function () {
       apiJson('/api/plan', body()).then(function (r) {
         var p = $('plan');
-        if (p && seq === planSeq) p.textContent = r.commands.map(function (c) { return '$ ' + c; }).join('\n');
-      }).catch(function (err) { var p = $('plan'); if (p) p.textContent = err.message; });
+        if (!p || seq !== planSeq) return;
+        p.textContent = r.commands.map(function (c) { return '$ ' + c; }).join('\n');
+        var h = (r.collisions || []).map(function (c) { return '<p class="warn">' + esc(c.message) + '</p>'; }).join('');
+        if (r.audit) {
+          if (!r.audit.enabled) h += '<p class="warn">' + esc(M.auditOff) + '</p>';
+          r.audit.results.forEach(function (a) {
+            h += '<h3>' + esc(a.id) + '</h3>' + riskHtml(a);
+            if (a.risks.some(function (x) { return x.level === 'high'; })) h += '<label><input type="checkbox" data-override="' + esc(a.id) + '"' +
+              (auditOverrides.has(a.id) ? ' checked' : '') + '> ' + esc(M.auditToggle) + ': ' + esc(a.id) + '</label>';
+          });
+        }
+        if ((r.blocked || []).length) h += '<p class="warn">' + esc(M.auditBlocked) + '</p>';
+        $('audit').innerHTML = h;
+        $('apply').disabled = (r.blocked || []).length > 0;
+      }).catch(function (err) { var p = $('plan'); if (p && seq === planSeq) p.textContent = err.message; });
     }, 150);
   }
 
@@ -723,15 +770,16 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var t = e.target.closest('[data-act],[data-add],[data-rm]');
     if (!t) return;
     var changed = [];
-    if (t.dataset.add) { adds.delete(t.dataset.add); changed.push(t.dataset.add); }
+    if (t.dataset.add) { adds.delete(t.dataset.add); auditOverrides.delete(t.dataset.add); changed.push(t.dataset.add); }
     else if (t.dataset.rm) { removes.delete(t.dataset.rm); changed.push(t.dataset.rm); }
-    else if (t.dataset.act === 'clear') { changed = Array.from(adds.keys()).concat(Array.from(removes)); adds.clear(); removes.clear(); }
+    else if (t.dataset.act === 'clear') { changed = Array.from(adds.keys()).concat(Array.from(removes)); adds.clear(); removes.clear(); auditOverrides.clear(); }
     else if (t.dataset.act === 'all-agents') showAllAgents = !showAllAgents;
     else if (t.dataset.act === 'apply') return apply();
     changed.forEach(updateRow); renderPanel();
   });
   $('panel').addEventListener('change', function (e) {
     var t = e.target;
+    if (t.dataset.override) { if (t.checked) auditOverrides.add(t.dataset.override); else auditOverrides.delete(t.dataset.override); }
     if (t.name === 'scope' || t.name === 'method') opts[t.name] = t.value;
     else if (t.dataset.agent) { if (t.checked) opts.agents.add(t.dataset.agent); else opts.agents.delete(t.dataset.agent); }
     renderPanel();
@@ -744,11 +792,16 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 
   // ---- apply -----------------------------------------------------------------------------
   function apply() {
-    var dlg = $('progress'), tasks = [];
+    var dlg = $('progress'), tasks = [], review = null;
     var out = $('progress-body');
     function render(end) {
       var h = '<h3>' + esc(end ? (end.ok ? M.summaryOk : M.summaryFailed) : M.progressTitle) + '</h3>' +
         '<p class="sub">' + esc(end ? (end.ok ? M.summaryOkHint : M.summaryFailedHint) : M.applying) + '</p>';
+      if (review) {
+        h += review.collisions.map(function (c) { return '<p class="warn">' + esc(c.message) + '</p>'; }).join('');
+        if (!review.audit.enabled) h += '<p class="warn">' + esc(M.auditOff) + '</p>';
+        h += review.audit.results.map(function (a) { return '<h4>' + esc(a.id) + '</h4>' + riskHtml(a); }).join('');
+      }
       tasks.forEach(function (t) {
         var dot = t.done ? (t.ok ? '<span class="dot ok">✓</span>' : '<span class="dot ko">!</span>')
                          : (t.started ? '<span class="dot spin"></span>' : '<span class="dot wait"></span>');
@@ -776,7 +829,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
           var lines = buf.split('\n'); buf = lines.pop();
           lines.filter(Boolean).forEach(function (line) {
             var ev = JSON.parse(line);
-            if (ev.type === 'start') tasks[ev.i] = { kind: ev.kind, source: ev.source, skills: ev.skills, started: true, phase: 'fetching' };
+            if (ev.type === 'audit') review = ev;
+            else if (ev.type === 'start') tasks[ev.i] = { kind: ev.kind, source: ev.source, skills: ev.skills, started: true, phase: 'fetching' };
             else if (ev.type === 'phase') tasks[ev.i].phase = ev.phase;
             else if (ev.type === 'done') { tasks[ev.i].done = true; tasks[ev.i].ok = ev.ok; tasks[ev.i].error = ev.error; }
             render(ev.type === 'end' ? ev : null);
@@ -790,7 +844,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 
   /** After an install: what is installed changed, the selection is spent. */
   function refresh() {
-    adds.clear(); removes.clear();
+    adds.clear(); removes.clear(); auditOverrides.clear();
     return apiJson('/api/state').then(function (st) { setState(st); renderPanel(); return load(false); }).catch(fail);
   }
 
