@@ -6,7 +6,7 @@ import { mergeInstalled } from './catalog/installed.js';
 import { loadCatalog } from './catalog/load.js';
 import { loadLatestCatalog } from './catalog/remote.js';
 import { curated } from './catalog/curated.js';
-import { readPacks } from './catalog/packs.js';
+import { packStatus, readPacks } from './catalog/packs.js';
 import pkg from '../package.json' with { type: 'json' };
 import { groupByTheme, popularityLabel, querySkills, resolveTheme, sortSkills, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
@@ -115,8 +115,13 @@ function resolveLang(argv: string[]): Lang {
 
 
 async function openCatalog(opts: CommonOptions): Promise<Catalog> {
+  const checked = (catalog: Catalog) => {
+    const failed = Object.entries(catalog.stats.sources ?? {}).filter(([, s]) => s.status === 'error').map(([name]) => name);
+    if (failed.length) console.error(paint('yellow', t().web.catalogPartial.replace('{sources}', failed.join(', '))));
+    return curated(catalog);
+  };
   try {
-    if (opts.catalog) return curated(await loadCatalog(opts.catalog));
+    if (opts.catalog) return checked(await loadCatalog(opts.catalog));
     // Latest snapshot from GitHub (refreshed daily), else the one bundled in the package.
     const catalog = await loadLatestCatalog({
       offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE),
@@ -129,7 +134,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
     if (opts.refresh && !opts.quiet) {
       console.error(paint('dim', t().cli.catalogOf(catalog.generatedAt.slice(0, 10), formatNumber(catalog.skills.length))));
     }
-    return curated(catalog);
+    return checked(catalog);
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   }
@@ -387,6 +392,7 @@ program
       themes: catalog.themes,
       skillsVersion: opts.skillsVersion,
       port: opts.port,
+      sources: catalog.stats.sources,
     }).catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
     const w = t().web;
     console.log(`\n  ${w.serving} ${paint(['bold', 'cyan'], server.url)}\n  ${paint('dim', w.stop)}\n`);
@@ -567,12 +573,15 @@ program
   .command('packs')
   .description(c.packsCmd)
   .option('--json', c.json)
-  .action((opts: { json?: boolean }) => {
+  .action(async (opts: { json?: boolean }) => {
     const packs = readPacks();
-    if (opts.json) return void process.stdout.write(`${JSON.stringify(packs, null, 2)}\n`);
-    for (const p of packs) {
-      console.log(`\n${paint('bold', `📦 ${p.name}`)} ${paint('dim', `${p.id} · ${formatNumber(p.skills.length)}`)}\n  ${p.description}`);
+    const catalog = await openCatalog({ offline: true });
+    const status = packs.map((p) => ({ ...p, ...packStatus(p, catalog.skills) }));
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+    for (const p of status) {
+      console.log(`\n${paint('bold', `📦 ${p.name}`)} ${paint('dim', `${p.id} · ${p.available}/${p.total}`)}\n  ${p.description}`);
       for (const id of p.skills) console.log(`  ${paint('dim', id)}`);
+      if (p.missing.length) console.log(paint('yellow', t().web.packMissing.replace('{ids}', p.missing.join(', '))));
     }
     console.log(paint('dim', `\n${c.packsHint}`));
   });

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { curated } from '../src/catalog/curated.js';
-import { readPacks, withPacks } from '../src/catalog/packs.js';
+import { packStatus, readPacks, withPacks } from '../src/catalog/packs.js';
 import type { Catalog, Skill } from '../src/types.js';
 
 const skill = (id: string): Skill => {
@@ -17,10 +17,16 @@ const catalog: Catalog = {
 };
 
 describe('packs', () => {
+  it('counts unique ids case-insensitively and keeps absent ids in the original pack', () => {
+    const pack = { id: 'x', name: 'X', description: 'x', skills: ['a/b@one', 'A/B@ONE', 'c/d@three', 'x/y@gone'] };
+    expect(packStatus(pack, catalog.skills)).toEqual({ available: 2, total: 3, missing: ['x/y@gone'] });
+    expect(pack.skills).toHaveLength(4);
+  });
+
   it('turns each pack into a theme after Trending, holding the skills the catalog knows', () => {
     const packed = withPacks(catalog, [{ id: 'web', name: 'Web dev', description: 'For the web.', skills: ['A/B@one', 'c/d@three', 'x/y@unknown'] }]);
     expect(packed.themes.map((th) => th.id)).toEqual(['recommended', 'trending', 'pack:web', 'code']);
-    expect(packed.themes[2]).toEqual({ id: 'pack:web', label: '📦 Web dev', description: 'For the web.' });
+    expect(packed.themes[2]).toEqual({ id: 'pack:web', label: '📦 Web dev', description: 'For the web.', pack: { available: 2, total: 3, missing: ['x/y@unknown'] } });
     expect(packed.skills.filter((s) => s.themes.includes('pack:web')).map((s) => s.id)).toEqual(['a/b@one', 'c/d@three']);
     expect(packed.stats.byTheme['pack:web']).toBe(2);
   });

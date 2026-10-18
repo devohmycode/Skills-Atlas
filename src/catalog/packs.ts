@@ -25,6 +25,14 @@ const Packs = z.array(z.object({
 /** Theme id of a pack in the tree and on the web page. */
 export const packTheme = (id: string) => `pack:${id}`;
 
+/** Availability in this snapshot, without declaring an absent skill uninstallable. */
+export function packStatus(pack: Pack, skills: Catalog['skills']) {
+  const known = new Set(skills.map((s) => s.id.toLowerCase()));
+  const ids = [...new Map(pack.skills.map((id) => [id.toLowerCase(), id])).values()];
+  const missing = ids.filter((id) => !known.has(id.toLowerCase()));
+  return { available: ids.length - missing.length, total: ids.length, missing };
+}
+
 function parsePacks(raw: unknown): Pack[] {
   const result = Packs.safeParse(raw);
   if (!result.success) throw new Error(`Invalid packs: ${result.error.message}`);
@@ -58,7 +66,7 @@ export function withPacks(catalog: Catalog, packs: Pack[] = readPacks()): Catalo
   });
   const byTheme = { ...catalog.stats.byTheme };
   for (const p of packs) byTheme[packTheme(p.id)] = skills.filter((s) => s.themes.includes(packTheme(p.id))).length;
-  const packThemes = packs.map((p) => ({ id: packTheme(p.id), label: `📦 ${p.name}`, description: p.description }));
+  const packThemes = packs.map((p) => ({ id: packTheme(p.id), label: `📦 ${p.name}`, description: p.description, pack: packStatus(p, catalog.skills) }));
   const others = catalog.themes.filter((th) => !th.id.startsWith('pack:'));
   const after = Math.max(others.findIndex((th) => th.id === 'trending'), others.findIndex((th) => th.id === 'recommended')) + 1;
   return { ...catalog, skills, themes: [...others.slice(0, after), ...packThemes, ...others.slice(after)], stats: { ...catalog.stats, byTheme } };

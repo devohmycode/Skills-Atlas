@@ -148,6 +148,9 @@ export const en = {
 
   /** Web interface (`skills-atlas ui`): plain strings, {placeholders} filled in by the page. */
   web: {
+    catalogPartial: 'Partial catalog: {sources} unavailable during collection.',
+    packAvailability: '{available}/{total} skills in this catalog.',
+    packMissing: 'Absent from this catalog (may still be installable): {ids}',
     github: 'Open GitHub repository',
     recommendedHint: 'A personal selection of skills.',
     serving: 'Skills Atlas is open at',

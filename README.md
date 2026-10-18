@@ -123,6 +123,8 @@ A `skills-atlas.json` at the root of a repository lists the skills the project e
 
 With `agents` in the file (or `-a` on the command line), `sync` checks each target agent separately. A skill installed for Cursor alone does not satisfy a request for Claude Code. `sync --check` lists the missing skill/agent combinations, and `sync` installs only those combinations. `-a` overrides the file's agents; `-a '*'` checks every supported agent. Without explicit agents, the existing project-wide presence check is used.
 
+The web interface and `skills-atlas packs` show how many pack members are present in the current catalog and list any missing ids. An absent catalog entry may still be installable; direct pack installation keeps the pack's original member list.
+
 ### Trending
 
 Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form **🔥 Trending**, right after Recommended, sorted by growth. The theme appears once two snapshots with install counts can be compared.
@@ -305,6 +307,8 @@ The snapshot is built from:
 | [officialskills.sh](https://officialskills.sh) | sitemap | official publishers: every skill whose GitHub owner is listed there is flagged `official` |
 
 **Rate limits.** The skills.sh search API allows 30 requests per minute. The crawl queries it at that pace, about 2 s per owner. The scheduled workflow covers the top 600 owners; a local crawl covers none by default. With `VERCEL_OIDC_TOKEN`, the crawl uses the [official API](https://skills.sh/docs/api) instead, which returns the full leaderboard.
+
+New snapshots retain collection status per source. If a source was unavailable during collection, the terminal and web interface warn that the catalog is partial. `packs --json` also includes `available`, `total` and `missing` fields. Older snapshots without source diagnostics remain readable; their source health is unknown. No extra source checks run while browsing.
 
 **Processing:**
 

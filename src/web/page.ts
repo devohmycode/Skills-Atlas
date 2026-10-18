@@ -255,6 +255,8 @@ pre {
   font: 11.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 150px; overflow: auto; color: var(--ink-2);
 }
 .warn { margin: 0 0 10px; color: var(--remove); font-size: 13px; }
+#catalog-health { margin: 0; padding: 10px 24px; border-bottom: 1px solid var(--rule); color: var(--gold); }
+#pack-health { color: var(--ink-2); }
 .primary {
   width: 100%; height: 46px; border: 0; border-radius: 12px; background: var(--brand-gradient); color: ${PALETTE.background};
   font: 600 16px/1 var(--display); letter-spacing: .02em; transition: filter .15s, transform .1s;
@@ -339,10 +341,12 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     </div>
   </div>
 </header>
+<p id="catalog-health" class="warn" role="status" hidden></p>
 <main>
   <nav id="themes" aria-label="Themes"></nav>
   <section class="list">
     <div class="list-head"><strong id="count" class="figure"></strong><span id="where"></span></div>
+    <p id="pack-health" class="warn" role="status" hidden></p>
     <div class="rows" id="rows" role="list"></div>
     <button class="more" id="more" hidden></button>
   </section>
@@ -527,6 +531,11 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     $('rows').hidden = false;
     $('count').textContent = fmt.format(view.total);
     $('where').textContent = view.theme ? tr('resultsIn', { theme: themeName(view.theme) }) : M.resultsAll;
+    var theme = S.themes.find(function (th) { return th.id === view.theme; });
+    var pack = theme && theme.pack;
+    $('pack-health').hidden = !pack;
+    $('pack-health').textContent = pack ? tr('packAvailability', { available: pack.available, total: pack.total }) +
+      (pack.missing.length ? ' ' + tr('packMissing', { ids: pack.missing.join(', ') }) : '') : '';
     var more = $('more');
     more.disabled = false;
     more.hidden = view.items.length >= view.total;
@@ -789,6 +798,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   function setState(st) {
     S = st;
     searchInstalled = createSearchIndex(st.installed);
+    var failed = Object.keys(st.sources || {}).filter(function (name) { return st.sources[name].status === 'error'; });
+    $('catalog-health').hidden = !failed.length;
+    $('catalog-health').textContent = failed.length ? tr('catalogPartial', { sources: failed.join(', ') }) : '';
     installedById = new Map(st.installed.map(function (s) { return [s.id, s]; }));
     // Regions of the map: hues spread evenly over the themes, in catalog order.
     var regions = st.themes.filter(function (th) { return th.id !== 'installed' && th.id !== 'recommended' && th.id !== 'other'; });

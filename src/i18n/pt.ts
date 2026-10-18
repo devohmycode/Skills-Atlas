@@ -150,6 +150,9 @@ export const pt: Messages = {
   },
 
   web: {
+    catalogPartial: 'Catálogo parcial: {sources} indisponível durante a coleta.',
+    packAvailability: '{available}/{total} skills neste catálogo.',
+    packMissing: 'Ausentes do catálogo (podem continuar instaláveis): {ids}',
     github: 'Abrir o repositório no GitHub',
     recommendedHint: 'Uma seleção pessoal de skills.',
     serving: 'Skills Atlas está aberto em',
