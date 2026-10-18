@@ -68,6 +68,11 @@ export const pt: Messages = {
     updates: (n) => `${n} ${s(n, 'atualização', 'atualizações')} (u)`,
     previewLoading: 'Carregando SKILL.md…',
     previewFailed: (msg) => `Não foi possível carregar o SKILL.md: ${msg}`,
+    risks: { pipeShell: "baixa e executa código", credentials: "acessa arquivos de credenciais", destructive: "apaga de forma ampla", hidden: "pede ao agente que esconda coisas ou ignore suas instruções", sudo: "executa comandos como administrador", secrets: "lê segredos do ambiente", sendsData: "envia dados a um servidor", runsCode: "instala ou executa pacotes ou scripts" },
+    riskLevels: { high: "alto", medium: "médio", info: "info" },
+    risksFound: (n) => `${n} ${s(n, 'sinal de alerta', 'sinais de alerta')} (verificação por padrões, não uma garantia)`,
+    noRisk: "Nenhum sinal de alerta (verificação por padrões, não uma garantia)",
+    growth: (n) => `+${n} instalações desde o último instantâneo`,
   },
 
   agents: {
@@ -93,6 +98,8 @@ export const pt: Messages = {
     agents: 'Agentes',
     method: 'Método',
     commands: 'Comandos',
+    collisions: (n) => `${n} ${s(n, 'skill substituiria', 'skills substituiriam')} outra com o mesmo nome`,
+    replaces: (incoming, replaced, installed) => `${incoming} substitui ${replaced}${installed ? ' (instalada)' : ' (também selecionada)'}`,
     update: (n) => `Atualizar ${n} ${s(n, 'skill', 'skills')} (global)`,
   },
 
@@ -263,6 +270,7 @@ export const pt: Messages = {
 
   themes: {
     recommended: 'Recomendados',
+    trending: 'Em alta',
     installed: 'Já instalados',
     frontend: 'Frontend e web',
     backend: 'Backend e APIs',

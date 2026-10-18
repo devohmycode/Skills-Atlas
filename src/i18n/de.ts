@@ -68,6 +68,11 @@ export const de: Messages = {
     updates: (n) => `${n} ${n === 1 ? 'Update' : 'Updates'} (u)`,
     previewLoading: 'SKILL.md wird geladen…',
     previewFailed: (msg) => `SKILL.md konnte nicht geladen werden: ${msg}`,
+    risks: { pipeShell: "lädt Code herunter und führt ihn aus", credentials: "greift auf Zugangsdaten zu", destructive: "löscht großflächig", hidden: "fordert den Agenten auf, etwas zu verbergen oder Anweisungen zu ignorieren", sudo: "führt Befehle als Administrator aus", secrets: "liest Geheimnisse aus der Umgebung", sendsData: "sendet Daten an einen Server", runsCode: "installiert oder startet Pakete oder Skripte" },
+    riskLevels: { high: "hoch", medium: "mittel", info: "info" },
+    risksFound: (n) => `${n} ${n === 1 ? 'Warnsignal' : 'Warnsignale'} (Musterprüfung, keine Garantie)`,
+    noRisk: "Kein Warnsignal gefunden (Musterprüfung, keine Garantie)",
+    growth: (n) => `+${n} Installationen seit dem letzten Stand`,
   },
 
   agents: {
@@ -93,6 +98,8 @@ export const de: Messages = {
     agents: 'Agenten',
     method: 'Methode',
     commands: 'Befehle',
+    collisions: (n) => `${n} ${n === 1 ? 'Skill würde' : 'Skills würden'} einen gleichnamigen ersetzen`,
+    replaces: (incoming, replaced, installed) => `${incoming} ersetzt ${replaced}${installed ? ' (installiert)' : ' (ebenfalls ausgewählt)'}`,
     update: (n) => `${n} ${n === 1 ? 'Skill' : 'Skills'} aktualisieren (global)`,
   },
 
@@ -263,6 +270,7 @@ export const de: Messages = {
 
   themes: {
     recommended: 'Empfohlen',
+    trending: 'Im Trend',
     installed: 'Bereits installiert',
     frontend: 'Frontend & Web',
     backend: 'Backend & APIs',

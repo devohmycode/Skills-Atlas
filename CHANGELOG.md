@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Same name, one folder.** The skills CLI installs by name, so a skill from another repository silently replaced an installed one of the same name, or another one selected in the same run. The review screen now lists such replacements, `install` and `import` warn before running, and the MCP server refuses them unless `replace: true`.
+- **Risk check.** The `p` preview, `show` and the MCP server's `show_skill` point at what a `SKILL.md` asks for beyond its description: downloading and running code, credential files, broad deletions, instructions to hide things from the user (high); administrator commands, secrets read from the environment, data sent to a server (medium); packages or scripts run (info). A pattern check on the text, tuned on the 150 most installed skills, which it leaves without a false high alert; it points at lines to read, it does not prove a skill safe.
+- **🔥 Trending.** Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form a Trending theme, right after Recommended, sorted by growth, with the gain shown in the details.
+
 ## 0.9.2 — 2026-10-17
 
 - **From Claude and other agents.** A `skills-atlas` skill (`npx skills add devohmycode/skills-atlas -s skills-atlas`), an MCP server (`skills-atlas mcp`: search, read, list, check updates, install and remove skills as tools) and a Claude Code plugin bundling both with a `/skills-atlas` command (`/plugin install skills-atlas --marketplace devohmycode/skills-atlas`).

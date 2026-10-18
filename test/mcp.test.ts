@@ -14,7 +14,8 @@ const catalog: Catalog = {
 };
 
 function server(run = vi.fn(async (): Promise<CommandOutcome[]> => [])) {
-  const handle = createHandler({ version: '9.9.9', skillsVersion: '1.7.0', loadCatalog: async () => catalog, run: run as never });
+  const installed = async () => [{ id: 'other/repo@deploy', name: 'deploy', source: 'other/repo', scope: 'global' as const, agents: ['claude-code'] }];
+  const handle = createHandler({ version: '9.9.9', skillsVersion: '1.7.0', loadCatalog: async () => catalog, run: run as never, installed });
   let id = 0;
   const call = async (name: string, args: object) => {
     const res = (await handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } })) as any;
@@ -60,6 +61,20 @@ describe('MCP server', () => {
     const bad = await call('install_skills', { ids: [], agents: ['claude-code'], scope: 'everywhere' });
     expect(bad).toMatchObject({ isError: true });
     expect(bad.text).toMatch(/invalid arguments/);
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it('refuses to let a skill replace another of the same name without replace: true', async () => {
+    const run = vi.fn(async (): Promise<CommandOutcome[]> => []);
+    const { call } = server(run);
+    const args = { ids: ['c/d@deploy'], agents: ['claude-code'], scope: 'global' };
+    const dry = JSON.parse((await call('install_skills', { ...args, dry_run: true })).text);
+    expect(dry.collisions).toEqual([{ name: 'deploy', incoming: 'c/d@deploy', replaced: 'other/repo@deploy', installed: true }]);
+    const refused = await call('install_skills', args);
+    expect(refused).toMatchObject({ isError: true });
+    expect(refused.text).toMatch(/Nothing installed: c\/d@deploy would replace other\/repo@deploy \(installed\)/);
+    expect(run).not.toHaveBeenCalled();
+    await call('install_skills', { ...args, replace: true });
     expect(run).toHaveBeenCalledOnce();
   });
 });

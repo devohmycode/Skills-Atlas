@@ -2,8 +2,10 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { installedSkills, outdatedSkills, searchSkills, showSkill } from './agent-api.js';
 import { unknownAgents } from './agents.js';
+import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
 import { isSuccess, runAll } from './install/run.js';
+import { riskReport } from './risks.js';
 import { checkSkillName } from './selection.js';
 import { SCOPES, type Catalog, type Scope } from './types.js';
 
@@ -20,6 +22,8 @@ export interface McpOptions {
   loadCatalog: () => Promise<Catalog>;
   /** Runs the npx skills commands; replaced in tests. */
   run?: typeof runAll;
+  /** Reads what is installed; replaced in tests. */
+  installed?: typeof installedSkills;
 }
 
 const Scope = z.enum(['project', 'global']);
@@ -67,8 +71,8 @@ const TOOLS = {
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   install_skills: {
-    description: 'Install (or update) skills through npx skills add, for the given agents and scope. Changes the machine: confirm the skills, agents and scope with the user first. dry_run returns the commands without running them.',
-    schema: z.object({ ids: Ids, agents: Agents, scope: Scope, method: z.enum(['symlink', 'copy']).optional(), dry_run: z.boolean().optional() }),
+    description: 'Install (or update) skills through npx skills add, for the given agents and scope. Changes the machine: confirm the skills, agents and scope with the user first. dry_run returns the commands, and any skill that would replace another of the same name, without running anything. Such a replacement is refused unless replace is true, which needs the user\'s say-so.',
+    schema: z.object({ ids: Ids, agents: Agents, scope: Scope, method: z.enum(['symlink', 'copy']).optional(), dry_run: z.boolean().optional(), replace: z.boolean().optional() }),
     inputSchema: {
       type: 'object',
       properties: {
@@ -77,6 +81,7 @@ const TOOLS = {
         scope: { type: 'string', enum: ['project', 'global'], description: 'project: the current directory; global: every project.' },
         method: { type: 'string', enum: ['symlink', 'copy'], description: 'Default symlink.' },
         dry_run: { type: 'boolean' },
+        replace: { type: 'boolean', description: 'Allow a skill to replace an installed or selected one of the same name from another source.' },
       },
       required: ['ids', 'agents', 'scope'],
     },
@@ -106,10 +111,12 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       const c = await catalog();
       return json(c.themes.map((th) => ({ id: th.id, label: th.label, skills: c.stats.byTheme[th.id] ?? 0 })));
     }
-    case 'show_skill':
-      return (await showSkill(await catalog(), input.id)).markdown;
+    case 'show_skill': {
+      const { markdown, risks } = await showSkill(await catalog(), input.id);
+      return `${riskReport(risks)}\n\n---\n\n${markdown}`;
+    }
     case 'list_installed':
-      return json(await installedSkills(input.scope ? [input.scope as Scope] : SCOPES));
+      return json(await (opts.installed ?? installedSkills)(input.scope ? [input.scope as Scope] : SCOPES));
     case 'outdated_skills':
       return json(await outdatedSkills());
     case 'install_skills': {
@@ -117,7 +124,13 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       const unknown = unknownAgents(input.agents);
       if (unknown.length) throw new Error(`unknown agents: ${unknown.join(', ')}`);
       const commands = planInstall(input.ids, { agents: input.agents, scope: input.scope, method: input.method ?? 'symlink', skillsVersion: opts.skillsVersion });
-      if (input.dry_run) return json({ commands: commands.map(formatCommand) });
+      // The skills CLI keeps one folder per name: a skill from another source would silently replace it.
+      const collisions = nameCollisions(input.ids, (await (opts.installed ?? installedSkills)([input.scope])).map((s) => s.id));
+      if (input.dry_run) return json({ commands: commands.map(formatCommand), collisions });
+      if (collisions.length && !input.replace) {
+        const list = collisions.map((c) => `${c.incoming} would replace ${c.replaced}${c.installed ? ' (installed)' : ' (also requested)'}`);
+        throw new Error(`Nothing installed: ${list.join('; ')}. Ask the user, then call again with replace: true, or drop one of them.`);
+      }
       const outcomes = await (opts.run ?? runAll)(commands);
       return json({ ok: outcomes.every(isSuccess), results: outcomes.flatMap((o) => o.results), errors: outcomes.filter((o) => !isSuccess(o)).map((o) => o.stderr.slice(-500)) });
     }

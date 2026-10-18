@@ -66,6 +66,11 @@ export const zh: Messages = {
     updates: (n) => `${n} 个更新 (u)`,
     previewLoading: '正在加载 SKILL.md…',
     previewFailed: (msg) => `无法加载 SKILL.md：${msg}`,
+    risks: { pipeShell: "下载并执行代码", credentials: "触及凭据文件", destructive: "大范围删除", hidden: "要求代理隐瞒或忽略其指令", sudo: "以管理员身份运行命令", secrets: "从环境变量读取机密", sendsData: "向服务器发送数据", runsCode: "安装或运行软件包或脚本" },
+    riskLevels: { high: "高", medium: "中", info: "信息" },
+    risksFound: (n) => `${n} 个警示信号（模式检查，并非保证）`,
+    noRisk: "未发现警示信号（模式检查，并非保证）",
+    growth: (n) => `自上次快照以来新增 ${n} 次安装`,
   },
 
   agents: {
@@ -91,6 +96,8 @@ export const zh: Messages = {
     agents: '智能体',
     method: '方式',
     commands: '命令',
+    collisions: (n) => `${n} 个技能会替换同名的另一个技能`,
+    replaces: (incoming, replaced, installed) => `${incoming} 替换 ${replaced}${installed ? '（已安装）' : '（同时选中）'}`,
     update: (n) => `更新 ${n} 个技能（全局）`,
   },
 
@@ -261,6 +268,7 @@ export const zh: Messages = {
 
   themes: {
     recommended: '推荐',
+    trending: '趋势',
     installed: '已安装',
     frontend: '前端与 Web',
     backend: '后端与 API',

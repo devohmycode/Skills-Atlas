@@ -11,6 +11,7 @@ import { AGENTS } from '../src/agents.js';
 import { loadCatalog } from '../src/catalog/load.js';
 import { haystack, querySkills, sortSkills } from '../src/catalog/query.js';
 import { withRecommendations } from '../src/catalog/recommended.js';
+import { withTrending } from '../src/catalog/trending.js';
 import { getLang, setLang, t, themeLabel } from '../src/i18n/index.js';
 import { PAGE_HTML } from '../src/web/page.js';
 
@@ -19,11 +20,11 @@ const TOP = 3000;
 const out = join('docs', 'demo', 'index.html');
 
 setLang('en');
-const catalog = withRecommendations(await loadCatalog());
+const catalog = withTrending(withRecommendations(await loadCatalog()));
 const all = querySkills(catalog, {});
 const top = sortSkills(all, 'installs').slice(0, TOP);
-const skills = [...new Map([...all.filter((s) => s.recommendation), ...top].map((s) => [s.id, s])).values()].map((s) => ({
-  id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars,
+const skills = [...new Map([...all.filter((s) => s.recommendation || s.themes.includes('trending')), ...top].map((s) => [s.id, s])).values()].map((s) => ({
+  id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth,
   rank: s.rank, official: s.official, recommendation: s.recommendation, themes: s.themes, text: haystack(s),
 }));
 const state = {
@@ -62,6 +63,7 @@ const shim = `<script>
       var counts = {};
       matching.forEach(function (s) { s.themes.forEach(function (th) { counts[th] = (counts[th] || 0) + 1; }); });
       var inTheme = theme ? matching.filter(function (s) { return s.themes.indexOf(theme) >= 0; }) : matching;
+      if (theme === 'trending') inTheme = inTheme.slice().sort(function (a, b) { return (b.growth || 0) - (a.growth || 0); });
       var offset = Number(p.get('offset')) || 0, limit = Math.min(500, Number(p.get('limit')) || 100);
       return json({ total: inTheme.length, all: matching.length, counts: counts, items: inTheme.slice(offset, offset + limit) });
     }

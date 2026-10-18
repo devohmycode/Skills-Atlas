@@ -29,6 +29,8 @@ export interface Skill {
   installs?: number;
   stars?: number;
   rank?: number;
+  /** Installs gained since the previous snapshot (crawl time). */
+  growth?: number;
   /** Published by the vendor itself (its GitHub owner is listed on officialskills.sh). */
   official?: boolean;
   /** Personal editorial selection, independent of popularity or official status. */
@@ -55,6 +57,8 @@ export interface Catalog {
     merged: number;
     /** Skills flagged `official` (absent from snapshots older than the flag). */
     official?: number;
+    /** Date of the snapshot `growth` is measured against. */
+    growthSince?: string;
     byTheme: Record<string, number>;
   };
 }

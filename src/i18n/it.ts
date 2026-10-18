@@ -68,6 +68,11 @@ export const it: Messages = {
     updates: (n) => `${n} ${s(n, 'aggiornamento', 'aggiornamenti')} (u)`,
     previewLoading: 'Caricamento di SKILL.md…',
     previewFailed: (msg) => `Impossibile caricare SKILL.md: ${msg}`,
+    risks: { pipeShell: "scarica ed esegue codice", credentials: "accede a file di credenziali", destructive: "cancella in modo esteso", hidden: "chiede all'agente di nascondere cose o ignorare le istruzioni", sudo: "esegue comandi come amministratore", secrets: "legge segreti dall'ambiente", sendsData: "invia dati a un server", runsCode: "installa o esegue pacchetti o script" },
+    riskLevels: { high: "alto", medium: "medio", info: "info" },
+    risksFound: (n) => `${n} ${s(n, 'segnale di allarme', 'segnali di allarme')} (controllo per schemi, non una garanzia)`,
+    noRisk: "Nessun segnale di allarme (controllo per schemi, non una garanzia)",
+    growth: (n) => `+${n} installazioni dall'ultima istantanea`,
   },
 
   agents: {
@@ -93,6 +98,8 @@ export const it: Messages = {
     agents: 'Agenti',
     method: 'Metodo',
     commands: 'Comandi',
+    collisions: (n) => `${n} ${s(n, 'skill sostituirebbe', 'skill sostituirebbero')} un'altra con lo stesso nome`,
+    replaces: (incoming, replaced, installed) => `${incoming} sostituisce ${replaced}${installed ? ' (installata)' : ' (anche selezionata)'}`,
     update: (n) => `Aggiorna ${n} skill (globale)`,
   },
 
@@ -263,6 +270,7 @@ export const it: Messages = {
 
   themes: {
     recommended: 'Consigliate',
+    trending: 'Di tendenza',
     installed: 'Già installate',
     frontend: 'Frontend e web',
     backend: 'Backend e API',

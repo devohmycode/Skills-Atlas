@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { AGENTS, detectAgents, unknownAgents } from '../agents.js';
 import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog/installed.js';
+import { byGrowth } from '../catalog/trending.js';
 import { haystack, SORT_ORDERS, sortSkills } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
 import { getLang, locale, t, themeLabel } from '../i18n/index.js';
@@ -63,6 +64,7 @@ const slim = (s: Skill) => ({
   installs: s.installs,
   stars: s.stars,
   rank: s.rank,
+  growth: s.growth,
   official: s.official,
   recommendation: s.recommendation,
   themes: s.themes,
@@ -139,7 +141,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       queryCache = { key, matching, counts };
     }
     const { matching, counts } = queryCache;
-    const inTheme = theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
+    const inTheme = theme === 'trending' ? byGrowth(matching.filter((s) => s.themes.includes(theme))) : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
     return { total: inTheme.length, all: matching.length, counts, items: inTheme.slice(offset, offset + limit).map(slim) };
   }
 

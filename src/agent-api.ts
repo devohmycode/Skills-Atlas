@@ -4,6 +4,7 @@ import { fetchSkillMarkdown, githubUrl } from './github.js';
 import { parseSkillId } from './install/plan.js';
 import { listInstalled } from './install/run.js';
 import { findUpdates } from './install/updates.js';
+import { scanRisks, type Risk } from './risks.js';
 import type { Catalog, Scope, Skill } from './types.js';
 
 /**
@@ -51,10 +52,11 @@ export function findSkill(catalog: Catalog, id: string): Skill {
   return { id, name, source, labels: [], origins: [], themes: [] };
 }
 
-/** A skill's SKILL.md, from its GitHub repository; escape sequences removed. */
-export async function showSkill(catalog: Catalog, id: string): Promise<{ skill: SkillSummary; markdown: string }> {
+/** A skill's SKILL.md, from its GitHub repository (escape sequences removed), and the warning signs it shows. */
+export async function showSkill(catalog: Catalog, id: string): Promise<{ skill: SkillSummary; markdown: string; risks: Risk[] }> {
   const skill = findSkill(catalog, id);
-  return { skill: summarize(skill), markdown: await fetchSkillMarkdown(skill) };
+  const markdown = await fetchSkillMarkdown(skill);
+  return { skill: summarize(skill), markdown, risks: scanRisks(markdown) };
 }
 
 /** An installed skill, with the agent ids an install command needs. */

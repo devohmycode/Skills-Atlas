@@ -1,0 +1,69 @@
+/**
+ * A first look at what a SKILL.md asks an agent to do, before installing it.
+ * Pattern matching on the text: it points at lines worth reading, it does not
+ * prove a skill safe. Each rule has an English label for machine output; the
+ * interface translates it by id.
+ */
+
+export type RiskLevel = 'high' | 'medium' | 'info';
+export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode';
+
+export interface Risk {
+  rule: RiskRule;
+  level: RiskLevel;
+  label: string;
+  /** First line (1-based) where the rule matched, and how many lines matched. */
+  line: number;
+  count: number;
+  excerpt: string;
+}
+
+const RULES: { rule: RiskRule; level: RiskLevel; label: string; re: RegExp }[] = [
+  {
+    rule: 'pipeShell', level: 'high', label: 'downloads and runs code',
+    re: /\b(curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*\|\s*(sudo\s+)?((ba|z)?sh\b|iex\b|(python3?|node)\s+-(\s|$))|base64\s+(-d|--decode)[^\n]*\|\s*(ba)?sh\b/i,
+  },
+  {
+    rule: 'credentials', level: 'high', label: 'touches credential files',
+    // A verb that reads or sends, just before the file: skills that refuse credential files name them too.
+    re: /\b(cat|type|read|open|copy|cp|scp|rsync|upload|send|print|base64|tar|zip|curl|wget|less|head)\b[^\n]{0,40}?((^|[\s"'`(=/~])\.(ssh|aws|gnupg|kube|docker|netrc|npmrc|pypirc)\b|\bid_(rsa|ed25519)\b|\bcredentials\.json\b|\bKeychain\b)/i,
+  },
+  { rule: 'destructive', level: 'high', label: 'deletes broadly', re: /\brm\s+-[a-z]*r[a-z]*f?[a-z]*\s+(\/|~|\$HOME|\*|\.\s*$)(\s|$)|\bRemove-Item\b[^\n]*-Recurse[^\n]*(\\|\/|~)\s*$/i },
+  {
+    rule: 'hidden', level: 'high', label: 'asks the agent to hide things or ignore its instructions',
+    re: /(?<!["'“«`])\b(ignore|disregard)\s+(all\s+)?(previous|prior|earlier|above|system)\s+(instructions|prompts?|rules)\b|\b(do not|don't|never)\s+(tell|inform|mention to|show)\s+the\s+user\b|\bwithout\s+(asking|telling|notifying)\s+the\s+user\b/i,
+  },
+  { rule: 'sudo', level: 'medium', label: 'runs commands as administrator', re: /(^|[\s`$(])sudo\s+\S|\brunas\s+\/user\b|-Verb\s+RunAs\b/i },
+  { rule: 'secrets', level: 'medium', label: 'reads secrets from the environment', re: /\$\{?[A-Z0-9_]*(TOKEN|SECRET|API_?KEY|PASSWORD|PASSWD)\b|\bprocess\.env\.[A-Z0-9_]*(TOKEN|SECRET|KEY|PASSWORD)\b|\b(printenv|env)\s*\|/ },
+  {
+    rule: 'sendsData', level: 'medium', label: 'sends data to a server',
+    re: /\bcurl\b[^\n]*(\s-d\s|\s--data|\s-X\s*(POST|PUT)|\s-F\s|\s--upload-file)|\bwget\b[^\n]*--post-(data|file)|\bmethod:\s*['"](POST|PUT)['"]|\brequests\.(post|put)\(/i,
+  },
+  {
+    rule: 'runsCode', level: 'info', label: 'installs or runs packages or scripts',
+    re: /\b(npx|bunx|uvx|pipx)\s+(-y\s+)?[@\w]|\b(pip3?|npm|pnpm|yarn|brew|apt(-get)?|cargo|go)\s+(install|add|i)\b|\b(scripts?|bin)\/[\w.-]+\.(sh|py|js|ts|ps1|rb)\b/i,
+  },
+];
+
+const ORDER: Record<RiskLevel, number> = { high: 0, medium: 1, info: 2 };
+
+/** The rules a SKILL.md matches, most serious first, each with its first line. */
+export function scanRisks(markdown: string): Risk[] {
+  const found = new Map<RiskRule, Risk>();
+  markdown.split('\n').forEach((text, i) => {
+    for (const r of RULES) {
+      if (!r.re.test(text)) continue;
+      const seen = found.get(r.rule);
+      if (seen) seen.count++;
+      else found.set(r.rule, { rule: r.rule, level: r.level, label: r.label, line: i + 1, count: 1, excerpt: text.trim().slice(0, 160) });
+    }
+  });
+  return [...found.values()].sort((a, b) => ORDER[a.level] - ORDER[b.level] || a.line - b.line);
+}
+
+/** One line for an agent: `Risk check: …` or that nothing matched. */
+export function riskReport(risks: Risk[]): string {
+  if (!risks.length) return 'skills-atlas risk check: no warning sign found (a pattern check, not a guarantee).';
+  const lines = risks.map((r) => `- ${r.level}: ${r.label} (line ${r.line}${r.count > 1 ? `, ${r.count} lines` : ''}): ${r.excerpt}`);
+  return ['skills-atlas risk check (a pattern check, not a guarantee):', ...lines].join('\n');
+}

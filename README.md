@@ -63,6 +63,22 @@ skills-atlas mcp                              # MCP server on stdio, for Claude 
 
 When a newer skills-atlas is published, a dim line says so above the tree and under the `ui` address. npm is asked at most once a day, in the background, so it never slows the start; `--offline` skips it.
 
+### Risk check
+
+The `SKILL.md` preview (`p`), `skills-atlas show` and the MCP server's `show_skill` point at what a skill asks for beyond its description:
+
+| Level | Warning sign |
+|---|---|
+| high | downloads and runs code (`curl … \| sh`, `base64 -d \| sh`), reads or sends credential files (`~/.ssh`, `~/.aws`…), deletes broadly (`rm -rf ~`), asks the agent to hide things from the user or ignore its instructions |
+| medium | runs commands as administrator, reads secrets from the environment, sends data to a server |
+| info | installs or runs packages or bundled scripts |
+
+It is a pattern check on the text, tuned on the 150 most installed skills: it points at lines worth reading, it does not prove a skill safe. `show` prints the warning signs on stderr, so that stdout stays the `SKILL.md` alone; `show --json` adds them as `risks`.
+
+### Trending
+
+Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form **🔥 Trending**, right after Recommended, sorted by growth. The theme appears once two snapshots with install counts can be compared.
+
 ### From Claude and other agents
 
 Three ways to let an agent find and install skills for you, from the lightest:
@@ -151,6 +167,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 - **Detection** reads what the skills CLI writes on disk: the canonical `.agents/skills` directory, every agent's skills directory, and the lock file for sources. It gives the same result as `npx skills list --json` in under a second instead of ~30 s.
 - **Pre-ticked**: installed skills are ticked and marked with their scope, `● project`, `● global` or `● project + global`, under their theme and in an **Already installed** group at the top. That group also holds skills the catalog does not know, such as home-made ones.
 - **Uninstall**: unticking an installed skill marks it `✗ will be uninstalled`. On confirmation it is removed from every agent of every scope it was found in, with one `npx skills remove -s … -y [-g]` per scope, then checked on disk.
+- **Same name, one folder**: the skills CLI installs by name, so a skill from another repository replaces an installed one of the same name. The review screen lists such replacements before anything runs; `install` and `import` print them.
 - **Updates**: globally installed skills with a newer version on GitHub read `↑ update available`, and the status line counts them. Press `u` to mark them: they are reinstalled at their latest version for the agents that already have them. The check runs in the background, one GitHub request per repository, with `GITHUB_TOKEN`, `GH_TOKEN` or the GitHub CLI's token when there is one (without a token GitHub allows 60 requests an hour). Project skills are not checked: their lock records a hash GitHub cannot be compared with.
 - **Install**: ticking a skill that is not installed installs it. The scope is asked after the tree, pre-filled with your last choice, unless `-p`/`-g` sets it.
 - **Questions**: the status line shows the balance `+N −M`. Scope, agents and method are only asked when there is something to install.
@@ -171,7 +188,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 | `s` | sort: installs (default) ↔ name |
 | `o` | only official skills (marked ◆) |
 | `g` | open the focused skill's GitHub repository |
-| `p` | preview the focused skill's `SKILL.md` before installing it (↑↓ scroll, esc back) |
+| `p` | preview the focused skill's `SKILL.md` before installing it, with its warning signs (↑↓ scroll, esc back) |
 | `u` | mark the focused outdated skill, or the outdated skills of a group, for update |
 | enter | continue |
 | `q` | quit |

@@ -127,6 +127,7 @@ nav button .n { font-family: var(--display); font-size: 12.5px; color: var(--ink
 nav button.all::before { background: conic-gradient(from 0deg, oklch(var(--region-l) var(--region-c) 30), oklch(var(--region-l) var(--region-c) 150), oklch(var(--region-l) var(--region-c) 270), oklch(var(--region-l) var(--region-c) 30)); border-radius: 50%; }
 nav button.mine::before { background: var(--accent); border-radius: 50%; }
 nav button.recommended::before { content: '★'; background: none; color: var(--gold); line-height: 12px; font-size: 17px; }
+nav button[data-theme="trending"]::before { content: '🔥'; background: none; line-height: 12px; font-size: 13px; }
 nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 
 /* ---- skill list -------------------------------------------------------------------------- */
@@ -177,6 +178,7 @@ a.source:hover { color: var(--accent); text-decoration: underline; }
 .pop { grid-row: 1 / 3; grid-column: 3; text-align: right; line-height: 1.15; padding-top: 1px; }
 .pop b { display: block; font: 600 17px/1.1 var(--display); font-variant-numeric: tabular-nums; }
 .pop span { font-size: 11.5px; color: var(--ink-3); }
+.pop .growth { display: block; color: var(--add); font-weight: 600; }
 .more {
   display: block; margin: 18px auto 0; height: 38px; padding: 0 18px; border-radius: 19px;
   border: 1px solid var(--rule-2); background: var(--sheet); color: var(--ink);
@@ -423,7 +425,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     return '--hue:' + hues[themeId];
   }
   function popularity(s) {
-    if (s.installs) return '<b>' + esc(compact.format(s.installs)) + '</b><span>' + esc(M.installs) + '</span>';
+    // In Trending, what made it trend: the installs gained since the previous snapshot.
+    var rise = view.theme === 'trending' && s.growth ? '<span class="growth">↑ +' + esc(compact.format(s.growth)) + '</span>' : '';
+    if (s.installs) return '<b>' + esc(compact.format(s.installs)) + '</b><span>' + esc(M.installs) + '</span>' + rise;
     if (s.stars) return '<b>' + esc(compact.format(s.stars)) + '</b><span>' + esc(M.stars) + '</span>';
     return s.rank != null ? '<b>#' + esc(fmt.format(s.rank)) + '</b><span>skills.sh</span>' : '';
   }

@@ -66,6 +66,11 @@ export const ja: Messages = {
     updates: (n) => `更新 ${n} 件 (u)`,
     previewLoading: 'SKILL.md を読み込み中…',
     previewFailed: (msg) => `SKILL.md を読み込めませんでした: ${msg}`,
+    risks: { pipeShell: "コードをダウンロードして実行", credentials: "認証情報ファイルに触れる", destructive: "広範囲を削除", hidden: "エージェントに隠し事や指示の無視を求める", sudo: "管理者権限でコマンドを実行", secrets: "環境変数から秘密情報を読む", sendsData: "サーバーにデータを送信", runsCode: "パッケージやスクリプトをインストール・実行" },
+    riskLevels: { high: "高", medium: "中", info: "情報" },
+    risksFound: (n) => `警告サイン ${n} 件（パターン検査であり保証ではありません）`,
+    noRisk: "警告サインなし（パターン検査であり保証ではありません）",
+    growth: (n) => `前回のスナップショットから +${n} インストール`,
   },
 
   agents: {
@@ -91,6 +96,8 @@ export const ja: Messages = {
     agents: 'エージェント',
     method: '方式',
     commands: 'コマンド',
+    collisions: (n) => `${n} 件のスキルが同名の別スキルを置き換えます`,
+    replaces: (incoming, replaced, installed) => `${incoming} が ${replaced} を置き換えます${installed ? '（インストール済み）' : '（同時に選択）'}`,
     update: (n) => `${n} 件のスキルを更新 (グローバル)`,
   },
 
@@ -261,6 +268,7 @@ export const ja: Messages = {
 
   themes: {
     recommended: 'おすすめ',
+    trending: 'トレンド',
     installed: 'インストール済み',
     frontend: 'フロントエンド・Web',
     backend: 'バックエンド・API',

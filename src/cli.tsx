@@ -6,11 +6,13 @@ import { mergeInstalled } from './catalog/installed.js';
 import { loadCatalog } from './catalog/load.js';
 import { loadLatestCatalog } from './catalog/remote.js';
 import { withRecommendations } from './catalog/recommended.js';
+import { withTrending } from './catalog/trending.js';
 import pkg from '../package.json' with { type: 'json' };
 import { groupByTheme, popularityLabel, querySkills, resolveTheme, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
 import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, systemLang, t, themeLabel, type Lang } from './i18n/index.js';
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
+import { nameCollisions } from './install/collisions.js';
 import { findUpdates } from './install/updates.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
@@ -106,7 +108,7 @@ function resolveLang(argv: string[]): Lang {
 
 async function openCatalog(opts: CommonOptions): Promise<Catalog> {
   try {
-    if (opts.catalog) return withRecommendations(await loadCatalog(opts.catalog));
+    if (opts.catalog) return withTrending(withRecommendations(await loadCatalog(opts.catalog)));
     // Latest snapshot from GitHub (refreshed daily), else the one bundled in the package.
     const catalog = await loadLatestCatalog({
       offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE),
@@ -119,7 +121,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
     if (opts.refresh && !opts.quiet) {
       console.error(paint('dim', t().cli.catalogOf(catalog.generatedAt.slice(0, 10), formatNumber(catalog.skills.length))));
     }
-    return withRecommendations(catalog);
+    return withTrending(withRecommendations(catalog));
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   }
@@ -472,6 +474,9 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
     if (!chosen) return;
     options = chosen.options;
   }
+  // shortcut: warns but goes on, as -y asked for no question; offer to stop here if users get caught by it.
+  const inScope = (await listInstalled(options.scope)).map((s) => `${s.source ?? 'local'}@${s.name}`);
+  for (const c of nameCollisions(ids, inScope)) console.error(paint('yellow', `⚠ ${m.confirm.replaces(c.incoming, c.replaced, c.installed)}`));
   await apply(ids, [], options, opts);
 }
 
@@ -490,7 +495,7 @@ program
       version: pkg.version,
       skillsVersion: opts.skillsVersion,
       // Silent: stdout carries the protocol, and nobody reads stderr.
-      loadCatalog: async () => withRecommendations(await loadLatestCatalog({ offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE) })),
+      loadCatalog: async () => withTrending(withRecommendations(await loadLatestCatalog({ offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE) }))),
     }),
   );
 
@@ -504,8 +509,13 @@ program
   .action(async (id: string, opts: CommonOptions & { json?: boolean }) => {
     const catalog = await openCatalog({ ...opts, quiet: true });
     try {
-      const { skill, markdown } = await showSkill(catalog, id);
-      process.stdout.write(opts.json ? `${JSON.stringify({ skill, markdown }, null, 2)}\n` : `${markdown.trimEnd()}\n`);
+      const { skill, markdown, risks } = await showSkill(catalog, id);
+      if (opts.json) return void process.stdout.write(`${JSON.stringify({ skill, risks, markdown }, null, 2)}\n`);
+      // The warning signs go to stderr: stdout stays the SKILL.md alone, to pipe or save.
+      const tree = m.tree;
+      console.error(risks.length ? paint('yellow', `⚠ ${tree.risksFound(risks.length)}`) : paint('dim', `✓ ${tree.noRisk}`));
+      for (const r of risks) console.error(paint(r.level === 'high' ? 'red' : 'dim', `  ${tree.riskLevels[r.level]} · ${tree.risks[r.rule]}  SKILL.md:${r.line}  ${r.excerpt}`));
+      process.stdout.write(`${markdown.trimEnd()}\n`);
     } catch (err) {
       fail(c.showFailed(id, err instanceof Error ? err.message : String(err)));
     }

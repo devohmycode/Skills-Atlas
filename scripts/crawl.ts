@@ -9,7 +9,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildCatalog } from '../src/catalog/build.js';
-import { saveCatalog } from '../src/catalog/load.js';
+import { loadCatalog, saveCatalog } from '../src/catalog/load.js';
+import { markGrowth } from '../src/catalog/trending.js';
 
 const args = process.argv.slice(2);
 const maxOwnersIdx = args.indexOf('--max-owners');
@@ -33,6 +34,10 @@ const started = Date.now();
 const log = (msg: string) => console.error(`[${((Date.now() - started) / 1000).toFixed(0)}s] ${msg}`);
 
 const catalog = await buildCatalog({ maxSkillsShOwners, enrich, githubToken: githubToken(), log });
+// The snapshot about to be replaced is the previous crawl's: growth is measured against it.
+const previous = await loadCatalog(out).catch(() => undefined);
+catalog.stats.growthSince = markGrowth(catalog.skills, previous);
+log(`growth: ${catalog.skills.filter((s) => s.growth).length} skills gained installs since ${catalog.stats.growthSince ?? 'nothing (no previous snapshot)'}`);
 await mkdir('data', { recursive: true });
 const bytes = await saveCatalog(catalog, out);
 

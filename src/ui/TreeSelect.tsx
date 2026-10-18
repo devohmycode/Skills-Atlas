@@ -1,8 +1,10 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByRepository } from '../catalog/groups.js';
+import { byGrowth, TRENDING_THEME } from '../catalog/trending.js';
 import { groupByTheme, haystack, popularityLabel, SORT_ORDERS, sortSkills, type SortOrder } from '../catalog/query.js';
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
+import { scanRisks, type RiskLevel } from '../risks.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
 import type { InstalledEntry } from '../catalog/installed.js';
 import type { Scope, Skill, Theme } from '../types.js';
@@ -95,7 +97,7 @@ function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<st
     out.push({ kind: 'theme', theme: g.theme, skills: g.skills, expanded: isOpen });
     if (!isOpen) continue;
     if (g.theme.id !== RECOMMENDED) {
-      for (const skill of g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
+      for (const skill of g.theme.id === TRENDING_THEME.id ? byGrowth(g.skills) : g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
       continue;
     }
     for (const repo of byRepository(g.skills)) {
@@ -344,7 +346,10 @@ export function TreeSelect({
     );
   };
   // The preview fills the list's place: header, text, hints.
-  const previewHeight = Math.max(5, termRows - 8);
+  // At most three warnings show above the text; the rest are in `skills-atlas show`.
+  const risks = useMemo(() => (preview?.text !== undefined ? scanRisks(preview.text) : []), [preview?.text]);
+  const riskLines = preview?.text === undefined ? 0 : 1 + Math.min(3, risks.length);
+  const previewHeight = Math.max(5, termRows - 8 - riskLines);
   const previewLines = preview?.text !== undefined ? wrapLines(preview.text, Math.max(20, columns - 6)) : [];
   const scrollPreview = (delta: number) =>
     setPreview((p) => (p ? { ...p, top: Math.max(0, Math.min(p.top + delta, previewLines.length - previewHeight)) } : p));
@@ -442,6 +447,7 @@ export function TreeSelect({
   if (preview) {
     const s = preview.skill;
     const shown = previewLines.slice(preview.top, preview.top + previewHeight);
+    const levelColor: Record<RiskLevel, string> = { high: PALETTE.danger, medium: PALETTE.gold, info: PALETTE.muted };
     return (
       <Box flexDirection="column">
         <Box justifyContent="space-between">
@@ -453,6 +459,21 @@ export function TreeSelect({
             <Text dimColor>{m.tree.position(formatNumber(preview.top + 1), formatNumber(previewLines.length))}</Text>
           )}
         </Box>
+        {preview.text !== undefined && (
+          <Box flexDirection="column">
+            {risks.length ? (
+              <Text color={levelColor[risks[0]!.level]} bold>{`⚠ ${m.tree.risksFound(risks.length)}`}</Text>
+            ) : (
+              <Text color={PALETTE.success}>{`✓ ${m.tree.noRisk}`}</Text>
+            )}
+            {risks.slice(0, 3).map((r) => (
+              <Text key={r.rule} wrap="truncate-end">
+                <Text color={levelColor[r.level]}>{`  ${m.tree.riskLevels[r.level]} · ${m.tree.risks[r.rule]}`}</Text>
+                <Text dimColor>{`  SKILL.md:${r.line}`}</Text>
+              </Text>
+            ))}
+          </Box>
+        )}
         <Panel>
           <Box ref={listRef} flexDirection="column" height={previewHeight}>
             {preview.error ? (
@@ -602,7 +623,10 @@ export function TreeSelect({
                   <Text color={PALETTE.accent}>{`  ● ${m.tree.installedIn(scopesLabel(installed.get(row.skill.id)!.scopes))}`}</Text>
                 )}
               </Text>
-              <Text dimColor>{popularityLong(row.skill)}</Text>
+              <Text>
+                {row.skill.growth ? <Text color={PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}   `}</Text> : null}
+                <Text dimColor>{popularityLong(row.skill)}</Text>
+              </Text>
             </Box>
             <Box height={2} overflow="hidden">
               <Text wrap="wrap">{row.skill.description ?? row.skill.recommendation?.reason ?? m.tree.noDescription}</Text>

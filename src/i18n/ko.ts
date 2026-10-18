@@ -66,6 +66,11 @@ export const ko: Messages = {
     updates: (n) => `업데이트 ${n}개 (u)`,
     previewLoading: 'SKILL.md 불러오는 중…',
     previewFailed: (msg) => `SKILL.md를 불러올 수 없습니다: ${msg}`,
+    risks: { pipeShell: "코드를 내려받아 실행", credentials: "자격 증명 파일에 접근", destructive: "광범위하게 삭제", hidden: "에이전트에게 숨기거나 지시를 무시하라고 요구", sudo: "관리자 권한으로 명령 실행", secrets: "환경 변수에서 비밀 정보를 읽음", sendsData: "서버로 데이터 전송", runsCode: "패키지나 스크립트를 설치·실행" },
+    riskLevels: { high: "높음", medium: "중간", info: "정보" },
+    risksFound: (n) => `경고 신호 ${n}개 (패턴 검사이며 보장은 아님)`,
+    noRisk: "경고 신호 없음 (패턴 검사이며 보장은 아님)",
+    growth: (n) => `지난 스냅샷 이후 설치 +${n}`,
   },
 
   agents: {
@@ -91,6 +96,8 @@ export const ko: Messages = {
     agents: '에이전트',
     method: '방식',
     commands: '명령',
+    collisions: (n) => `스킬 ${n}개가 같은 이름의 다른 스킬을 대체합니다`,
+    replaces: (incoming, replaced, installed) => `${incoming}이(가) ${replaced}을(를) 대체${installed ? ' (설치됨)' : ' (함께 선택됨)'}`,
     update: (n) => `스킬 ${n}개 업데이트 (전역)`,
   },
 
@@ -261,6 +268,7 @@ export const ko: Messages = {
 
   themes: {
     recommended: '추천',
+    trending: '인기 급상승',
     installed: '설치됨',
     frontend: '프론트엔드 & 웹',
     backend: '백엔드 & API',

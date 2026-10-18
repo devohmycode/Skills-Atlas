@@ -4,6 +4,7 @@ import { AGENTS, getAgent } from '../agents.js';
 import { INSTALLED_THEME, type TreeData } from '../catalog/installed.js';
 import type { SortOrder } from '../catalog/query.js';
 import { t } from '../i18n/index.js';
+import { nameCollisions, type Collision } from '../install/collisions.js';
 import { formatCommand, planInstall, planRemovals, planUpdates, type Update } from '../install/plan.js';
 import { SCOPES, type InstallMethod, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
 import { Banner, Header, Hints, Panel, useTerminalSize, type StepId } from './Layout.js';
@@ -286,6 +287,13 @@ export function App(props: AppProps) {
       ids={ids}
       remove={removals}
       update={updates}
+      // One folder per name in a scope: what is installed there, minus what this run uninstalls from it.
+      collisions={nameCollisions(
+        ids,
+        [...tree.installed]
+          .filter(([, e]) => e.scopes.includes(options.scope) && !removals.some((r) => r.name === e.name && r.scopes.includes(options.scope)))
+          .map(([id]) => id),
+      )}
       options={options}
       onConfirm={() => finish({ ids, remove: removals, update: updates, options })}
       onBack={back}
@@ -297,12 +305,13 @@ interface ConfirmProps {
   ids: string[];
   remove: Removal[];
   update: Update[];
+  collisions: Collision[];
   options: InstallOptions;
   onConfirm: () => void;
   onBack: () => void;
 }
 
-function Confirm({ ids, remove, update, options, onConfirm, onBack }: ConfirmProps) {
+function Confirm({ ids, remove, update, collisions, options, onConfirm, onBack }: ConfirmProps) {
   const m = t();
   useInput((input, key) => {
     if (isMouseInput(input)) return;
@@ -332,6 +341,15 @@ function Confirm({ ids, remove, update, options, onConfirm, onBack }: ConfirmPro
             <Text key={c.source} wrap="truncate-end">
               <Text dimColor>{c.source}</Text>
               {`  ${c.skills.join(', ')}`}
+            </Text>
+          ))}
+        </Panel>
+      )}
+      {collisions.length > 0 && (
+        <Panel color={PALETTE.gold} title={`⚠ ${m.confirm.collisions(collisions.length)}`}>
+          {collisions.map((c) => (
+            <Text key={c.incoming} wrap="wrap">
+              {m.confirm.replaces(c.incoming, c.replaced, c.installed)}
             </Text>
           ))}
         </Panel>
