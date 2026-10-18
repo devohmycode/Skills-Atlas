@@ -248,6 +248,7 @@ export const zh: Messages = {
     completionCmd: "输出 shell 补全脚本（bash、zsh、fish、powershell）",
     packOption: "同时安装这些包中的技能（见 `skills-atlas packs`）",
     packsCmd: "列出技能包：一起安装的技能",
+    lockCmd: "将项目技能固定到仓库当前提交",
     syncCmd: "安装此项目 skills-atlas.json 中缺少的技能",
     noAudit: "不进行安全审计直接安装（每个 SKILL.md 的风险检查）",
     auditCmd: "显示或设置安装前的安全审计：on 或 off",

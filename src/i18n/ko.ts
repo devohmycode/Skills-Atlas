@@ -248,6 +248,7 @@ export const ko: Messages = {
     completionCmd: "셸 자동 완성 스크립트 출력 (bash, zsh, fish, powershell)",
     packOption: "이 팩의 스킬도 설치 (`skills-atlas packs` 참고)",
     packsCmd: "팩 목록: 함께 설치할 스킬",
+    lockCmd: "프로젝트 스킬을 현재 저장소 커밋으로 고정",
     syncCmd: "이 프로젝트의 skills-atlas.json에서 빠진 스킬을 설치",
     noAudit: "보안 감사 없이 설치 (각 SKILL.md의 위험 검사)",
     auditCmd: "설치 전 보안 감사 표시 또는 설정: on 또는 off",

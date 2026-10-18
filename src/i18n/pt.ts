@@ -250,6 +250,7 @@ export const pt: Messages = {
     completionCmd: "mostra o script de autocompletar do shell (bash, zsh, fish, powershell)",
     packOption: "instala também as skills destes pacotes (veja `skills-atlas packs`)",
     packsCmd: "lista os pacotes: skills para instalar juntas",
+    lockCmd: "fixar os skills do projeto nos commits atuais",
     syncCmd: "instala as skills do skills-atlas.json que faltam neste projeto",
     noAudit: "instala sem a auditoria de segurança (a verificação de riscos de cada SKILL.md)",
     auditCmd: "mostra ou ajusta a auditoria de segurança antes das instalações: on ou off",

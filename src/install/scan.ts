@@ -101,3 +101,25 @@ export function scanInstalled(scope: Scope, cwd = process.cwd()): InstalledSkill
   }
   return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * A project may have canonical files and independent copies for several agents.
+ * Directories named after the skill are included whatever their SKILL.md says
+ * (or lacks), so an edited or broken copy is still verified instead of vanishing.
+ */
+export function installedSkillPaths(scope: Scope, cwd: string, name: string): string[] {
+  const dirs = new Set([canonicalDir(scope, cwd)]);
+  for (const agent of AGENTS) {
+    if (scope === 'project') dirs.add(join(cwd, agent.projectDir));
+    else if (agent.globalDir) dirs.add(expandHome(agent.globalDir));
+  }
+  const wanted = name.toLowerCase();
+  const named = (dir: string) => {
+    try {
+      return readdirSync(dir).filter(entry => entry.toLowerCase() === wanted).map(entry => join(dir, entry));
+    } catch {
+      return [];
+    }
+  };
+  return [...new Set([...dirs].flatMap(dir => [...named(dir), ...readSkillsDir(dir).filter(s => s.name.toLowerCase() === wanted).map(s => s.path)]))];
+}

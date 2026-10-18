@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseSkillId } from './install/plan.js';
+import { checkRevision, parseSkillId } from './install/plan.js';
 import type { InstalledSkill } from './install/run.js';
 import { AGENTS, unknownAgents } from './agents.js';
 
@@ -7,6 +7,7 @@ import { AGENTS, unknownAgents } from './agents.js';
 export interface Selection {
   skillsAtlas: 1;
   skills: string[];
+  revisions?: Record<string, string>;
 }
 
 /**
@@ -24,13 +25,13 @@ export function toSelection(installed: InstalledSkill[]): { selection: Selection
   return { selection: { skillsAtlas: 1, skills: [...ids.values()].sort() }, skipped: [...skipped].sort() };
 }
 
-const File = z.object({ skillsAtlas: z.literal(1), skills: z.array(z.string()), agents: z.array(z.string()).optional() });
+const File = z.object({ skillsAtlas: z.literal(1), skills: z.array(z.string()), agents: z.array(z.string()).optional(), revisions: z.record(z.string(), z.string()).optional() });
 
 /**
  * A selection file, checked: a file from elsewhere is untrusted input to `npx skills add`.
  * `agents` is optional: a project's skills-atlas.json may name the agents its team uses.
  */
-export function parseSelectionFile(text: string): { ids: string[]; agents?: string[] } {
+export function parseSelectionFile(text: string): { ids: string[]; agents?: string[]; revisions?: Record<string, string> } {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -40,7 +41,14 @@ export function parseSelectionFile(text: string): { ids: string[]; agents?: stri
   const file = File.safeParse(raw);
   if (!file.success) throw new Error('not a skills-atlas selection ({ "skillsAtlas": 1, "skills": [...] })');
   for (const id of file.data.skills) checkSkillName(parseSkillId(id).name, id);
-  return { ids: [...new Set(file.data.skills)], agents: file.data.agents };
+  const ids = [...new Set(file.data.skills)];
+  const revisions: Record<string, string> = {};
+  for (const [id, revision] of Object.entries(file.data.revisions ?? {})) {
+    const key = id.toLowerCase();
+    if (!ids.some(id => id.toLowerCase() === key) || Object.hasOwn(revisions, key)) throw new Error('revision must name a selected skill once');
+    revisions[key] = checkRevision(revision);
+  }
+  return { ids, agents: file.data.agents, ...(file.data.revisions ? { revisions } : {}) };
 }
 
 /** The ids of a selection file. */
