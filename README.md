@@ -12,7 +12,12 @@ Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible ter
 
 🤖 Visit [Website](https://skillsatlas.replit.app/).
 
-**★ Recommended** highlights a personal selection, with Ponytail, mattpocock/skills, obra/superpowers and addyosmani/agent-skills. Both interfaces support nine languages, including Italian, Japanese, Korean and Simplified Chinese.
+- **Find**: about 75,000 skills from skills.sh, claude-plugins.dev and Smithery, in 20 themes, plus [★ Recommended](#recommended-skills) repositories, [🔥 Trending](#trending) skills and [📦 Packs](#packs) to install as a block.
+- **Check before installing**: read any skill's `SKILL.md` with `p`, with a [risk check](#risk-check) that points at what it runs, reads or sends. A skill that would [replace another of the same name](#installed-skills) is flagged before anything runs.
+- **Keep up to date**: installed skills are detected and ticked; untick to uninstall, press `u` to [update](#installed-skills) the outdated ones, and see [which agent has what](#usage).
+- **Share**: `export` and `import` a selection, or commit a [`skills-atlas.json`](#a-projects-skills-skills-atlasjson) so that `skills-atlas sync` gives every teammate the same skills.
+- **From your agent**: a skill, an MCP server and a Claude Code plugin let [Claude and other agents](#from-claude-and-other-agents) search, read and install skills for you.
+- **Everywhere**: 79 agents, a terminal tree and a [web page](#web-interface), nine languages, [shell completion](#usage), and it works offline.
 
 ![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/demo.gif?v=0.9.0)
 
@@ -116,7 +121,7 @@ Each crawl records the installs every skill gained since the previous snapshot. 
 Three ways to let an agent find and install skills for you, from the lightest:
 
 - **The skill.** `npx skills add devohmycode/skills-atlas -s skills-atlas` teaches any agent the commands above (`list --json`, `show`, `install … -y`, `outdated --json`). Ask "find me a skill to draw diagrams": the agent searches, reads the candidates' `SKILL.md`, then installs the one you pick.
-- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill`, `list_installed`, `outdated_skills`, `install_skills` (with `dry_run`) and `remove_skills`. In Claude Code:
+- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill` (with its risk check), `list_packs`, `list_installed`, `outdated_skills`, `install_skills` (with `dry_run`; it refuses to replace a skill of the same name unless `replace: true`) and `remove_skills`. In Claude Code:
 
   ```bash
   claude mcp add skills-atlas -- npx -y skills-atlas@latest mcp
