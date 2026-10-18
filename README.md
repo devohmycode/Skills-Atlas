@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/v/skills-atlas?color=FF8AD8" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/dm/skills-atlas?color=B69BFA" alt="npm downloads"></a>
+  <a href="#install-options"><img src="https://img.shields.io/badge/works%20with-79%20agents-A6D5B2" alt="Works with 79 agents"></a>
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/skills-atlas?color=8BD5F5" alt="MIT license"></a>
   <a href="https://devohmycode.github.io/skills-atlas/demo/"><img src="https://img.shields.io/badge/try%20it-web%20demo-E6BF68" alt="Web demo"></a>
 </p>
