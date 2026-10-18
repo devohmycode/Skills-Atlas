@@ -1,10 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 — 2026-10-18
 
 - **Security audit before installing.** The risk check now runs on every skill to install or update. A skill with a high warning sign fails: on the review screen it is listed unticked, with its warning signs, and space installs it anyway; without a person at the keyboard (`install -y`, `import`, `sync`, `update`) it is left out; the MCP server refuses it unless `ignore_audit: true`. `skills-atlas audit on|off` sets it for good, `--no-audit` for one command.
 - `install` with questions now installs what its review screen kept, not every id it was given.
 - **Update everything.** `skills-atlas update` updates every outdated global skill, or only the ones named, each for its own agents (`--dry-run` available). In the tree, `U` marks every outdated skill at once.
+
+Validation: 161 tests and TypeScript checks.
 
 ## 0.10.0 — 2026-10-18
 
