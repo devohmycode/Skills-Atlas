@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByRepository } from '../catalog/groups.js';
 import { byGrowth, TRENDING_THEME } from '../catalog/trending.js';
-import { groupByTheme, haystack, popularityLabel, SORT_ORDERS, sortSkills, type SortOrder } from '../catalog/query.js';
+import { createSearchIndex, groupByTheme, popularityLabel, SORT_ORDERS, type SortOrder } from '../catalog/query.js';
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
 import { scanRisks, type RiskLevel } from '../risks.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
@@ -26,7 +26,7 @@ interface ViewCache {
   sort: SortOrder;
   officialOnly: boolean;
   filter: string;
-  sorted: Skill[];
+  explicitSort: boolean;
   visible: Skill[];
   groups: ReturnType<typeof groupByTheme>;
 }
@@ -55,6 +55,7 @@ export interface TreeSelectProps {
   scopes?: Scope[];
   /** Starting order, changed with `s`. */
   initialSort?: SortOrder;
+  initialSearch?: string;
   /** Start with only official skills, toggled with `o`. */
   initialOfficial?: boolean;
   /** Installed skill ids with a newer version upstream, marked for update with `u`. */
@@ -97,7 +98,7 @@ function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<st
     out.push({ kind: 'theme', theme: g.theme, skills: g.skills, expanded: isOpen });
     if (!isOpen) continue;
     if (g.theme.id !== RECOMMENDED) {
-      for (const skill of g.theme.id === TRENDING_THEME.id ? byGrowth(g.skills) : g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
+      for (const skill of g.theme.id === TRENDING_THEME.id && !filter.trim() ? byGrowth(g.skills) : g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
       continue;
     }
     for (const repo of byRepository(g.skills)) {
@@ -135,7 +136,8 @@ export function TreeSelect({
   initialSelected = [],
   installed = EMPTY_INSTALLED,
   scopes,
-  initialSort = 'installs',
+  initialSort,
+  initialSearch = '',
   initialOfficial = false,
   onSubmit,
   onCancel,
@@ -153,9 +155,10 @@ export function TreeSelect({
   const [preview, setPreview] = useState<{ skill: Skill; text?: string; error?: string; top: number } | null>(null);
   const previews = useRef(new Map<string, string>());
   const [cursor, setCursorState] = useState(0);
-  const [filter, setFilterState] = useState('');
+  const [filter, setFilterState] = useState(initialSearch);
   const [editingFilter, setEditingFilterState] = useState(false);
-  const [sort, setSort] = useState<SortOrder>(initialSort);
+  const [sort, setSort] = useState<SortOrder>(initialSort ?? 'installs');
+  const explicitSort = useRef(initialSort !== undefined);
   const [officialOnly, setOfficialOnly] = useState(initialOfficial);
   // Keys can arrive faster than renders (held arrows, pasted input, a slow terminal): the
   // handlers read and write these through a ref, so that each key sees the previous one.
@@ -185,22 +188,18 @@ export function TreeSelect({
     setEditingFilterState(next);
   };
 
-  const texts = useMemo(() => new Map(skills.map((s) => [s.id, haystack(s)])), [skills]);
+  const search = useMemo(() => createSearchIndex(skills), [skills]);
   const viewCache = useRef<ViewCache | undefined>(undefined);
   // Render and input handlers share the query cache. A sort or filter key immediately changes
   // the view used by subsequent keys, even when React has not rendered the new state yet.
   const getView = (sort: SortOrder, officialOnly: boolean, filter: string): ViewCache => {
     const cached = viewCache.current;
-    const sameSort = cached !== undefined && cached.skills === skills && cached.sort === sort;
+    const sameSort = cached !== undefined && cached.skills === skills && cached.sort === sort && cached.explicitSort === explicitSort.current;
     const sameFilter = sameSort && cached.officialOnly === officialOnly && cached.filter === filter;
     if (sameFilter && cached.themes === themes) return cached;
-    const sorted = sameSort ? cached.sorted : sortSkills(skills, sort);
-    const terms = filter.toLowerCase().split(/\s+/).filter(Boolean);
-    const visible = sameFilter ? cached.visible : sorted.filter(
-      (s) => (!officialOnly || s.official) && terms.every((term) => texts.get(s.id)!.includes(term)),
-    );
+    const visible = sameFilter ? cached.visible : search(filter, explicitSort.current || !filter.trim() ? sort : undefined).filter((s) => !officialOnly || s.official);
     const groups = groupByTheme(themes, visible);
-    const view = { skills, themes, sort, officialOnly, filter, sorted, visible, groups };
+    const view = { skills, themes, sort, officialOnly, filter, explicitSort: explicitSort.current, visible, groups };
     viewCache.current = view;
     return view;
   };
@@ -312,6 +311,7 @@ export function TreeSelect({
     setCursor(0);
   };
   const cycleSort = () => {
+    explicitSort.current = true;
     const next = SORT_ORDERS[(SORT_ORDERS.indexOf(live.current.sort) + 1) % SORT_ORDERS.length]!;
     live.current.sort = next;
     setSort(next);
@@ -521,7 +521,7 @@ export function TreeSelect({
           {toUpdateCount > 0 && <Text color={PALETTE.gold}>{` ${UPDATE_MARK}${toUpdateCount}`}</Text>}
           {updates.size > 0 && <Text color={PALETTE.gold}>{`   ${UPDATE_MARK} ${m.tree.updates(updates.size)}`}</Text>}
           {scopes && <Text dimColor>{`   ${m.tree.scope(scopesLabel(scopes))}`}</Text>}
-          <Text dimColor>{`   ${m.tree.sortedBy(m.tree.sort[sort])}`}</Text>
+          <Text dimColor>{`   ${m.tree.sortedBy(m.tree.sort[filter.trim() && !explicitSort.current ? 'relevance' : sort])}`}</Text>
           {officialOnly && <Text color={PALETTE.lavender}>{`   ${OFFICIAL_MARK} ${m.tree.officialOnly}`}</Text>}
         </Text>
         <Text dimColor>{rows.length ? m.tree.position(formatNumber(current + 1), formatNumber(rows.length)) : ''}</Text>

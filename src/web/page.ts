@@ -9,6 +9,7 @@
  * sets titles and figures.
  */
 import { groupByRepository } from '../catalog/groups.js';
+import { createSearchIndex, sortSkills } from '../catalog/query.js';
 import { PALETTE } from '../ui/palette.js';
 
 export const PAGE_HTML = String.raw`<!doctype html>
@@ -351,15 +352,18 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 <script>
 (function () {
   'use strict';
+  ${sortSkills}
+  ${createSearchIndex}
   var token = location.hash.slice(1);
   var M = {};
   var S = null;               // server state: themes, agents, installed, defaults…
   var installedById = new Map();
+  var searchInstalled = createSearchIndex([]);
   var hues = {};              // theme id -> hue on the map
   var adds = new Map();       // id -> skill, to install
   var removes = new Set();    // installed ids to uninstall
   var opts = { scope: 'project', method: 'symlink', agents: new Set() };
-  var view = { q: '', sort: 'installs', official: false, theme: '', items: [], total: 0, counts: {}, all: 0 };
+  var view = { q: '', sort: '', official: false, theme: '', items: [], total: 0, counts: {}, all: 0 };
   var showAllAgents = false, agentFilter = '', planTimer = 0, planSeq = 0, queryTimer = 0, querySeq = 0;
   var fmt = new Intl.NumberFormat(), compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
   var PAGE = 100;
@@ -565,10 +569,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     else if (e.key === 'ArrowUp' && row.previousElementSibling) { e.preventDefault(); row.previousElementSibling.focus(); }
   });
 
-  function matchesQuery(s) {
-    var terms = view.q.toLowerCase().split(/\s+/).filter(Boolean);
-    var text = (s.id + ' ' + (s.description || '')).toLowerCase();
-    return (!view.official || s.official) && terms.every(function (t) { return text.indexOf(t) >= 0; });
+  function installedMatches() {
+    return searchInstalled(view.q, view.sort || (view.q.trim() ? undefined : 'installs')).filter(function (s) { return !view.official || s.official; });
   }
 
   /** Installed skills are few and known here; the catalog is searched by the server, a page at a time. */
@@ -583,10 +585,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       if (seq !== querySeq) return;
       view.counts = r.counts; view.all = r.all;
       if (local) {
-        var list = S.installed.filter(matchesQuery);
-        list.sort(view.sort === 'name'
-          ? function (a, b) { return a.name.localeCompare(b.name); }
-          : function (a, b) { return (b.installs || 0) - (a.installs || 0); });
+        var list = installedMatches();
         view.items = list; view.total = list.length;
       } else {
         view.items = append ? view.items.concat(r.items) : r.items;
@@ -605,7 +604,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     return th ? th.label : id;
   }
   function renderThemes() {
-    var installedCount = S.installed.filter(matchesQuery).length;
+    var installedCount = installedMatches().length;
     var cur = function (id) { return view.theme === id ? ' aria-current="true"' : ''; };
     var html = '<h2>' + esc(M.legend) + '</h2>' +
       '<button class="all" data-theme=""' + cur('') + '><span>' + esc(M.allThemes) + '</span><span class="n">' + fmt.format(view.all) + '</span></button>';
@@ -789,6 +788,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   // ---- boot ------------------------------------------------------------------------------
   function setState(st) {
     S = st;
+    searchInstalled = createSearchIndex(st.installed);
     installedById = new Map(st.installed.map(function (s) { return [s.id, s]; }));
     // Regions of the map: hues spread evenly over the themes, in catalog order.
     var regions = st.themes.filter(function (th) { return th.id !== 'installed' && th.id !== 'recommended' && th.id !== 'other'; });
@@ -825,12 +825,18 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 
   $('q').addEventListener('input', function (e) {
     clearTimeout(queryTimer);
-    queryTimer = setTimeout(function () { view.q = e.target.value.trim(); load(false); }, 120);
+    queryTimer = setTimeout(function () {
+      view.q = e.target.value.trim();
+      $('sort').setAttribute('aria-label', view.q && !view.sort ? M.sortRelevance : M.sortLabel);
+      Array.prototype.forEach.call($('sort').children, function (x) { x.setAttribute('aria-pressed', String(x.dataset.sort === (view.sort || (view.q ? '' : 'installs')))); });
+      load(false);
+    }, 120);
   });
   $('sort').addEventListener('click', function (e) {
     var b = e.target.closest('button');
     if (!b) return;
     view.sort = b.dataset.sort;
+    $('sort').setAttribute('aria-label', M.sortLabel);
     Array.prototype.forEach.call($('sort').children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
     load(false);
   });

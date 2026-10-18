@@ -136,7 +136,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
 
 function toQuery(catalog: Catalog, opts: FilterOptions): QueryOptions {
   const themes = opts.theme?.map((th) => resolveTheme(catalog, th)?.id ?? fail(t().errors.unknownTheme(th)));
-  return { themes, search: opts.search, minInstalls: opts.minInstalls, all: opts.all, official: opts.official, sort: opts.sort };
+  return { themes, search: opts.search, minInstalls: opts.minInstalls, all: opts.all, official: opts.official, sort: opts.sort ?? (opts.search?.trim() ? undefined : 'installs') };
 }
 
 /** Options fixed by flags; anything left undefined is asked (or defaulted with -y). */
@@ -280,7 +280,7 @@ const filterOptions = (cmd: Command) =>
     .option('--min-installs <n>', c.minInstalls, (v) => Number.parseInt(v, 10))
     .option('--all', c.all)
     .option('--official', c.official)
-    .addOption(new Option('-s, --sort <order>', c.sort).choices(SORT_ORDERS).default('installs'))
+    .addOption(new Option('-s, --sort <order>', c.sort).choices(SORT_ORDERS))
     .addOption(catalogOption())
     .addOption(offlineOption())
     .addOption(refreshOption());
@@ -327,6 +327,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           skillsVersion={opts.skillsVersion}
           loadInstalled={loadInstalled}
           sort={opts.sort}
+          search={opts.search}
           official={opts.official}
           notice={notice || versionNotice}
           treeMemory={treeMemory}

@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS } from '../src/agents.js';
 import { loadCatalog } from '../src/catalog/load.js';
-import { haystack, querySkills, sortSkills } from '../src/catalog/query.js';
+import { createSearchIndex, querySkills, sortSkills } from '../src/catalog/query.js';
 import { curated } from '../src/catalog/curated.js';
 import { getLang, setLang, t, themeLabel } from '../src/i18n/index.js';
 import { PAGE_HTML } from '../src/web/page.js';
@@ -24,7 +24,7 @@ const all = querySkills(catalog, {});
 const top = sortSkills(all, 'installs').slice(0, TOP);
 const skills = [...new Map([...all.filter((s) => s.recommendation || s.themes.some((th) => th === 'trending' || th.startsWith('pack:'))), ...top].map((s) => [s.id, s])).values()].map((s) => ({
   id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth,
-  rank: s.rank, official: s.official, recommendation: s.recommendation, themes: s.themes, text: haystack(s),
+  rank: s.rank, official: s.official, recommendation: s.recommendation, themes: s.themes, labels: s.labels,
 }));
 const state = {
   lang: getLang(),
@@ -47,22 +47,24 @@ const state = {
 // Answers the page's /api calls like the local server does, on the embedded skills.
 const shim = `<script>
 (function () {
+  ${sortSkills}
+  ${createSearchIndex}
   var DEMO = ${JSON.stringify({ state, skills }).replace(/</g, '\\u003c')};
   var json = function (body, status) { return Promise.resolve(new Response(JSON.stringify(body), { status: status || 200, headers: { 'content-type': 'application/json' } })); };
-  var byName = DEMO.skills.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+  var search = createSearchIndex(DEMO.skills);
   window.fetch = function (input, init) {
     var url = new URL(String(input), location.href);
     if (url.pathname.endsWith('/api/state')) return json(DEMO.state);
     if (url.pathname.endsWith('/api/skills')) {
-      var p = url.searchParams, terms = (p.get('q') || '').toLowerCase().split(/\\s+/).filter(Boolean);
+      var p = url.searchParams, query = p.get('q') || '';
       var official = p.get('official') === '1', theme = p.get('theme');
-      var matching = (p.get('sort') === 'name' ? byName : DEMO.skills).filter(function (s) {
-        return (!official || s.official) && terms.every(function (t) { return s.text.indexOf(t) >= 0; });
+      var matching = search(query, p.get('sort') || (query.trim() ? undefined : 'installs')).filter(function (s) {
+        return !official || s.official;
       });
       var counts = {};
       matching.forEach(function (s) { s.themes.forEach(function (th) { counts[th] = (counts[th] || 0) + 1; }); });
       var inTheme = theme ? matching.filter(function (s) { return s.themes.indexOf(theme) >= 0; }) : matching;
-      if (theme === 'trending') inTheme = inTheme.slice().sort(function (a, b) { return (b.growth || 0) - (a.growth || 0); });
+      if (theme === 'trending' && !query.trim()) inTheme = inTheme.slice().sort(function (a, b) { return (b.growth || 0) - (a.growth || 0); });
       var offset = Number(p.get('offset')) || 0, limit = Math.min(500, Number(p.get('limit')) || 100);
       return json({ total: inTheme.length, all: matching.length, counts: counts, items: inTheme.slice(offset, offset + limit) });
     }

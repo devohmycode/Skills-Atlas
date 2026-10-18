@@ -39,6 +39,7 @@ export interface AppProps {
   initialIds?: string[];
   /** Starting order and official filter of the tree (`--sort`, `--official`). */
   sort?: SortOrder;
+  search?: string;
   official?: boolean;
   /** Detects what is installed in these scopes, to pre-tick it in the tree. */
   loadInstalled?: (scopes: Scope[]) => Promise<TreeData>;
@@ -93,7 +94,7 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone } = props;
   const m = t();
   const { exit } = useApp();
   const { rows } = useTerminalSize();
@@ -195,6 +196,7 @@ export function App(props: AppProps) {
           installed={tree.installed}
           scopes={loadInstalled ? readScopes : undefined}
           initialSort={sort}
+          initialSearch={search}
           initialOfficial={official}
           memory={treeMemory}
           updates={outdated}

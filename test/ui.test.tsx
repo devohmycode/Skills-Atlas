@@ -40,6 +40,35 @@ async function press(stdin: { write: (s: string) => void }, ...keys: string[]) {
 }
 
 describe('TreeSelect', () => {
+  it('retains relevance for a search supplied by the browse command', async () => {
+    const found = [
+      { ...skill('o/r@popular', ['frontend'], 'café'), installs: 900 },
+      { ...skill('o/r@café', ['frontend']), installs: 1 },
+    ];
+    const { lastFrame } = render(<TreeSelect themes={themes} skills={found} initialSearch="cafe" onSubmit={() => {}} onCancel={() => {}} />);
+    await tick();
+    expect(lastFrame()).toContain('○ café');
+    expect(lastFrame()!.indexOf('○ café')).toBeLessThan(lastFrame()!.indexOf('○ popular'));
+  });
+  it('ranks accent and label matches until an explicit sort is chosen', async () => {
+    const found = [
+      { ...skill('o/r@popular', ['frontend'], 'Café résumé'), installs: 900 },
+      { ...skill('o/r@café-tools', ['frontend']), installs: 10 },
+      { ...skill('o/r@café', ['frontend']), installs: 1 },
+      { ...skill('o/r@label', ['frontend']), labels: ['café', 'résumé'], installs: 20 },
+    ];
+    const { lastFrame, stdin } = render(<TreeSelect themes={themes} skills={found} onSubmit={() => {}} onCancel={() => {}} />);
+    await tick();
+    await press(stdin, '/', 'CAFE', KEY.enter);
+    expect(lastFrame()!.indexOf('○ café ')).toBeLessThan(lastFrame()!.indexOf('○ café-tools'));
+    expect(lastFrame()!.indexOf('○ café-tools')).toBeLessThan(lastFrame()!.indexOf('○ popular'));
+    await press(stdin, 's', 's');
+    expect(lastFrame()!.indexOf('○ popular')).toBeLessThan(lastFrame()!.indexOf('○ café-tools'));
+    await press(stdin, '/', ' resume', KEY.enter);
+    expect(lastFrame()).toContain('○ label');
+    expect(lastFrame()).not.toContain('○ café-tools');
+  });
+
   it('shows collapsed themes with counts, expands and selects', async () => {
     const onSubmit = vi.fn();
     const { lastFrame, stdin } = render(<TreeSelect themes={themes} skills={skills} onSubmit={onSubmit} onCancel={() => {}} />);

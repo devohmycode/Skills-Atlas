@@ -38,7 +38,7 @@ export function agentIds(names: string[]): string[] {
   return [...new Set(names.map((n) => AGENTS.find((a) => a.displayName === n)?.id).filter((id): id is string => !!id))];
 }
 
-/** The catalog's skills matching a search, most installed first, as one ranked list. */
+/** Search matches ranked by relevance, with popularity breaking ties. */
 export function searchSkills(catalog: Catalog, opts: { query?: string; theme?: string; official?: boolean; limit?: number } = {}): SkillSummary[] {
   const found = querySkills(catalog, { search: opts.query, themes: opts.theme ? [opts.theme] : undefined, official: opts.official });
   return found.slice(0, opts.limit ?? 20).map(summarize);

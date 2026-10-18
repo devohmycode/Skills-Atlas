@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { AGENTS, detectAgents, unknownAgents } from '../agents.js';
 import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog/installed.js';
 import { byGrowth } from '../catalog/trending.js';
-import { haystack, SORT_ORDERS, sortSkills } from '../catalog/query.js';
+import { createSearchIndex, SORT_ORDERS } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
 import { getLang, locale, t, themeLabel } from '../i18n/index.js';
 import { formatCommand, planInstall, planRemovals, type InstallCommand } from '../install/plan.js';
@@ -61,6 +61,7 @@ const slim = (s: Skill) => ({
   name: s.name,
   source: s.source,
   description: s.description,
+  labels: s.labels,
   installs: s.installs,
   stars: s.stars,
   rank: s.rank,
@@ -89,8 +90,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   const list = opts.listInstalled ?? listInstalled;
   const run = opts.runAll ?? runAll;
   const token = randomBytes(24).toString('hex');
-  const texts = new Map(opts.skills.map((s) => [s.id, haystack(s)]));
-  const sorted = { installs: sortSkills(opts.skills, 'installs'), name: sortSkills(opts.skills, 'name') };
+  const search = createSearchIndex(opts.skills);
   let queryCache: { key: string; matching: Skill[]; counts: Record<string, number> } | undefined;
   let running = false;
 
@@ -124,24 +124,22 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   }
 
   function skillsPage(params: URLSearchParams) {
-    const sort = SORT_ORDERS.find((o) => o === params.get('sort')) ?? 'installs';
-    const terms = (params.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const query = params.get('q') ?? '';
+    const sort = SORT_ORDERS.find((o) => o === params.get('sort')) ?? (query.trim() ? undefined : 'installs');
     const official = params.get('official') === '1';
     const theme = params.get('theme') || undefined;
     const offset = Math.max(0, Number(params.get('offset')) || 0);
     const limit = Math.min(MAX_LIMIT, Math.max(1, Number(params.get('limit')) || 100));
     // Paging and switching themes keep the same search: scan the catalog once for both.
-    const key = JSON.stringify([sort, terms, official]);
+    const key = JSON.stringify([sort, query, official]);
     if (queryCache?.key !== key) {
-      const matching = sorted[sort].filter(
-        (s) => (!official || s.official) && terms.every((term) => texts.get(s.id)!.includes(term)),
-      );
+      const matching = search(query, sort).filter((s) => !official || s.official);
       const counts: Record<string, number> = {};
       for (const s of matching) for (const th of s.themes) counts[th] = (counts[th] ?? 0) + 1;
       queryCache = { key, matching, counts };
     }
     const { matching, counts } = queryCache;
-    const inTheme = theme === 'trending' ? byGrowth(matching.filter((s) => s.themes.includes(theme))) : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
+    const inTheme = theme === 'trending' && !query.trim() ? byGrowth(matching.filter((s) => s.themes.includes(theme))) : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
     return { total: inTheme.length, all: matching.length, counts, items: inTheme.slice(offset, offset + limit).map(slim) };
   }
 

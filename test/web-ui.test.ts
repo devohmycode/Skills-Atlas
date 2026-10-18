@@ -24,7 +24,7 @@ function browser() {
   };
   const script = [...PAGE_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)![1]!;
   new Script(script.replace(/\}\)\(\);\s*$/, `
-    globalThis.ui = { view, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl,
+    globalThis.ui = { view, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl, installedMatches,
       init: function (state, messages) { M = messages; setState(state); } };
   })();`)).runInNewContext(context);
   context.ui.init({
@@ -42,6 +42,21 @@ function browser() {
 }
 
 describe('web interface', () => {
+  it('uses normalized relevance and explicit sorts for installed skills too', () => {
+    const { ui, skill } = browser();
+    const found = [
+      { ...skill, id: 'o/r@popular', name: 'popular', description: 'Café résumé', installs: 900 },
+      { ...skill, id: 'o/r@café', name: 'café', installs: 1 },
+      { ...skill, id: 'o/r@label', name: 'label', labels: ['café', 'résumé'], installs: 10 },
+    ];
+    ui.init({ installed: found, themes: [], agents: [], cwd: '.' }, {});
+    ui.view.q = 'CAFE';
+    expect(ui.installedMatches().map((s: any) => s.name)).toEqual(['café', 'popular', 'label']);
+    ui.view.q = 'cafe resume';
+    expect(ui.installedMatches().map((s: any) => s.name)).toEqual(['popular', 'label']);
+    ui.view.q = 'cafe'; ui.view.sort = 'installs';
+    expect(ui.installedMatches()[0].name).toBe('popular');
+  });
   it('embeds the shared repository grouping without bundler helpers', () => {
     // esbuild's keepNames adds __name() calls, which the page does not define.
     expect(PAGE_HTML).toContain('function groupByRepository');

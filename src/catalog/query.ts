@@ -34,14 +34,31 @@ export function resolveTheme(catalog: Catalog, input: string): Theme | undefined
   );
 }
 
-export function haystack(s: Skill): string {
-  return `${s.id} ${s.description ?? ''}`.toLowerCase();
+/** Cached search shared with the browser and offline demo, embedded alongside sortSkills. */
+export function createSearchIndex(skills: Skill[]) {
+  const entries = skills.map((skill) => ({
+    skill,
+    name: skill.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
+    text: `${skill.id} ${skill.name} ${skill.description ?? ''} ${(skill.labels ?? []).join(' ')}`.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
+  }));
+  return (search = '', order?: SortOrder): Skill[] => {
+    const query = search.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
+    const terms = query.split(/\s+/).filter(Boolean);
+    const found = entries.filter((e) => terms.every((term) => e.text.includes(term)));
+    if (query && !order) {
+      const scores = new Map(found.map((e) => [e.skill,
+        e.name === query ? 3 : e.name.startsWith(query) ? 2 : terms.every((term) => e.name.includes(term)) ? 1 : 0,
+      ]));
+      found.sort((a, b) => scores.get(b.skill)! - scores.get(a.skill)! || (b.skill.installs ?? 0) - (a.skill.installs ?? 0) || (b.skill.stars ?? 0) - (a.skill.stars ?? 0));
+    }
+    const result = found.map((e) => e.skill);
+    return order ? sortSkills(result, order) : result;
+  };
 }
 
-/** Every whitespace-separated term must appear in the id or the description. */
+/** Every whitespace-separated term must appear in the id, description or labels. */
 export function matchesSearch(s: Skill, search: string): boolean {
-  const text = haystack(s);
-  return search.toLowerCase().split(/\s+/).filter(Boolean).every((term) => text.includes(term));
+  return createSearchIndex([s])(search).length > 0;
 }
 
 export function querySkills(catalog: Catalog, q: QueryOptions = {}): Skill[] {
@@ -50,9 +67,9 @@ export function querySkills(catalog: Catalog, q: QueryOptions = {}): Skill[] {
     if (!q.all && !s.recommendation && !s.installs && !s.stars && s.rank === undefined) return false;
     if (q.minInstalls && (s.installs ?? 0) < q.minInstalls) return false;
     if (q.themes?.length && !s.themes.some((t) => q.themes!.includes(t))) return false;
-    if (q.search && !matchesSearch(s, q.search)) return false;
     return true;
   });
+  if (q.search?.trim()) return createSearchIndex(found)(q.search, q.sort);
   return q.sort ? sortSkills(found, q.sort) : found;
 }
 
