@@ -121,6 +121,8 @@ A `skills-atlas.json` at the root of a repository lists the skills the project e
 
 `skills-atlas export -p > skills-atlas.json` writes it from what the project has (add `agents` by hand if you want them fixed). Then anyone who clones the repository runs `skills-atlas sync`: it installs, in the project, the listed skills that are missing, for the file's agents unless `-a` says otherwise. `skills-atlas sync --check` installs nothing; it lists what is missing and exits with 1 if anything is, for a CI step.
 
+With `agents` in the file (or `-a` on the command line), `sync` checks each target agent separately. A skill installed for Cursor alone does not satisfy a request for Claude Code. `sync --check` lists the missing skill/agent combinations, and `sync` installs only those combinations. `-a` overrides the file's agents; `-a '*'` checks every supported agent. Without explicit agents, the existing project-wide presence check is used.
+
 ### Trending
 
 Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form **🔥 Trending**, right after Recommended, sorted by growth. The theme appears once two snapshots with install counts can be compared.
