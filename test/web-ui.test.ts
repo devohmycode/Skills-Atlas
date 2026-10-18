@@ -1,17 +1,18 @@
 import { Script } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
+import { en } from '../src/i18n/en.js';
 import { PAGE_HTML } from '../src/web/page.js';
 
 /** Run the actual inline browser script with only the DOM surfaces these checks use. */
 function browser(preview: unknown = { markdown: '<img src=x onerror=bad()>', risks: [] }, plan?: (body: any) => unknown) {
+  let respond: (path: string, init: any) => Promise<any> = () => new Promise(() => {});
   const elements = new Map<string, any>();
   const rows = new Map<string, any>();
   function element(id: string): any {
     if (!elements.has(id)) elements.set(id, {
       innerHTML: '', textContent: '', scrollTop: 0, events: new Map(),
-      showModal: vi.fn(), close: vi.fn(), focus: vi.fn(),
       addEventListener(event: string, fn: unknown) { this.events.set(event, fn); },
-      insertAdjacentHTML: vi.fn(),
+      insertAdjacentHTML: vi.fn(), focus: vi.fn(), showModal: vi.fn(), close: vi.fn(),
       querySelector(selector: string) { return selector.startsWith('[data-id=') ? rows.get(selector.slice(10, -2)) : null; },
     });
     return elements.get(id);
@@ -19,21 +20,22 @@ function browser(preview: unknown = { markdown: '<img src=x onerror=bad()>', ris
   const open = vi.fn();
   const context: any = {
     location: { hash: '#test' },
-    document: { activeElement: null, getElementById: element, addEventListener: vi.fn() },
+    document: { activeElement: null, getElementById: element, addEventListener: vi.fn(), querySelector: () => element('list') },
     window: { open }, fetch: (path: string, init: any) => path.startsWith('/api/preview')
       ? Promise.resolve({ ok: true, json: async () => preview }) : path === '/api/plan' && plan
-        ? Promise.resolve({ ok: true, json: async () => plan(JSON.parse(init.body)) }) : new Promise(() => {}),
-    Intl, URLSearchParams, CSS: { escape: (s: string) => s }, setTimeout, clearTimeout,
+        ? Promise.resolve({ ok: true, json: async () => plan(JSON.parse(init.body)) }) : respond(path, init),
+    TextDecoder, Intl, URLSearchParams, CSS: { escape: (s: string) => s }, setTimeout: plan ? setTimeout : () => 0, clearTimeout,
   };
   const script = [...PAGE_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)![1]!;
   new Script(script.replace(/\}\)\(\);\s*$/, `
-    globalThis.ui = { view, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl, installedMatches, previewSkill, body, opts,
+    globalThis.ui = { view, opts, apply, body, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl, installedMatches, previewSkill,
       init: function (state, messages) { M = messages; setState(state); } };
   })();`)).runInNewContext(context);
   context.ui.init({
-    installed: [], agents: [{ id: 'claude-code', name: 'Claude Code', detected: true }], cwd: '.',
+    installed: [], agents: [{ id: 'codex', name: 'Codex', detected: true }], cwd: '.',
     themes: [{ id: 'installed', label: 'Already installed' }, { id: 'recommended', label: 'Recommended' }, { id: 'code', label: 'Code' }],
-  }, { github: 'Open on GitHub', recommendedHint: 'Handpicked skills', noMatch: 'No match' });
+  }, en.web);
+  context.ui.opts.agents.add('codex');
   const skill = { id: 'owner/repo@skill', source: 'owner/repo', name: 'skill', description: 'Description', themes: ['code'] };
   context.ui.view.items = [skill];
   context.ui.view.total = 2;
@@ -41,7 +43,8 @@ function browser(preview: unknown = { markdown: '<img src=x onerror=bad()>', ris
   const pin = { checked: false };
   const row = { dataset: { id: skill.id }, classList: { toggle: vi.fn() }, querySelector: () => pin, closest: (selector: string): unknown => selector === '.row' ? row : null, tagName: 'DIV' };
   rows.set(skill.id, row);
-  return { ui: context.ui, element, skill, row, pin, open };
+  return { ui: context.ui, element, skill, row, pin, open,
+    respond(fn: typeof respond) { respond = fn; } };
 }
 
 describe('web interface', () => {
@@ -176,3 +179,181 @@ describe('web interface', () => {
   });
 });
 
+/** Exercise the real API/NDJSON path, without touching live installations. */
+function operationBrowser(installed: any[] = []) {
+  const b = browser();
+  const state = {
+    installed, agents: [{ id: 'codex', name: 'Codex', detected: true }], cwd: '.',
+    themes: [{ id: 'code', label: 'Code' }],
+  };
+  b.ui.init(state, en.web);
+  const requests: any[] = [];
+  let refreshError = false;
+  let events: any[] = [];
+  let disconnect = false;
+  b.respond(async (path, init) => {
+    if (path === '/api/state') {
+      if (refreshError) throw new Error('state unavailable');
+      return { ok: true, json: async () => state };
+    }
+    if (path.startsWith('/api/skills?')) return {
+      ok: true, json: async () => ({ items: [], total: 0, all: 0, counts: {} }),
+    };
+    if (path === '/api/apply') {
+      requests.push(JSON.parse(init.body));
+      let sent = false;
+      return { ok: true, body: { getReader: () => ({ read: async () => {
+        if (sent) {
+          if (disconnect) throw new Error('connection lost');
+          return { done: true };
+        }
+        sent = true;
+        return { done: false, value: new TextEncoder().encode(events.map(e => JSON.stringify(e)).join('\n') + '\n') };
+      } }) } };
+    }
+    throw new Error('unexpected API request: ' + path);
+  });
+  return {
+    ...b, state, requests,
+    response(next: any[], lost = false) { events = next; disconnect = lost; },
+    failRefresh(fail: boolean) { refreshError = fail; },
+    async retry() {
+      return b.element('panel').events.get('click')({ target: { closest: () => ({ dataset: { act: 'apply' } }) } });
+    },
+  };
+}
+
+describe('retrying web operations', () => {
+  it.each(['failed result', 'disconnect'])('retains missing agent destinations after %s and requests a verified retry', async mode => {
+    const b = operationBrowser();
+    b.state.agents.push({ id: 'claude-code', name: 'Claude Code', detected: true });
+    b.ui.opts.agents.add('claude-code');
+    b.ui.toggle(b.skill);
+    b.state.installed = [{ ...b.skill, scopes: ['project', 'global'], agentsByScope: { project: ['codex'], global: ['claude-code'] } }];
+    b.response([
+      { type: 'start', i: 0, kind: 'add', source: 'owner/repo', skills: ['skill'] },
+      ...(mode === 'failed result' ? [
+        { type: 'done', i: 0, ok: false, results: [{ name: 'skill', status: 'failed', error: 'Claude Code link failed' }] },
+        { type: 'end', ok: false },
+      ] : []),
+    ], mode === 'disconnect');
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual(['owner/repo@skill']);
+    expect(b.element('panel-foot').innerHTML).toContain(en.web.retryRemaining);
+    await b.retry();
+    expect(b.requests[1]).toMatchObject({ install: ['owner/repo@skill'], retry: true });
+    b.state.installed[0].agentsByScope.project.push('claude-code');
+    await b.retry();
+    expect(b.requests).toHaveLength(2);
+    expect(b.ui.body().install).toEqual([]);
+  });
+
+  it('reports outstanding operations even when the command reported success', async () => {
+    const b = operationBrowser();
+    b.ui.toggle(b.skill);
+    b.response([
+      { type: 'start', i: 0, kind: 'add', source: 'owner/repo', skills: ['skill'] },
+      { type: 'done', i: 0, ok: true, results: [{ name: 'skill', status: 'installed' }] },
+      { type: 'end', ok: true },
+    ]);
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual(['owner/repo@skill']);
+    expect(b.element('progress-body').innerHTML).toContain(en.web.summaryFailed);
+  });
+
+  it('clears a completed selection and leaves close as a dismissal', async () => {
+    const b = operationBrowser();
+    b.ui.toggle(b.skill);
+    b.state.installed = [{ ...b.skill, scopes: ['project'], agentsByScope: { project: ['codex'] } }];
+    b.response([{ type: 'end', ok: true }]);
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual([]);
+    expect(b.element('panel-foot').hidden).toBe(true);
+    expect(b.element('progress-body').innerHTML).toContain(en.web.summaryOk);
+    b.element('close').onclick();
+    expect(b.requests).toHaveLength(1);
+  });
+
+  it('keeps only the failed skill in a partial repository and shows its escaped error', async () => {
+    const b = operationBrowser();
+    const other = { ...b.skill, id: 'owner/repo@other', name: 'other' };
+    b.ui.toggle(b.skill); b.ui.toggle(other);
+    b.state.installed = [{ ...b.skill, scopes: ['project'], agentsByScope: { project: ['codex'] } }];
+    b.response([
+      { type: 'start', i: 0, kind: 'add', source: 'owner/repo', skills: ['skill', 'other'] },
+      { type: 'done', i: 0, ok: false, results: [
+        { name: 'skill', status: 'installed' }, { name: 'other', status: 'failed', error: '<denied>' },
+      ] },
+      { type: 'end', ok: false },
+    ]);
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual(['owner/repo@other']);
+    expect(b.element('progress-body').innerHTML).toContain('other: &lt;denied&gt;');
+    expect(b.element('progress-body').innerHTML).not.toContain('<denied>');
+    expect(b.element('panel-foot').innerHTML).toContain(en.web.retryRemaining);
+    expect(b.requests).toHaveLength(1);
+    await b.retry();
+    expect(b.requests.map(r => r.install)).toEqual([['owner/repo@skill', 'owner/repo@other'], ['owner/repo@other']]);
+  });
+
+  it('retains a failed removal and retries only skills still installed', async () => {
+    const a = { id: 'owner/repo@a', source: 'owner/repo', name: 'a', scopes: ['project'] };
+    const bSkill = { ...a, id: 'owner/repo@b', name: 'b' };
+    const b = operationBrowser([a, bSkill]);
+    b.ui.toggle(a); b.ui.toggle(bSkill);
+    b.state.installed = [bSkill];
+    b.response([
+      { type: 'start', i: 0, kind: 'remove', skills: ['a', 'b'] },
+      { type: 'done', i: 0, ok: false, results: [{ name: 'a', status: 'removed' }, { name: 'b', status: 'failed', error: 'still installed' }] },
+      { type: 'end', ok: false },
+    ]);
+    await b.ui.apply();
+    expect(b.ui.body().remove).toEqual(['owner/repo@b']);
+    await b.retry();
+    expect(b.requests.map(r => r.remove)).toEqual([['owner/repo@a', 'owner/repo@b'], ['owner/repo@b']]);
+  });
+
+  it.each(['disconnect', 'missing end'])('reconciles actual progress after %s', async mode => {
+    const b = operationBrowser();
+    const other = { ...b.skill, id: 'owner/repo@other', name: 'other' };
+    b.ui.toggle(b.skill); b.ui.toggle(other);
+    b.state.installed = [{ ...b.skill, scopes: ['project'], agentsByScope: { project: ['codex'] } }];
+    b.response([{ type: 'start', i: 0, kind: 'add', source: 'owner/repo', skills: ['skill', 'other'] }], mode === 'disconnect');
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual(['owner/repo@other']);
+    expect(b.element('progress-body').innerHTML).toContain(en.web.summaryFailed);
+    await b.retry();
+    expect(b.requests[1].install).toEqual(['owner/repo@other']);
+  });
+
+  it('preserves intent on failed refresh and blocks retry until actual state is known', async () => {
+    const b = operationBrowser();
+    b.ui.toggle(b.skill);
+    b.response([
+      { type: 'start', i: 0, kind: 'add', source: 'owner/repo', skills: ['skill'] },
+      { type: 'done', i: 0, ok: true, results: [{ name: 'skill', status: 'installed' }] },
+      { type: 'end', ok: true },
+    ]);
+    b.failRefresh(true);
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual(['owner/repo@skill']);
+    expect(b.element('progress-body').innerHTML).toContain('state unavailable');
+    await b.retry();
+    expect(b.requests).toHaveLength(1);
+    expect(b.ui.body().install).toEqual(['owner/repo@skill']);
+    b.state.installed = [{ ...b.skill, scopes: ['project'], agentsByScope: { project: ['codex'] } }];
+    b.failRefresh(false);
+    await b.retry();
+    expect(b.requests).toHaveLength(1);
+    expect(b.ui.body().install).toEqual([]);
+  });
+
+  it('keeps an install outstanding when it only exists in another scope', async () => {
+    const b = operationBrowser();
+    b.ui.toggle(b.skill);
+    b.state.installed = [{ ...b.skill, scopes: ['global'], agentsByScope: { global: ['codex'] } }];
+    b.response([{ type: 'end', ok: false }]);
+    await b.ui.apply();
+    expect(b.ui.body().install).toEqual(['owner/repo@skill']);
+  });
+});

@@ -13,9 +13,9 @@ import { fetchSkillMarkdown } from '../github.js';
 import { scanRisks } from '../risks.js';
 import { nameCollisions } from '../install/collisions.js';
 import { getLang, locale, t, themeLabel } from '../i18n/index.js';
-import { formatCommand, planInstall, planRemovals } from '../install/plan.js';
+import { formatCommand, planInstall, planRemovals, type InstallCommand } from '../install/plan.js';
 import { isSuccess, listInstalled, phaseOf, runAll, type CommandOutcome, type InstalledSkill, type Phase } from '../install/run.js';
-import { SCOPES, type Catalog, type InstallOptions, type Removal, type Skill, type Theme } from '../types.js';
+import { SCOPES, type Catalog, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
 import { PAGE_HTML } from './page.js';
 export { openBrowser } from '../browser.js';
 
@@ -60,7 +60,12 @@ const Body = z.object({
     scope: z.enum(['project', 'global']),
     method: z.enum(['symlink', 'copy']),
   }),
+  /** Install only the requested agents that do not have the skill yet in the scope. */
+  retry: z.boolean().optional(),
 });
+
+/** Agent ids from the display names the installed-skill scan reports. */
+const agentIds = (names: string[]) => names.map((n) => AGENTS.find((a) => a.displayName === n || a.id === n)?.id ?? n);
 
 /** Fields of a skill the page needs. */
 const slim = (s: Skill) => ({
@@ -102,10 +107,19 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   let queryCache: { key: string; matching: Skill[]; counts: Record<string, number> } | undefined;
   let running = false;
 
-  /** What is installed now, in both scopes, merged into the catalog like the tree does. */
+  /**
+   * What is installed now, in both scopes, merged into the catalog like the tree does,
+   * with the agent ids that have each skill in each scope.
+   */
   async function installed() {
-    const found = (await Promise.all(SCOPES.map((sc) => list(sc, cwd)))).flat();
-    return mergeInstalled(opts.catalogSkills, opts.skills, found);
+    const found = await Promise.all(SCOPES.map((sc) => list(sc, cwd)));
+    const coverage = new Map<string, Partial<Record<Scope, string[]>>>();
+    SCOPES.forEach((sc, i) => {
+      for (const [id, e] of mergeInstalled(opts.catalogSkills, [], found[i]!).installed) {
+        coverage.set(id, { ...coverage.get(id), [sc]: agentIds(e.agents) });
+      }
+    });
+    return { ...mergeInstalled(opts.catalogSkills, opts.skills, found.flat()), coverage };
   }
 
   function replacements(ids: string[], entries: Map<string, InstalledEntry>, scope: 'project' | 'global') {
@@ -135,7 +149,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
         scope: config.scope ?? 'project',
         method: config.method ?? 'symlink',
       },
-      installed: [...inst.installed].map(([id, e]) => ({ ...slim(byId.get(id)!), installedName: e.name, scopes: e.scopes })),
+      installed: [...inst.installed].map(([id, e]) => ({ ...slim(byId.get(id)!), installedName: e.name, scopes: e.scopes, agentsByScope: inst.coverage.get(id) ?? {} })),
     };
   }
 
@@ -163,7 +177,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   async function plan(raw: unknown) {
     const parsed = Body.safeParse(raw);
     if (!parsed.success) throw new HttpError(400, 'invalid request');
-    const { install: requested, remove, options, auditOverrides } = parsed.data;
+    const { install: requested, remove, options, auditOverrides, retry } = parsed.data;
     const install = [...new Set(requested)];
     if (auditOverrides.some((id) => !install.includes(id))) throw new HttpError(400, 'invalid audit overrides');
     const inst = await installed();
@@ -188,11 +202,23 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       const e = inst.installed.get(id) as InstalledEntry;
       return { name: e.name, scopes: [...e.scopes] };
     });
-    const commands = [
-      ...planRemovals(removals, opts.skillsVersion),
-      ...(allowed.length ? planInstall(allowed, full) : []),
-    ];
-    return { commands, options: full, installs: install.length, blocked, audit: { enabled, results }, collisions };
+    let installs: InstallCommand[] = [];
+    if (retry) {
+      // A partial install leaves some agents without the skill: plan only those, grouped by agent set.
+      const byAgents = new Map<string, { agents: string[]; ids: string[] }>();
+      for (const id of allowed) {
+        const have = new Set(inst.coverage.get(id)?.[options.scope] ?? []);
+        const missing = options.agents.filter((a) => !have.has(a));
+        if (!missing.length) continue;
+        const key = missing.join(' ');
+        const group = byAgents.get(key) ?? { agents: missing, ids: [] };
+        group.ids.push(id);
+        byAgents.set(key, group);
+      }
+      installs = [...byAgents.values()].flatMap((g) => planInstall(g.ids, { ...full, agents: g.agents }));
+    } else if (allowed.length) installs = planInstall(allowed, full);
+    const commands = [...planRemovals(removals, opts.skillsVersion), ...installs];
+    return { commands, options: full, installs: installs.length, blocked, audit: { enabled, results }, collisions };
   }
 
   /** Runs the plan, streaming one JSON line per event: start, phase, done, then end. */
