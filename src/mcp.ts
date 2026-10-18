@@ -2,13 +2,14 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { installedSkills, outdatedSkills, searchSkills, showSkill } from './agent-api.js';
 import { unknownAgents } from './agents.js';
+import { auditSkills, auditTarget, failsAudit } from './audit.js';
 import { readPacks } from './catalog/packs.js';
 import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
 import { isSuccess, runAll } from './install/run.js';
 import { riskReport } from './risks.js';
 import { checkSkillName } from './selection.js';
-import { SCOPES, type Catalog, type Scope } from './types.js';
+import { SCOPES, type Catalog, type Scope, type Skill } from './types.js';
 
 /**
  * A Model Context Protocol server on stdio: the same catalog, previews and
@@ -25,6 +26,10 @@ export interface McpOptions {
   run?: typeof runAll;
   /** Reads what is installed; replaced in tests. */
   installed?: typeof installedSkills;
+  /** Reads a SKILL.md for the security audit; replaced in tests. */
+  readSkill?: (s: Pick<Skill, 'id' | 'source' | 'name' | 'path'>) => Promise<string>;
+  /** Whether installs are audited (the user's `skills-atlas audit` setting). */
+  audit?: boolean;
 }
 
 const Scope = z.enum(['project', 'global']);
@@ -79,7 +84,7 @@ const TOOLS = {
   },
   install_skills: {
     description: 'Install (or update) skills through npx skills add, for the given agents and scope. Changes the machine: confirm the skills, agents and scope with the user first. dry_run returns the commands, and any skill that would replace another of the same name, without running anything. Such a replacement is refused unless replace is true, which needs the user\'s say-so.',
-    schema: z.object({ ids: Ids, agents: Agents, scope: Scope, method: z.enum(['symlink', 'copy']).optional(), dry_run: z.boolean().optional(), replace: z.boolean().optional() }),
+    schema: z.object({ ids: Ids, agents: Agents, scope: Scope, method: z.enum(['symlink', 'copy']).optional(), dry_run: z.boolean().optional(), replace: z.boolean().optional(), ignore_audit: z.boolean().optional() }),
     inputSchema: {
       type: 'object',
       properties: {
@@ -89,6 +94,7 @@ const TOOLS = {
         method: { type: 'string', enum: ['symlink', 'copy'], description: 'Default symlink.' },
         dry_run: { type: 'boolean' },
         replace: { type: 'boolean', description: 'Allow a skill to replace an installed or selected one of the same name from another source.' },
+        ignore_audit: { type: 'boolean', description: "Install skills that fail the security audit (a high warning sign in their SKILL.md). Only with the user's explicit yes, after telling them the warning signs." },
       },
       required: ['ids', 'agents', 'scope'],
     },
@@ -136,6 +142,16 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       // The skills CLI keeps one folder per name: a skill from another source would silently replace it.
       const collisions = nameCollisions(input.ids, (await (opts.installed ?? installedSkills)([input.scope])).map((s) => s.id));
       if (input.dry_run) return json({ commands: commands.map(formatCommand), collisions });
+      // The security audit: a skill with a high warning sign needs the user's yes, passed as ignore_audit.
+      if (opts.audit !== false && !input.ignore_audit) {
+        const c = await catalog();
+        const known = new Map(c.skills.map((s) => [s.id.toLowerCase(), s]));
+        const failing = (await auditSkills((input.ids as string[]).map((id) => auditTarget(id, known)), opts.readSkill)).filter(failsAudit);
+        if (failing.length) {
+          const list = failing.map((r) => `${r.id}: ${r.risks.filter((x) => x.level === 'high').map((x) => `${x.label} (SKILL.md:${x.line}: ${x.excerpt})`).join('; ')}`);
+          throw new Error(`Nothing installed: ${failing.length} skill(s) fail the security audit. ${list.join(' | ')}. Tell the user, and call again with ignore_audit: true only if they say yes.`);
+        }
+      }
       if (collisions.length && !input.replace) {
         const list = collisions.map((c) => `${c.incoming} would replace ${c.replaced}${c.installed ? ' (installed)' : ' (also requested)'}`);
         throw new Error(`Nothing installed: ${list.join('; ')}. Ask the user, then call again with replace: true, or drop one of them.`);

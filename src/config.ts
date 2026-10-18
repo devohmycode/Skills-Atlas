@@ -10,6 +10,8 @@ export interface UserConfig {
   method?: InstallMethod;
   /** Interface language set with `skills-atlas lang <code>`. */
   lang?: string;
+  /** `false` (set with `skills-atlas audit off`): install without the security audit. */
+  audit?: boolean;
 }
 
 export function configPath(): string {

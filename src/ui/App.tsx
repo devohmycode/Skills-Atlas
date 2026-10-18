@@ -5,9 +5,10 @@ import { INSTALLED_THEME, type TreeData } from '../catalog/installed.js';
 import type { SortOrder } from '../catalog/query.js';
 import { t } from '../i18n/index.js';
 import { nameCollisions, type Collision } from '../install/collisions.js';
+import { auditSkills, auditTarget, failsAudit, type AuditResult } from '../audit.js';
 import { formatCommand, planInstall, planRemovals, planUpdates, type Update } from '../install/plan.js';
 import { SCOPES, type InstallMethod, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
-import { Banner, Header, Hints, Panel, useTerminalSize, type StepId } from './Layout.js';
+import { ACCENT, Banner, Header, Hints, Panel, useTerminalSize, type Hint, type StepId } from './Layout.js';
 import { ListSelect } from './ListSelect.js';
 import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
@@ -47,6 +48,10 @@ export interface AppProps {
   treeMemory?: TreeMemory;
   /** `owner/repo@name` (lower case) of the installed skills with a newer version; checked in the background. */
   findUpdates?: () => Promise<Set<string>>;
+  /** Run the security audit on the review screen (on unless turned off). */
+  audit?: boolean;
+  /** Reads a skill's SKILL.md for the audit; replaced in tests. */
+  readSkill?: (s: Pick<Skill, 'id' | 'source' | 'name' | 'path'>) => Promise<string>;
   onDone: (result: WizardResult | null) => void;
 }
 
@@ -88,7 +93,7 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, treeMemory, findUpdates, onDone } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone } = props;
   const m = t();
   const { exit } = useApp();
   const { rows } = useTerminalSize();
@@ -276,6 +281,7 @@ export function App(props: AppProps) {
     );
   }
 
+  const targets = new Map(tree.skills.map((sk) => [sk.id.toLowerCase(), sk]));
   const options: InstallOptions = {
     agents: agents ?? defaults.agents,
     scope: scope ?? defaults.scope,
@@ -295,7 +301,13 @@ export function App(props: AppProps) {
           .map(([id]) => id),
       )}
       options={options}
-      onConfirm={() => finish({ ids, remove: removals, update: updates, options })}
+      audit={audit}
+      targets={targets}
+      readSkill={readSkill}
+      // Nothing left once the audit left skills out (and nothing to remove): nothing to run.
+      onConfirm={(kept, keptUpdates) =>
+        finish(kept.length || keptUpdates.length || removals.length ? { ids: kept, remove: removals, update: keptUpdates, options } : null)
+      }
       onBack={back}
     />,
   );
@@ -307,20 +319,64 @@ interface ConfirmProps {
   update: Update[];
   collisions: Collision[];
   options: InstallOptions;
-  onConfirm: () => void;
+  /** Run the security audit on what will be installed or updated. */
+  audit: boolean;
+  /** Catalog skills by lower-case id, for their SKILL.md path. */
+  targets: Map<string, Skill>;
+  readSkill?: (s: Pick<Skill, 'id' | 'source' | 'name' | 'path'>) => Promise<string>;
+  /** What to install and update, without the skills left out after the audit. */
+  onConfirm: (ids: string[], update: Update[]) => void;
   onBack: () => void;
 }
 
-function Confirm({ ids, remove, update, collisions, options, onConfirm, onBack }: ConfirmProps) {
+function Confirm({ ids, remove, update, collisions, options, audit, targets, readSkill, onConfirm, onBack }: ConfirmProps) {
   const m = t();
+  const audited = [...ids, ...update.map((u) => u.id)];
+  const [results, setResults] = useState<AuditResult[] | undefined>(audit && audited.length ? undefined : []);
+  // Skills that fail the audit are left out, unless the user ticks them here.
+  const [keep, setKeep] = useState<Set<string>>(new Set());
+  const [cursor, setCursor] = useState(0);
+  useEffect(() => {
+    if (results) return;
+    let live = true;
+    void auditSkills(audited.map((id) => auditTarget(id, targets)), readSkill).then((r) => live && setResults(r));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const failing = (results ?? []).filter(failsAudit);
+  const left = new Set(failing.map((r) => r.id).filter((id) => !keep.has(id)));
+  const keptIds = ids.filter((id) => !left.has(id));
+  const keptUpdates = update.filter((u) => !left.has(u.id));
+  const ready = results !== undefined;
+  const confirm = () => ready && onConfirm(keptIds, keptUpdates);
+  const toggleKeep = (id: string) => {
+    const next = new Set(keep);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setKeep(next);
+  };
   useInput((input, key) => {
     if (isMouseInput(input)) return;
-    if (key.return || input === 'y') onConfirm();
-    else if (key.escape || input === 'n') onBack();
+    if (key.escape || input === 'n') onBack();
+    else if (!ready) return;
+    else if (key.upArrow) setCursor(Math.max(0, cursor - 1));
+    else if (key.downArrow) setCursor(Math.min(failing.length - 1, cursor + 1));
+    else if (input === ' ' && failing[cursor]) toggleKeep(failing[cursor]!.id);
+    else if (key.return || input === 'y') confirm();
   });
   const removeCommands = planRemovals(remove, options.skillsVersion);
-  const addCommands = [...(ids.length ? planInstall(ids, options) : []), ...planUpdates(update, options)];
-  const installCommands = ids.length ? planInstall(ids, options) : [];
+  const addCommands = [...(keptIds.length ? planInstall(keptIds, options) : []), ...planUpdates(keptUpdates, options)];
+  const installCommands = keptIds.length ? planInstall(keptIds, options) : [];
+  const warned = (results ?? []).filter((r) => !failsAudit(r) && (r.error || r.risks.some((x) => x.level === 'medium')));
+  const passed = (results ?? []).filter((r) => !r.error && !r.risks.some((x) => x.level !== 'info')).length;
+  const riskLine = (r: AuditResult, level: 'high' | 'medium') =>
+    r.risks.filter((x) => x.level === level).slice(0, 2).map((x) => (
+      <Text key={x.rule} color={level === 'high' ? PALETTE.danger : PALETTE.gold} wrap="truncate-end">
+        {`      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  `}
+        <Text dimColor>{`SKILL.md:${x.line}`}</Text>
+      </Text>
+    ));
   const row = (label: string, value: string) => (
     <Text>
       <Text dimColor>{padEnd(label, 10)}</Text>
@@ -335,8 +391,37 @@ function Confirm({ ids, remove, update, collisions, options, onConfirm, onBack }
           <Text wrap="wrap">{remove.map((r) => `${r.name} (${scopesLabel(r.scopes)})`).join('  ·  ')}</Text>
         </Panel>
       )}
-      {ids.length > 0 && (
-        <Panel color={PALETTE.success} title={`+ ${m.confirm.install(ids.length, installCommands.length)}`}>
+      {!audit && audited.length > 0 && <Text dimColor>{`🛡 ${m.confirm.auditOff}`}</Text>}
+      {audit && !ready && <Text color={PALETTE.gold}>{`🛡 ${m.confirm.auditing(audited.length)}`}</Text>}
+      {ready && failing.length > 0 && (
+        <Panel color={PALETTE.danger} title={`🛡 ${m.confirm.auditFailed(failing.length)}`}>
+          {failing.map((r, i) => (
+            <Box key={r.id} flexDirection="column">
+              <Text wrap="truncate-end">
+                <Text color={ACCENT}>{i === cursor ? '❯ ' : '  '}</Text>
+                <Text color={keep.has(r.id) ? PALETTE.danger : PALETTE.muted}>{keep.has(r.id) ? '◉ ' : '○ '}</Text>
+                <Text bold={i === cursor}>{r.id}</Text>
+                <Text dimColor>{`  ${keep.has(r.id) ? m.confirm.auditKept : m.confirm.auditLeftOut}`}</Text>
+              </Text>
+              {riskLine(r, 'high')}
+            </Box>
+          ))}
+          <Text dimColor>{m.confirm.auditHint}</Text>
+        </Panel>
+      )}
+      {ready && warned.length > 0 && (
+        <Box flexDirection="column">
+          {warned.map((r) => (
+            <Box key={r.id} flexDirection="column">
+              <Text color={PALETTE.gold} wrap="truncate-end">{r.error ? `? ${r.id}  ${m.confirm.auditUnread}` : `⚠ ${r.id}`}</Text>
+              {riskLine(r, 'medium')}
+            </Box>
+          ))}
+        </Box>
+      )}
+      {ready && audit && passed > 0 && <Text color={PALETTE.success}>{`🛡 ✓ ${m.confirm.auditPassed(passed)}`}</Text>}
+      {keptIds.length > 0 && (
+        <Panel color={PALETTE.success} title={`+ ${m.confirm.install(keptIds.length, installCommands.length)}`}>
           {installCommands.map((c) => (
             <Text key={c.source} wrap="truncate-end">
               <Text dimColor>{c.source}</Text>
@@ -354,15 +439,15 @@ function Confirm({ ids, remove, update, collisions, options, onConfirm, onBack }
           ))}
         </Panel>
       )}
-      {update.length > 0 && (
-        <Panel color={PALETTE.gold} title={`↑ ${m.confirm.update(update.length)}`}>
-          <Text wrap="wrap">{update.map((u) => u.id).join('  ·  ')}</Text>
+      {keptUpdates.length > 0 && (
+        <Panel color={PALETTE.gold} title={`↑ ${m.confirm.update(keptUpdates.length)}`}>
+          <Text wrap="wrap">{keptUpdates.map((u) => u.id).join('  ·  ')}</Text>
         </Panel>
       )}
       <Box flexDirection="column">
-        {ids.length > 0 && row(m.confirm.scope, options.scope === 'global' ? m.scope.global : m.scope.project)}
-        {ids.length > 0 && row(m.confirm.agents, options.agents.join(', '))}
-        {ids.length > 0 && row(m.confirm.method, options.method === 'copy' ? m.method.copy : m.method.symlink)}
+        {keptIds.length > 0 && row(m.confirm.scope, options.scope === 'global' ? m.scope.global : m.scope.project)}
+        {keptIds.length > 0 && row(m.confirm.agents, options.agents.join(', '))}
+        {keptIds.length > 0 && row(m.confirm.method, options.method === 'copy' ? m.method.copy : m.method.symlink)}
       </Box>
       <Box flexDirection="column">
         <Text dimColor>{m.confirm.commands}</Text>
@@ -374,7 +459,8 @@ function Confirm({ ids, remove, update, collisions, options, onConfirm, onBack }
       </Box>
       <Hints
         items={[
-          [m.keyNames.enter, m.keys.apply, onConfirm],
+          ...(failing.length ? [['↑↓', m.keys.move] as Hint, [m.keyNames.space, m.confirm.auditToggle] as Hint] : []),
+          [m.keyNames.enter, m.keys.apply, ready ? confirm : undefined],
           [m.keyNames.esc, m.keys.back, onBack],
         ]}
       />

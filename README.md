@@ -97,6 +97,14 @@ The `SKILL.md` preview (`p`), `skills-atlas show` and the MCP server's `show_ski
 
 It is a pattern check on the text, tuned on the 150 most installed skills: it points at lines worth reading, it does not prove a skill safe. `show` prints the warning signs on stderr, so that stdout stays the `SKILL.md` alone; `show --json` adds them as `risks`.
 
+**The security audit** runs this check before every install and update. A skill **fails** it with at least one high warning sign; medium ones are shown and do not block.
+
+- **In the tree and with `install`'s questions**, the review screen lists the skills that fail, **unticked**: they are left out. Read one (`p` in the list, or `skills-atlas show <id>`), then tick it with space to install it anyway.
+- **Without a person at the keyboard** (`install -y`, `import`, `sync`, `update`), a failing skill is left out with its warning signs printed; `--no-audit` installs it anyway.
+- **Through the MCP server**, `install_skills` refuses a failing skill and tells the agent why; it passes only with `ignore_audit: true`, which the agent is told to send only after the user's yes.
+
+`skills-atlas audit off` turns the audit off for good, `skills-atlas audit on` turns it back on, and `--no-audit` skips it for one command. A `SKILL.md` that cannot be read is reported as not audited, not as failing.
+
 ### Packs
 
 A pack is a set of skills meant to be installed together: **📦 Frontend dev**, **📦 Security review**, **📦 Code quality & testing** and **📦 Writing & docs**. Each one is a theme in the tree and on the web page, after Recommended and Trending: tick the theme to take the whole pack, or open it to pick. `skills-atlas packs` lists them and `install --pack <id>` installs one.
@@ -243,6 +251,7 @@ The mouse works too: the wheel moves through the list, a click ticks a skill, op
 | `--copy` / `--symlink` | one copy per agent, or a symlink to `.agents/skills` |
 | `-y, --yes` | no questions; `--agent` becomes required |
 | `--dry-run` | print the `npx skills` commands without running them |
+| `--no-audit` | install without the [security audit](#risk-check) (`skills-atlas audit off` for good) |
 | `--no-mouse` | keyboard only: normal screen, native text selection |
 | `--skills-version <v>` | skills CLI version (default: 1.7.0, pinned) |
 | `--catalog <path\|url>` | alternative catalog |

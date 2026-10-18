@@ -44,6 +44,7 @@ npx -y skills-atlas@latest install <id> -a claude-code -g -y --dry-run          
 - `-a` is required with `-y`; use the detected agents the user works with, or ask.
 - `-g` (user profile) or `-p` (current project): ask when the user did not say.
 - `--copy` installs an independent copy per agent instead of a symlink to `.agents/skills`.
+- The security audit runs first. A line `✗ <id> left out: it fails the security audit` means the skill has a high warning sign and was not installed. Tell the user the warning signs printed above it; reinstall it with `--no-audit` only if they say yes.
 - One folder per name: a skill from another repository replaces an installed one of the same name. Run the install with `--dry-run` first: a line `⚠ <id> replaces <other id>` on stderr means it would; tell the user and install only after a yes (with `-y`, the real run warns but goes ahead).
 
 Updates (global skills only):

@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './agent-api.js';
 import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
+import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
 import { browseLoop } from './browse.js';
 import { missingSkills, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
@@ -74,6 +75,8 @@ interface InstallFlags {
   symlink?: boolean;
   yes?: boolean;
   dryRun?: boolean;
+  /** `--no-audit` sets it to false. */
+  audit?: boolean;
   verbose?: boolean;
   /** `--no-mouse` sets it to false. */
   mouse: boolean;
@@ -290,6 +293,7 @@ const installOptions = (cmd: Command) =>
     .option('--symlink', c.symlink)
     .option('-y, --yes', c.yes)
     .option('--dry-run', c.dryRun)
+    .option('--no-audit', c.noAudit)
     .option('--verbose', c.verbose)
     .option('--no-mouse', c.noMouse)
     .option('--skills-version <version>', c.skillsVersion, SKILLS_VERSION);
@@ -327,6 +331,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           notice={notice || versionNotice}
           treeMemory={treeMemory}
           findUpdates={opts.offline ? undefined : () => findUpdates()}
+          audit={auditEnabled(readConfig(), opts.audit)}
           onDone={(r) => (result = r)}
         />,
       );
@@ -435,6 +440,29 @@ program
     console.log(t().cli.langSet(lang));
   });
 
+/**
+ * The security audit without a person at the keyboard: prints each skill's warning signs and
+ * leaves out those that fail it. With the audit off, every id goes through.
+ */
+async function auditGate(ids: string[], flags: InstallFlags): Promise<string[]> {
+  if (!ids.length || !auditEnabled(readConfig(), flags.audit)) return ids;
+  // Offline: the catalog only gives each skill's path, the SKILL.md itself comes from GitHub.
+  const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
+  const known = new Map(catalog?.skills.map((s) => [s.id.toLowerCase(), s]));
+  const left = new Set<string>();
+  for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)))) {
+    for (const x of r.risks.filter((x) => x.level !== 'info')) {
+      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  ${r.id}  SKILL.md:${x.line}`));
+    }
+    if (r.error) console.error(paint('yellow', `  ? ${r.id}: ${m.confirm.auditUnread}`));
+    if (failsAudit(r)) {
+      console.error(paint('red', `✗ ${c.auditSkipped(r.id)}`));
+      left.add(r.id);
+    }
+  }
+  return ids.filter((id) => !left.has(id));
+}
+
 /** Installs skills given by id, asking only for the options the flags left open (the tree is skipped). */
 async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
   for (const id of ids) {
@@ -448,9 +476,10 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
   if (!preset.agents && (opts.yes || !process.stdin.isTTY)) fail(m.errors.agentRequired);
   const { defaults, detected } = resolveDefaults();
   let options: InstallOptions | undefined;
-  if (preset.agents && (opts.yes || (preset.scope && preset.method))) {
+  const wizard = !(preset.agents && (opts.yes || (preset.scope && preset.method)));
+  if (!wizard) {
     options = {
-      agents: preset.agents,
+      agents: preset.agents!, // !wizard implies agents were given
       scope: preset.scope ?? defaults.scope,
       method: preset.method ?? defaults.method,
       skillsVersion: opts.skillsVersion,
@@ -468,6 +497,7 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
         detectedAgents={detected}
         skillsVersion={opts.skillsVersion}
         initialIds={ids}
+        audit={auditEnabled(readConfig(), opts.audit)}
         onDone={(r) => (result = r)}
       />,
     );
@@ -477,7 +507,11 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
     const chosen = result as WizardResult | null;
     if (!chosen) return;
     options = chosen.options;
+    // What the review screen kept: the audit may have left skills out.
+    ids = chosen.ids;
   }
+  if (!wizard) ids = await auditGate(ids, opts);
+  if (!ids.length) return console.log(paint('dim', m.run.noChange));
   // shortcut: warns but goes on, as -y asked for no question; offer to stop here if users get caught by it.
   const inScope = (await listInstalled(options.scope)).map((s) => `${s.source ?? 'local'}@${s.name}`);
   for (const c of nameCollisions(ids, inScope)) console.error(paint('yellow', `⚠ ${m.confirm.replaces(c.incoming, c.replaced, c.installed)}`));
@@ -574,6 +608,17 @@ program
   });
 
 program
+  .command('audit')
+  .argument('[state]', 'on or off')
+  .description(c.auditCmd)
+  .action((state?: string) => {
+    if (state !== undefined && state !== 'on' && state !== 'off') fail(c.auditBadValue);
+    const config = readConfig();
+    if (state) writeConfig({ ...config, audit: state === 'on' });
+    console.log(c.auditState(auditEnabled(state ? { audit: state === 'on' } : config)));
+  });
+
+program
   .command('installed')
   .description(c.installedCmd)
   .option('-g, --global', c.global)
@@ -602,6 +647,7 @@ program
   .action((opts: { skillsVersion: string; offline?: boolean }) =>
     serveMcp({
       version: pkg.version,
+      audit: auditEnabled(readConfig()),
       skillsVersion: opts.skillsVersion,
       // Silent: stdout carries the protocol, and nobody reads stderr.
       loadCatalog: async () => curated(await loadLatestCatalog({ offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE) })),
@@ -640,6 +686,10 @@ installOptions(program.command('update'))
     const chosen = ids.length ? outdated.filter((s) => wanted.includes(s.id.toLowerCase())) : outdated;
     if (!chosen.length) return console.log(paint('dim', c.upToDate));
     for (const s of chosen) console.log(`  ${paint('pink', '↑')} ${s.id}`);
+    // A new version is new content: it is audited like an install.
+    const passed = new Set(await auditGate(chosen.map((s) => s.id), opts));
+    chosen.splice(0, chosen.length, ...chosen.filter((s) => passed.has(s.id)));
+    if (!chosen.length) return console.log(paint('dim', m.run.noChange));
     const { defaults } = resolveDefaults();
     // Each skill keeps its own agents; these options only fill in what a skill's scan did not name.
     const options: InstallOptions = { agents: defaults.agents, scope: 'global', method: opts.copy ? 'copy' : opts.symlink ? 'symlink' : defaults.method, skillsVersion: opts.skillsVersion };
