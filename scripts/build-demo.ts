@@ -10,8 +10,7 @@ import { join } from 'node:path';
 import { AGENTS } from '../src/agents.js';
 import { loadCatalog } from '../src/catalog/load.js';
 import { haystack, querySkills, sortSkills } from '../src/catalog/query.js';
-import { withRecommendations } from '../src/catalog/recommended.js';
-import { withTrending } from '../src/catalog/trending.js';
+import { curated } from '../src/catalog/curated.js';
 import { getLang, setLang, t, themeLabel } from '../src/i18n/index.js';
 import { PAGE_HTML } from '../src/web/page.js';
 
@@ -20,10 +19,10 @@ const TOP = 3000;
 const out = join('docs', 'demo', 'index.html');
 
 setLang('en');
-const catalog = withTrending(withRecommendations(await loadCatalog()));
+const catalog = curated(await loadCatalog());
 const all = querySkills(catalog, {});
 const top = sortSkills(all, 'installs').slice(0, TOP);
-const skills = [...new Map([...all.filter((s) => s.recommendation || s.themes.includes('trending')), ...top].map((s) => [s.id, s])).values()].map((s) => ({
+const skills = [...new Map([...all.filter((s) => s.recommendation || s.themes.some((th) => th === 'trending' || th.startsWith('pack:'))), ...top].map((s) => [s.id, s])).values()].map((s) => ({
   id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth,
   rank: s.rank, official: s.official, recommendation: s.recommendation, themes: s.themes, text: haystack(s),
 }));

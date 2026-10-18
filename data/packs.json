@@ -1,0 +1,55 @@
+[
+  {
+    "id": "frontend",
+    "name": "Frontend dev",
+    "description": "Interfaces that look designed, React and Next.js done right, and a real browser to check them.",
+    "skills": [
+      "anthropics/skills@frontend-design",
+      "vercel-labs/agent-skills@vercel-react-best-practices",
+      "vercel-labs/agent-skills@web-design-guidelines",
+      "vercel-labs/agent-skills@vercel-react-view-transitions",
+      "addyosmani/agent-skills@frontend-ui-engineering",
+      "vercel-labs/agent-browser@agent-browser",
+      "anthropics/skills@webapp-testing"
+    ]
+  },
+  {
+    "id": "security",
+    "name": "Security review",
+    "description": "Threat models, hardening, static analysis and audits before code ships.",
+    "skills": [
+      "addyosmani/agent-skills@security-and-hardening",
+      "cloudflare/security-audit-skill@security-audit",
+      "openai/skills@security-best-practices",
+      "openai/skills@security-threat-model",
+      "trailofbits/skills@audit-context-building",
+      "trailofbits/skills@codeql"
+    ]
+  },
+  {
+    "id": "quality",
+    "name": "Code quality & testing",
+    "description": "Test first, debug from the root cause, review every change, and prove it works before saying so.",
+    "skills": [
+      "addyosmani/agent-skills@test-driven-development",
+      "addyosmani/agent-skills@code-review-and-quality",
+      "addyosmani/agent-skills@debugging-and-error-recovery",
+      "obra/superpowers@verification-before-completion",
+      "microsoft/playwright-cli@playwright-cli",
+      "anthropics/skills@webapp-testing"
+    ]
+  },
+  {
+    "id": "writing",
+    "name": "Writing & docs",
+    "description": "Co-written documents, decision records, clear prose and plans an engineer can follow.",
+    "skills": [
+      "anthropics/skills@doc-coauthoring",
+      "vercel-labs/agent-skills@writing-guidelines",
+      "addyosmani/agent-skills@documentation-and-adrs",
+      "anthropics/skills@internal-comms",
+      "obra/superpowers@writing-plans",
+      "anthropics/skills@docx"
+    ]
+  }
+]

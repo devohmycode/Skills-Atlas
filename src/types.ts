@@ -45,6 +45,8 @@ export interface Skill {
 export interface Theme {
   id: string;
   label: string;
+  /** What a curated theme (a pack) is for, shown with it. */
+  description?: string;
 }
 
 export interface Catalog {

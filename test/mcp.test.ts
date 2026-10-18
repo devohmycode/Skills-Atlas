@@ -31,7 +31,7 @@ describe('MCP server', () => {
     expect(init.result).toMatchObject({ protocolVersion: '2025-06-18', serverInfo: { name: 'skills-atlas', version: '9.9.9' }, capabilities: { tools: {} } });
     const list = (await handle({ jsonrpc: '2.0', id: 2, method: 'tools/list' })) as any;
     expect(list.result.tools.map((t: { name: string }) => t.name)).toEqual(
-      ['search_skills', 'list_themes', 'show_skill', 'list_installed', 'outdated_skills', 'install_skills', 'remove_skills'],
+      ['search_skills', 'list_themes', 'show_skill', 'list_packs', 'list_installed', 'outdated_skills', 'install_skills', 'remove_skills'],
     );
     // Notifications get no answer; unknown methods a JSON-RPC error.
     expect(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeUndefined();

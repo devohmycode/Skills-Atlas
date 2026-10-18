@@ -5,8 +5,8 @@ import { AGENTS, detectAgents, unknownAgents } from './agents.js';
 import { mergeInstalled } from './catalog/installed.js';
 import { loadCatalog } from './catalog/load.js';
 import { loadLatestCatalog } from './catalog/remote.js';
-import { withRecommendations } from './catalog/recommended.js';
-import { withTrending } from './catalog/trending.js';
+import { curated } from './catalog/curated.js';
+import { readPacks } from './catalog/packs.js';
 import pkg from '../package.json' with { type: 'json' };
 import { groupByTheme, popularityLabel, querySkills, resolveTheme, sortSkills, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
@@ -21,7 +21,10 @@ import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './age
 import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
 import { browseLoop } from './browse.js';
-import { parseSelection, toSelection } from './selection.js';
+import { missingSkills, parseSelection, parseSelectionFile, toSelection } from './selection.js';
+
+/** The skills a project expects, at its root, versioned with its code. */
+const PROJECT_FILE = 'skills-atlas.json';
 import { newerVersion } from './version.js';
 import { App, type WizardResult } from './ui/App.js';
 import type { TreeMemory } from './ui/TreeSelect.js';
@@ -109,7 +112,7 @@ function resolveLang(argv: string[]): Lang {
 
 async function openCatalog(opts: CommonOptions): Promise<Catalog> {
   try {
-    if (opts.catalog) return withTrending(withRecommendations(await loadCatalog(opts.catalog)));
+    if (opts.catalog) return curated(await loadCatalog(opts.catalog));
     // Latest snapshot from GitHub (refreshed daily), else the one bundled in the package.
     const catalog = await loadLatestCatalog({
       offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE),
@@ -122,7 +125,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
     if (opts.refresh && !opts.quiet) {
       console.error(paint('dim', t().cli.catalogOf(catalog.generatedAt.slice(0, 10), formatNumber(catalog.skills.length))));
     }
-    return withTrending(withRecommendations(catalog));
+    return curated(catalog);
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   }
@@ -482,9 +485,54 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
 }
 
 installOptions(program.command('install'))
-  .argument('<ids...>', c.ids)
+  .argument('[ids...]', c.ids)
+  .option('--pack <ids...>', c.packOption)
   .description(c.install)
-  .action((ids: string[], opts: InstallFlags) => installIds(ids, opts));
+  .action((ids: string[], opts: InstallFlags & { pack?: string[] }) => {
+    if (!opts.pack) return ids.length ? installIds(ids, opts) : fail(c.nothingToInstall);
+    const packs = readPacks();
+    const unknown = opts.pack.filter((id) => !packs.some((p) => p.id === id));
+    if (unknown.length) fail(c.unknownPacks(unknown.join(', ')));
+    const fromPacks = packs.filter((p) => opts.pack!.includes(p.id)).flatMap((p) => p.skills);
+    return installIds([...new Set([...ids, ...fromPacks])], opts);
+  });
+
+installOptions(program.command('sync'))
+  .description(c.syncCmd)
+  .option('--check', c.syncCheck)
+  .action(async (opts: InstallFlags & { check?: boolean }) => {
+    let file: { ids: string[]; agents?: string[] } = { ids: [] };
+    try {
+      file = parseSelectionFile(readFileSync(PROJECT_FILE, 'utf8'));
+    } catch (err) {
+      fail(c.syncFailed(PROJECT_FILE, (err as NodeJS.ErrnoException).code === 'ENOENT' ? c.syncNoFile : (err as Error).message));
+    }
+    // The project's skills, in the project: they travel with the code.
+    const installed = (await listInstalled('project')).map((s) => `${s.source ?? 'local'}@${s.name}`);
+    const missing = missingSkills(file.ids, installed);
+    if (!missing.length) return console.log(paint('dim', c.syncUpToDate(file.ids.length)));
+    if (opts.check) {
+      for (const id of missing) console.log(`  ${id}`);
+      console.error(paint('yellow', c.syncMissing(missing.length)));
+      process.exitCode = 1;
+      return;
+    }
+    await installIds(missing, { ...opts, project: true, global: false, agent: opts.agent ?? file.agents });
+  });
+
+program
+  .command('packs')
+  .description(c.packsCmd)
+  .option('--json', c.json)
+  .action((opts: { json?: boolean }) => {
+    const packs = readPacks();
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(packs, null, 2)}\n`);
+    for (const p of packs) {
+      console.log(`\n${paint('bold', `📦 ${p.name}`)} ${paint('dim', `${p.id} · ${formatNumber(p.skills.length)}`)}\n  ${p.description}`);
+      for (const id of p.skills) console.log(`  ${paint('dim', id)}`);
+    }
+    console.log(paint('dim', `\n${c.packsHint}`));
+  });
 
 program
   .command('completion')
@@ -556,7 +604,7 @@ program
       version: pkg.version,
       skillsVersion: opts.skillsVersion,
       // Silent: stdout carries the protocol, and nobody reads stderr.
-      loadCatalog: async () => withTrending(withRecommendations(await loadLatestCatalog({ offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE) }))),
+      loadCatalog: async () => curated(await loadLatestCatalog({ offline: opts.offline || Boolean(process.env.SKILLS_ATLAS_OFFLINE) })),
     }),
   );
 

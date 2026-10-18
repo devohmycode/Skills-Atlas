@@ -56,6 +56,17 @@ To update one, install it again with its own agents: `install <id> -g -a <its ag
 
 There is no non-interactive uninstall in skills-atlas: use `npx -y skills remove -s <name> -y` (add `-g` for a global skill).
 
+## Packs and a project's skills
+
+```bash
+npx -y skills-atlas@latest packs --json                                  # curated packs: [{ id, name, description, skills }]
+npx -y skills-atlas@latest install --pack <id> -a <agent> -g -y          # a whole pack
+npx -y skills-atlas@latest sync --check                                  # what this project's skills-atlas.json lists and is missing (exit 1 if any)
+npx -y skills-atlas@latest sync -y                                       # install those, in the project
+```
+
+When a repository has a `skills-atlas.json`, its team expects those skills: offer `sync` rather than installing them one by one.
+
 ## Copy skills to another machine or project
 
 ```bash

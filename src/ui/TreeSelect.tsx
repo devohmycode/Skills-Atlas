@@ -659,7 +659,7 @@ export function TreeSelect({
               <Text dimColor>{`  ${m.tree.skills(formatNumber(row.skills.length))}`}</Text>
             </Text>
             <Box height={2}>
-              <Text dimColor>{row.theme.id === 'recommended' ? m.tree.recommendedHint : m.tree.groupHint}</Text>
+              <Text dimColor>{row.theme.description ?? (row.theme.id === 'recommended' ? m.tree.recommendedHint : m.tree.groupHint)}</Text>
             </Box>
           </>
         ) : (

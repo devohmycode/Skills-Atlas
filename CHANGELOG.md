@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **📦 Packs.** Curated sets of skills to install together: Frontend dev, Security review, Code quality & testing, Writing & docs. Each is a theme in the tree and on the web page (tick it to take the pack), `skills-atlas packs` lists them and `install --pack <id>` installs one. A personal `packs.json` replaces them.
+- **A project's skills.** A `skills-atlas.json` at a repository's root lists the skills it expects, in the `export` format with optional `agents`. `skills-atlas sync` installs the missing ones in the project; `sync --check` lists them and exits with 1, for CI.
 - **Per agent.** `skills-atlas installed` lists the installed skills under each agent that sees them; `-a codex claude-code` shows only those, side by side, and `--json` is available. In the tree, an installed skill's details name its agents.
 - **Shell completion** for bash, zsh, fish and PowerShell: `skills-atlas completion <shell>` prints the script. It completes commands, options, skill ids, agents, themes and languages, from the cached catalog.
 - **Same name, one folder.** The skills CLI installs by name, so a skill from another repository silently replaced an installed one of the same name, or another one selected in the same run. The review screen now lists such replacements, `install` and `import` warn before running, and the MCP server refuses them unless `replace: true`.

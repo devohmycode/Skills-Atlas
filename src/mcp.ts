@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { installedSkills, outdatedSkills, searchSkills, showSkill } from './agent-api.js';
 import { unknownAgents } from './agents.js';
+import { readPacks } from './catalog/packs.js';
 import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
 import { isSuccess, runAll } from './install/run.js';
@@ -57,6 +58,12 @@ const TOOLS = {
     schema: z.object({ id: z.string() }),
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'owner/repo@name' } }, required: ['id'] },
     annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  list_packs: {
+    description: 'List the curated packs (frontend, security, quality, writing…): skills meant to be installed together. Install one with install_skills and its skill ids.',
+    schema: z.object({}),
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
   },
   list_installed: {
     description: 'List the installed skills, with their scope and the agent ids they are installed for.',
@@ -115,6 +122,8 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       const { markdown, risks } = await showSkill(await catalog(), input.id);
       return `${riskReport(risks)}\n\n---\n\n${markdown}`;
     }
+    case 'list_packs':
+      return json(readPacks());
     case 'list_installed':
       return json(await (opts.installed ?? installedSkills)(input.scope ? [input.scope as Scope] : SCOPES));
     case 'outdated_skills':

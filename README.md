@@ -58,6 +58,9 @@ skills-atlas show obra/superpowers@brainstorming      # a skill's SKILL.md, read
 skills-atlas outdated                         # global skills with a newer version on GitHub (--json available)
 skills-atlas mcp                              # MCP server on stdio, for Claude and other agents
 skills-atlas installed -a claude-code codex   # installed skills by agent: what each one sees (--json available)
+skills-atlas packs                            # curated packs: frontend, security, quality, writing
+skills-atlas install --pack security -a claude-code -g   # install a whole pack
+skills-atlas sync                             # install what this project's skills-atlas.json lists and is missing
 skills-atlas completion bash                  # shell completion script (bash, zsh, fish, powershell)
 ```
 
@@ -87,6 +90,22 @@ The `SKILL.md` preview (`p`), `skills-atlas show` and the MCP server's `show_ski
 | info | installs or runs packages or bundled scripts |
 
 It is a pattern check on the text, tuned on the 150 most installed skills: it points at lines worth reading, it does not prove a skill safe. `show` prints the warning signs on stderr, so that stdout stays the `SKILL.md` alone; `show --json` adds them as `risks`.
+
+### Packs
+
+A pack is a set of skills meant to be installed together: **📦 Frontend dev**, **📦 Security review**, **📦 Code quality & testing** and **📦 Writing & docs**. Each one is a theme in the tree and on the web page, after Recommended and Trending: tick the theme to take the whole pack, or open it to pick. `skills-atlas packs` lists them and `install --pack <id>` installs one.
+
+The packs ship in [`data/packs.json`](data/packs.json). As for Recommended, a personal `~/.config/skills-atlas/packs.json` replaces them, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; `[]` hides them.
+
+### A project's skills: skills-atlas.json
+
+A `skills-atlas.json` at the root of a repository lists the skills the project expects, versioned with its code:
+
+```json
+{ "skillsAtlas": 1, "agents": ["claude-code"], "skills": ["anthropics/skills@pdf", "obra/superpowers@writing-plans"] }
+```
+
+`skills-atlas export -p > skills-atlas.json` writes it from what the project has (add `agents` by hand if you want them fixed). Then anyone who clones the repository runs `skills-atlas sync`: it installs, in the project, the listed skills that are missing, for the file's agents unless `-a` says otherwise. `skills-atlas sync --check` installs nothing; it lists what is missing and exits with 1 if anything is, for a CI step.
 
 ### Trending
 

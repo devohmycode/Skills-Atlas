@@ -23,10 +23,13 @@ export function toSelection(installed: InstalledSkill[]): { selection: Selection
   return { selection: { skillsAtlas: 1, skills: [...ids.values()].sort() }, skipped: [...skipped].sort() };
 }
 
-const File = z.object({ skillsAtlas: z.literal(1), skills: z.array(z.string()) });
+const File = z.object({ skillsAtlas: z.literal(1), skills: z.array(z.string()), agents: z.array(z.string()).optional() });
 
-/** The ids of a selection file, checked: a file from elsewhere is untrusted input to `npx skills add`. */
-export function parseSelection(text: string): string[] {
+/**
+ * A selection file, checked: a file from elsewhere is untrusted input to `npx skills add`.
+ * `agents` is optional: a project's skills-atlas.json may name the agents its team uses.
+ */
+export function parseSelectionFile(text: string): { ids: string[]; agents?: string[] } {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -36,7 +39,16 @@ export function parseSelection(text: string): string[] {
   const file = File.safeParse(raw);
   if (!file.success) throw new Error('not a skills-atlas selection ({ "skillsAtlas": 1, "skills": [...] })');
   for (const id of file.data.skills) checkSkillName(parseSkillId(id).name, id);
-  return [...new Set(file.data.skills)];
+  return { ids: [...new Set(file.data.skills)], agents: file.data.agents };
+}
+
+/** The ids of a selection file. */
+export const parseSelection = (text: string): string[] => parseSelectionFile(text).ids;
+
+/** The ids of `wanted` not installed yet (ids compared without case). */
+export function missingSkills(wanted: string[], installedIds: string[]): string[] {
+  const have = new Set(installedIds.map((id) => id.toLowerCase()));
+  return wanted.filter((id) => !have.has(id.toLowerCase()));
 }
 
 /**

@@ -30,3 +30,12 @@ describe('selections', () => {
     expect(() => parseSelection(file(['a/b@x\u001b[2J']))).toThrow(/invalid skill name/);
   });
 });
+
+describe('project file', () => {
+  it('reads the agents a project names, and finds what is not installed yet', async () => {
+    const { missingSkills, parseSelectionFile } = await import('../src/selection.js');
+    expect(parseSelectionFile('{"skillsAtlas":1,"agents":["claude-code"],"skills":["a/b@x","c/d@y"]}')).toEqual({ ids: ['a/b@x', 'c/d@y'], agents: ['claude-code'] });
+    expect(parseSelectionFile('{"skillsAtlas":1,"skills":["a/b@x"]}').agents).toBeUndefined();
+    expect(missingSkills(['A/B@x', 'c/d@y'], ['a/b@X', 'local@z'])).toEqual(['c/d@y']);
+  });
+});

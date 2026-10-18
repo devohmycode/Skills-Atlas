@@ -619,7 +619,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     html += '<div class="sep"></div>';
     S.themes.forEach(function (th) {
       if (th.id === 'installed' || th.id === 'recommended') return;
-      html += '<button data-theme="' + esc(th.id) + '"' + cur(th.id) + ' style="' + hueStyle(th.id) + '"><span>' +
+      html += '<button data-theme="' + esc(th.id) + '"' + cur(th.id) + (th.description ? ' title="' + esc(th.description) + '"' : '') + ' style="' + hueStyle(th.id) + '"><span>' +
         esc(th.label) + '</span><span class="n">' + fmt.format(view.counts[th.id] || 0) + '</span></button>';
     });
     $('themes').innerHTML = html;
