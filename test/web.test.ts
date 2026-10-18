@@ -9,6 +9,8 @@ import type { Skill } from '../src/types.js';
 import { startServer, type AtlasServer } from '../src/web/server.js';
 import { withRecommendations } from '../src/catalog/recommended.js';
 import { querySkills } from '../src/catalog/query.js';
+import { searchSkills } from '../src/agent-api.js';
+import { assemble } from '../src/catalog/build.js';
 
 const skill = (id: string, themes: string[], extra: Partial<Skill> = {}): Skill => {
   const [source, name] = id.split('@') as [string, string];
@@ -21,6 +23,28 @@ const skills = [
 ];
 const installedNow: InstalledSkill[] = [{ name: 'pentest', source: 'c/d', scope: 'global', agents: ['Claude Code'] }];
 const ran: InstallCommand[][] = [];
+
+it('shares accent, label and relevance search with the catalog and agent API', async () => {
+  const catalog = assemble({ 'skills.sh': [], 'claude-plugins.dev': [], smithery: [] });
+  catalog.skills = [
+    skill('o/r@popular', ['frontend'], { installs: 900, description: 'Café résumé' }),
+    skill('o/r@café-tools', ['frontend'], { installs: 10 }),
+    skill('o/r@café', ['frontend'], { installs: 1 }),
+    skill('o/r@label', ['frontend'], { installs: 20, labels: ['Café', 'résumé'] }),
+  ];
+  const local = await startServer({ skills: catalog.skills, catalogSkills: catalog.skills, themes: [], skillsVersion: '1.7.0', port: 0, listInstalled: async () => [] });
+  try {
+    for (const query of ['CAFE', 'cafe resume', 'cafe absent', '']) {
+      const response = await fetch(`http://127.0.0.1:${local.port}/api/skills?q=${encodeURIComponent(query)}`, { headers: { 'x-atlas-token': local.token } });
+      const result = await response.json();
+      const expected = querySkills(catalog, { search: query, sort: query ? undefined : 'installs' }).map(s => s.id);
+      expect(result.items.map((s: Skill) => s.id)).toEqual(expected);
+      if (query) expect(result.items.map((s: Skill) => s.id)).toEqual(searchSkills(catalog, { query }).map(s => s.id));
+    }
+    const response = await fetch(`http://127.0.0.1:${local.port}/api/skills?q=cafe&sort=installs`, { headers: { 'x-atlas-token': local.token } });
+    expect((await response.json()).items[0].name).toBe('popular');
+  } finally { await local.close(); }
+});
 
 let server: AtlasServer;
 let configDir: string;

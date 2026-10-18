@@ -12,6 +12,7 @@ import {
   skillDir,
 } from '../src/catalog/normalize.js';
 import { groupByTheme, querySkills, resolveTheme, sortSkills } from '../src/catalog/query.js';
+import { searchSkills } from '../src/agent-api.js';
 import { markOfficial, parseOfficialSitemap } from '../src/catalog/sources/official.js';
 import { langFlag, LANGUAGES, LOCALES, normalizeLang, systemLang } from '../src/i18n/index.js';
 import { allThemes } from '../src/catalog/taxonomy.js';
@@ -241,6 +242,21 @@ describe('official skills', () => {
 });
 
 describe('sorting', () => {
+  it('matches accents and labels, ranks names first, and keeps explicit sorts', () => {
+    const catalog = assemble({ 'skills.sh': [], 'claude-plugins.dev': [], smithery: [] });
+    const mk = (name: string, installs: number, description = '', labels: string[] = []) => ({
+      id: `o/r@${name}`, name, source: 'o/r', installs, description, labels, origins: [], themes: [],
+    });
+    catalog.skills = [mk('popular', 900, 'Café résumé'), mk('café-tools', 10), mk('café', 1), mk('z-label', 20, '', ['CAFÉ', 'résumé']), mk('tools-café', 50)];
+    expect(querySkills(catalog, { search: 'CAFE' }).map(s => s.name)).toEqual(['café', 'café-tools', 'tools-café', 'popular', 'z-label']);
+    expect(querySkills(catalog, { search: 'cafe resume' }).map(s => s.name)).toEqual(['popular', 'z-label']);
+    expect(querySkills(catalog, { search: 'cafe absent' })).toEqual([]);
+    expect(querySkills(catalog, { search: 'cafe', sort: 'installs' })[0]!.name).toBe('popular');
+    expect(querySkills(catalog, { search: 'cafe', sort: 'name' }).map(s => s.name)).toEqual(sortSkills(catalog.skills, 'name').map(s => s.name));
+    expect(querySkills(catalog, { search: '  ' })).toEqual(catalog.skills);
+    expect(searchSkills(catalog, { query: 'CAFE' }).map(s => s.id)).toEqual(querySkills(catalog, { search: 'CAFE' }).map(s => s.id));
+  });
+
   const mk = (name: string, extra: object) => ({ id: `o/r@${name}`, name, source: 'o/r', labels: [], origins: [], themes: [], ...extra });
   const skills = [mk('ranked-first', { rank: 1, installs: 31 }), mk('beta', { installs: 900 }), mk('alpha', { stars: 5 }), mk('gamma', {})];
 

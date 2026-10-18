@@ -155,6 +155,8 @@ The tools only change your machine through `install_skills` and `remove_skills`,
 
 `skills-atlas ui` opens a local page with themes and **★ Recommended**, catalog search and skills to tick. Installed skills start ticked; untick one to uninstall it. The changes panel shows scope, agents, method and the exact `npx skills` commands, with live progress when you apply. It shares the terminal's catalog, installation logic and remembered choices.
 
+Search ignores case and accents and checks the skill id, description and source labels. Every word must match. Exact skill names appear first, followed by name prefixes, other name matches, then description or label matches; installs and stars break ties. This applies to the CLI, terminal, web interface, offline demo and MCP search. Searches use relevance until you explicitly choose name or installs order (`--sort`, terminal `s`, or the web sort buttons). With no search, the existing popularity order and Trending growth order remain.
+
 The server listens on `127.0.0.1` only. The address carries a random token (after the `#`, so it never leaves your browser) that every request must present, and requests from any other host name are refused, so no other web page can drive installs. Stop it with Ctrl+C.
 
 | Option | Effect |
