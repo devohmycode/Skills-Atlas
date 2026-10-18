@@ -169,6 +169,41 @@ describe('web server', () => {
     } finally { await local.close(); }
   });
 
+  it('exposes agent coverage by scope and retries only missing skill-agent combinations', async () => {
+    const commandsRun: InstallCommand[][] = [];
+    const partial = await startServer({
+      skills, catalogSkills: skills, themes: [], skillsVersion: '1.7.0', port: 0, cwd: configDir,
+      listInstalled: async scope => scope === 'project' ? [
+        { name: 'react-hooks', source: 'a/b', scope, agents: ['Cursor'] },
+        { name: 'tailwind', source: 'a/b', scope, agents: ['Claude Code'] },
+      ] : [{ name: 'react-hooks', source: 'a/b', scope, agents: ['Claude Code'] }],
+      runAll: async commands => { commandsRun.push(commands); return []; },
+    });
+    const url = `http://127.0.0.1:${partial.port}`;
+    const headers = { 'x-atlas-token': partial.token, 'content-type': 'application/json' };
+    const body = { install: ['a/b@react-hooks', 'a/b@tailwind'], remove: [], retry: true,
+      options: { ...options, agents: ['cursor', 'claude-code'] } };
+    try {
+      const state = await (await fetch(url + '/api/state', { headers })).json();
+      expect(state.installed.find((s: { id: string }) => s.id === 'a/b@react-hooks').agentsByScope)
+        .toEqual({ project: ['cursor'], global: ['claude-code'] });
+      const plan = await (await fetch(url + '/api/plan', { method: 'POST', headers, body: JSON.stringify(body) })).json();
+      expect(plan.commands).toEqual([
+        'npx -y skills@1.7.0 add a/b -s react-hooks -a claude-code -y --json',
+        'npx -y skills@1.7.0 add a/b -s tailwind -a cursor -y --json',
+      ]);
+      const result = await fetch(url + '/api/apply', { method: 'POST', headers, body: JSON.stringify(body) });
+      await result.text();
+      expect(commandsRun[0]!.map(c => ({ skills: c.skills, args: c.args }))).toEqual([
+        { skills: ['react-hooks'], args: ['-y', 'skills@1.7.0', 'add', 'a/b', '-s', 'react-hooks', '-a', 'claude-code', '-y', '--json'] },
+        { skills: ['tailwind'], args: ['-y', 'skills@1.7.0', 'add', 'a/b', '-s', 'tailwind', '-a', 'cursor', '-y', '--json'] },
+      ]);
+      expect((await fetch(url + '/api/plan', { method: 'POST', headers,
+        body: JSON.stringify({ ...body, options: { ...options, agents: ['invalid'] } }),
+      })).status).toBe(400);
+    } finally { await partial.close(); }
+  });
+
   it('serves and plans curated skills absent from the downloaded catalog', async () => {
     const catalog = withRecommendations({
       version: 1, generatedAt: '2026-10-15', themes: [{ id: 'code', label: 'Code' }], skills: [],

@@ -367,6 +367,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   var searchInstalled = createSearchIndex([]);
   var hues = {};              // theme id -> hue on the map
   var adds = new Map();       // id -> skill, to install
+  var retryRemaining = false;
   var removes = new Set();    // installed ids to uninstall
   var auditOverrides = new Set(), previewSeq = 0;
   var opts = { scope: 'project', method: 'symlink', agents: new Set() };
@@ -423,8 +424,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   function toggle(skill) {
     if (!skill) return;
     auditOverrides.delete(skill.id);
-    if (installedById.has(skill.id)) { if (removes.has(skill.id)) removes.delete(skill.id); else removes.add(skill.id); }
-    else if (adds.has(skill.id)) adds.delete(skill.id);
+    // A retained partial install is already listed as installed: unticking drops the retry.
+    if (adds.has(skill.id)) adds.delete(skill.id);
+    else if (installedById.has(skill.id)) { if (removes.has(skill.id)) removes.delete(skill.id); else removes.add(skill.id); }
     else adds.set(skill.id, skill);
     updateRow(skill.id); renderPanel();
     if (grouped()) updateRepoPin(repoKey(skill));
@@ -729,15 +731,17 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var blocked = nAdd && !opts.agents.size;
     $('panel-foot').hidden = false;
     $('panel-foot').innerHTML = (blocked ? '<p class="warn">' + esc(M.needAgent) + '</p>' : '') +
-      '<button class="primary" id="apply" data-act="apply" disabled>' + esc(tr('applyN', { n: nAdd + nRm })) + '</button>';
+      '<button class="primary" id="apply" data-act="apply" disabled>' + esc(retryRemaining ? M.retryRemaining : tr('applyN', { n: nAdd + nRm })) + '</button>';
     schedulePlan();
   }
   function choice(name, value, label, hint) {
     return '<label class="choice"><input type="radio" name="' + name + '" value="' + value + '"' + (opts[name] === value ? ' checked' : '') + '>' +
       '<span><b>' + esc(label) + '</b><small>' + esc(hint) + '</small></span></label>';
   }
-  function body() {
-    return { install: Array.from(adds.keys()), remove: Array.from(removes), auditOverrides: Array.from(auditOverrides).filter(function (id) { return adds.has(id); }), options: { agents: selectedAgents(), scope: opts.scope, method: opts.method } };
+  function body(retry) {
+    var b = { install: Array.from(adds.keys()), remove: Array.from(removes), auditOverrides: Array.from(auditOverrides).filter(function (id) { return adds.has(id); }), options: { agents: selectedAgents(), scope: opts.scope, method: opts.method } };
+    if (retry === undefined ? retryRemaining : retry) b.retry = true;
+    return b;
   }
   /** Command preview, computed by the server with the same code as the terminal. */
   function schedulePlan() {
@@ -792,7 +796,14 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 
   // ---- apply -----------------------------------------------------------------------------
   function apply() {
-    var dlg = $('progress'), tasks = [], review = null;
+    if (!retryRemaining) return run(false);
+    return refresh().then(function () {
+      retryRemaining = false;
+      if (adds.size || removes.size) return run(true);
+    }).catch(fail);
+  }
+  function run(retry) {
+    var dlg = $('progress'), tasks = [], review = null, end;
     var out = $('progress-body');
     function render(end) {
       var h = '<h3>' + esc(end ? (end.ok ? M.summaryOk : M.summaryFailed) : M.progressTitle) + '</h3>' +
@@ -809,22 +820,25 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
         h += '<div class="task">' + dot + '<strong>' + esc(t.kind === 'remove' ? M.uninstall : t.source) + '</strong>' +
           '<span class="phase ' + (t.done ? (t.ok ? 'ok' : 'ko') : '') + '">' + esc(M['phase_' + phase]) + '</span>' +
           '<span class="skills">' + esc(t.skills.join(', ')) + '</span>' +
+          (t.results || []).filter(function (r) { return r.status === 'failed' || r.status === 'skipped'; }).map(function (r) {
+            return '<pre class="err">' + esc((r.name || '') + ': ' + (r.error || r.reason || M.phase_failed)) + '</pre>';
+          }).join('') +
           (t.error ? '<pre class="err">' + esc(t.error) + '</pre>' : '') + '</div>';
       });
       if (end && end.error) h += '<p class="warn">' + esc(end.error) + '</p>';
       if (end) h += '<footer><button class="primary" id="close">' + esc(M.close) + '</button></footer>';
       out.innerHTML = h;
       var c = $('close');
-      if (c) { c.onclick = function () { dlg.close(); refresh(); }; c.focus(); }
+      if (c) { c.onclick = function () { dlg.close(); }; c.focus(); }
     }
     render(null);
     dlg.showModal();
     dlg.oncancel = function (e) { if (!$('close')) e.preventDefault(); };
-    api('/api/apply', body()).then(function (res) {
+    return api('/api/apply', body(retry)).then(function (res) {
       var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
       function pump() {
         return reader.read().then(function (chunk) {
-          if (chunk.done) return;
+          if (chunk.done) { if (!end) throw new Error(M.interrupted); return; }
           buf += dec.decode(chunk.value, { stream: true });
           var lines = buf.split('\n'); buf = lines.pop();
           lines.filter(Boolean).forEach(function (line) {
@@ -832,20 +846,45 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
             if (ev.type === 'audit') review = ev;
             else if (ev.type === 'start') tasks[ev.i] = { kind: ev.kind, source: ev.source, skills: ev.skills, started: true, phase: 'fetching' };
             else if (ev.type === 'phase') tasks[ev.i].phase = ev.phase;
-            else if (ev.type === 'done') { tasks[ev.i].done = true; tasks[ev.i].ok = ev.ok; tasks[ev.i].error = ev.error; }
-            render(ev.type === 'end' ? ev : null);
+            else if (ev.type === 'done') { tasks[ev.i].done = true; tasks[ev.i].ok = ev.ok; tasks[ev.i].error = ev.error; tasks[ev.i].results = ev.results; }
+            if (ev.type === 'end') end = ev; else render(null);
           });
           return pump();
         });
       }
       return pump();
-    }).catch(function (err) { render({ ok: false, error: err.message }); });
+    }).catch(function (err) { end = { ok: false, error: err.message }; }).then(function () {
+      return refresh().catch(function (err) {
+        end = { ok: false, error: [end && end.error, err.message].filter(Boolean).join('\n') };
+      });
+    }).then(function () {
+      retryRemaining = !!(adds.size || removes.size);
+      if (retryRemaining) end.ok = false;
+      renderPanel();
+      render(end);
+    });
   }
 
-  /** After an install: what is installed changed, the selection is spent. */
+  /** Whether every selected agent has the skill in the selected scope, per the scan of the disk. */
+  function covered(id) {
+    var inst = installedById.get(id), agents = selectedAgents();
+    var have = inst && inst.agentsByScope && inst.agentsByScope[opts.scope];
+    return !!have && agents.length > 0 && agents.every(function (a) { return have.indexOf(a) >= 0; });
+  }
+  /**
+   * Clear only requests achieved on disk; a failed state fetch leaves intent intact. An install
+   * stays selected until each requested agent has it, whatever the command reported.
+   */
   function refresh() {
-    adds.clear(); removes.clear(); auditOverrides.clear();
-    return apiJson('/api/state').then(function (st) { setState(st); renderPanel(); return load(false); }).catch(fail);
+    return apiJson('/api/state').then(function (st) {
+      setState(st);
+      adds.forEach(function (s, id) { if (covered(id)) adds.delete(id); });
+      removes.forEach(function (id) { if (!installedById.has(id)) removes.delete(id); });
+      auditOverrides.forEach(function (id) { if (!adds.has(id)) auditOverrides.delete(id); });
+      if (!adds.size && !removes.size) retryRemaining = false;
+      renderPanel();
+      return load(false);
+    });
   }
 
   // ---- boot ------------------------------------------------------------------------------
