@@ -3,6 +3,16 @@ import type { Messages } from './en.js';
 const s = (n: number, one: string, many: string) => (n <= 1 ? one : many);
 
 export const fr: Messages = {
+  doctor: {
+    command: 'diagnostique les skills installés sans modifier les fichiers',
+    healthy: 'Aucun problème d’installation détecté.',
+    issues: {
+      'unreadable-directory': 'Impossible de lire le dossier des skills', 'broken-link': 'Lien de skill cassé',
+      'missing-skill-md': 'SKILL.md absent', 'unreadable-skill': 'Impossible de lire SKILL.md',
+      'invalid-lock': 'Fichier de verrouillage invalide', 'unreadable-lock': 'Impossible de lire le fichier de verrouillage',
+      'stale-lock-entry': 'Entrée du verrouillage sans skill installé lisible',
+    },
+  },
   tagline: 'Tous les Agent Skills publics, par thème — choisir, installer, désinstaller.',
 
   steps: { scope: 'Portée', select: 'Sélection', agents: 'Agents', method: 'Méthode', confirm: 'Confirmation' },

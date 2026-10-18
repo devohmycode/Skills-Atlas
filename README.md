@@ -222,6 +222,10 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 
 *Agents step: every agent the skills CLI supports, with those detected on this machine flagged `· detected`.*
 
+### Installation diagnostics
+
+`skills-atlas doctor` checks project and global installations without changing any files. Use `-p` or `-g` for one scope and `--json` for a machine-readable report. It reports broken links, missing or unreadable `SKILL.md` files, invalid lock files and lock entries without a readable installed skill. Missing ordinary agent directories and absent lock files are normal. It exits with 1 when it finds issues and 0 otherwise; it never repairs or removes anything automatically.
+
 ### Keys (tree)
 
 | Key | Action |

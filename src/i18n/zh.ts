@@ -2,6 +2,15 @@ import type { Messages } from './en.js';
 
 /** Simplified Chinese. No plural forms; counts read "3 个技能". */
 export const zh: Messages = {
+  doctor: {
+    command: '诊断已安装的技能，不修改任何文件', healthy: '未发现安装问题。',
+    issues: {
+      'unreadable-directory': '无法读取技能目录', 'broken-link': '技能链接已损坏',
+      'missing-skill-md': '缺少 SKILL.md', 'unreadable-skill': '无法读取 SKILL.md',
+      'invalid-lock': '锁文件无效', 'unreadable-lock': '无法读取锁文件',
+      'stale-lock-entry': '锁记录没有对应的可读取已安装技能',
+    },
+  },
   tagline: '按主题浏览所有公开的 Agent Skills —— 选择、安装、卸载。',
 
   steps: { scope: '范围', select: '选择', agents: '智能体', method: '方式', confirm: '确认' },

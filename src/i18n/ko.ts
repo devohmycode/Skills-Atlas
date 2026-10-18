@@ -2,6 +2,15 @@ import type { Messages } from './en.js';
 
 /** Korean. No plural forms; counts read "스킬 3개". */
 export const ko: Messages = {
+  doctor: {
+    command: '파일을 변경하지 않고 설치된 스킬 진단', healthy: '설치 문제가 발견되지 않았습니다.',
+    issues: {
+      'unreadable-directory': '스킬 디렉터리를 읽을 수 없습니다', 'broken-link': '손상된 스킬 링크',
+      'missing-skill-md': 'SKILL.md 없음', 'unreadable-skill': 'SKILL.md를 읽을 수 없습니다',
+      'invalid-lock': '잘못된 잠금 파일', 'unreadable-lock': '잠금 파일을 읽을 수 없습니다',
+      'stale-lock-entry': '잠금 항목에 해당하는 읽을 수 있는 스킬이 없습니다',
+    },
+  },
   tagline: '공개된 모든 Agent Skills를 테마별로 — 고르고, 설치하고, 제거하세요.',
 
   steps: { scope: '범위', select: '선택', agents: '에이전트', method: '방식', confirm: '확인' },

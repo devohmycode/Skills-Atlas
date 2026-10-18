@@ -14,6 +14,7 @@ import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, sys
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
 import { nameCollisions } from './install/collisions.js';
 import { findUpdates } from './install/updates.js';
+import { diagnoseInstalled } from './install/doctor.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
 import { readFileSync } from 'node:fs';
@@ -616,6 +617,21 @@ program
     const config = readConfig();
     if (state) writeConfig({ ...config, audit: state === 'on' });
     console.log(c.auditState(auditEnabled(state ? { audit: state === 'on' } : config)));
+  });
+
+program
+  .command('doctor')
+  .description(m.doctor.command)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('--json', c.json)
+  .action((opts: { global?: boolean; project?: boolean; json?: boolean }) => {
+    const scopes: Scope[] = opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
+    const issues = scopes.flatMap((scope) => diagnoseInstalled(scope)).map((issue) => ({ ...issue, message: m.doctor.issues[issue.code] }));
+    if (issues.length) process.exitCode = 1;
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(issues, null, 2)}\n`);
+    if (!issues.length) return console.log(paint('dim', m.doctor.healthy));
+    for (const issue of issues) console.log(`  ${t().tree.where[issue.scope]} · ${issue.message}: ${issue.path}${issue.name ? ` (${issue.name})` : ''}`);
   });
 
 program

@@ -2,6 +2,15 @@ import type { Messages } from './en.js';
 
 /** Japanese. No plural forms; counts read "3 件のスキル". */
 export const ja: Messages = {
+  doctor: {
+    command: 'ファイルを変更せずにインストール済みスキルを診断', healthy: 'インストールの問題は見つかりませんでした。',
+    issues: {
+      'unreadable-directory': 'スキルのディレクトリを読み取れません', 'broken-link': 'スキルのリンクが壊れています',
+      'missing-skill-md': 'SKILL.md がありません', 'unreadable-skill': 'SKILL.md を読み取れません',
+      'invalid-lock': 'ロックファイルが無効です', 'unreadable-lock': 'ロックファイルを読み取れません',
+      'stale-lock-entry': 'ロック項目に対応する読み取り可能なスキルがありません',
+    },
+  },
   tagline: '公開されている Agent Skills をテーマ別に — 選んで、インストール、アンインストール。',
 
   steps: { scope: 'スコープ', select: '選択', agents: 'エージェント', method: '方式', confirm: '確認' },

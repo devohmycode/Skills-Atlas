@@ -4,6 +4,15 @@ const s = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /** Italian. "Skill" stays as the name of the Agent Skills format. */
 export const it: Messages = {
+  doctor: {
+    command: 'diagnostica gli skill installati senza modificare i file', healthy: 'Nessun problema di installazione rilevato.',
+    issues: {
+      'unreadable-directory': 'Impossibile leggere la cartella degli skill', 'broken-link': 'Collegamento dello skill interrotto',
+      'missing-skill-md': 'SKILL.md mancante', 'unreadable-skill': 'Impossibile leggere SKILL.md',
+      'invalid-lock': 'File di blocco non valido', 'unreadable-lock': 'Impossibile leggere il file di blocco',
+      'stale-lock-entry': 'Voce di blocco senza skill installato leggibile',
+    },
+  },
   tagline: 'Tutte le Agent Skills pubbliche, per tema: scegli, installa, disinstalla.',
 
   steps: { scope: 'Ambito', select: 'Selezione', agents: 'Agenti', method: 'Metodo', confirm: 'Conferma' },

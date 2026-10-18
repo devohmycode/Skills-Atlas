@@ -60,13 +60,8 @@ function readSkillsDir(dir: string): { name: string; path: string }[] {
   return out;
 }
 
-/**
- * Installed skills of a scope, read straight from disk: the canonical
- * directory and every agent's skills directory, plus the lock file for
- * sources. Same result as `skills list --json`, in milliseconds instead of
- * tens of seconds (no npx, no agent detection, no per-agent probing).
- */
-export function scanInstalled(scope: Scope, cwd = process.cwd()): InstalledSkill[] {
+/** Unique skills directories of a scope and the agents that read each directory. */
+export function skillDirectories(scope: Scope, cwd: string): Map<string, string[]> {
   // Directory → agents reading it (several agents share `.agents/skills`).
   const dirs = new Map<string, string[]>();
   const add = (dir: string, agent?: string) => {
@@ -82,6 +77,12 @@ export function scanInstalled(scope: Scope, cwd = process.cwd()): InstalledSkill
     } else add(join(cwd, agent.projectDir), agent.displayName);
   }
 
+  return dirs;
+}
+
+/** Installed skills read from the canonical/agent directories and their lock sources, without npx. */
+export function scanInstalled(scope: Scope, cwd = process.cwd()): InstalledSkill[] {
+  const dirs = skillDirectories(scope, cwd);
   const sources = readLockSources(lockPath(scope, cwd));
   const skills = new Map<string, InstalledSkill>();
   for (const [dir, agents] of dirs) {
