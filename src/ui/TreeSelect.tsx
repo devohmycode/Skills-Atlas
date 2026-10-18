@@ -118,6 +118,12 @@ function popularityLong(s: Skill): string {
   return s.rank !== undefined ? `${m.rank} #${formatNumber(s.rank)}` : '';
 }
 
+/** "Claude Code, Codex, Cursor +19". */
+export function agentList(agents: string[]): string {
+  const sorted = [...agents].sort((a, b) => a.localeCompare(b));
+  return sorted.length > 3 ? `${sorted.slice(0, 3).join(', ')} +${sorted.length - 3}` : sorted.join(', ');
+}
+
 /** "project", "global" or "project + global". */
 export function scopesLabel(scopes: Scope[]): string {
   return scopes.map((sc) => t().tree.where[sc]).join(' + ');
@@ -621,6 +627,10 @@ export function TreeSelect({
                 {row.skill.official && <Text color={PALETTE.lavender}>{`  ${OFFICIAL_MARK} ${m.tree.official}`}</Text>}
                 {installed.has(row.skill.id) && (
                   <Text color={PALETTE.accent}>{`  ● ${m.tree.installedIn(scopesLabel(installed.get(row.skill.id)!.scopes))}`}</Text>
+                )}
+                {(installed.get(row.skill.id)?.agents.length ?? 0) > 0 && (
+                  // The agents that see it; many read the shared .agents/skills, so only the first three are named.
+                  <Text dimColor>{`  → ${agentList(installed.get(row.skill.id)!.agents)}`}</Text>
                 )}
               </Text>
               <Text>

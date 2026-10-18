@@ -74,6 +74,18 @@ export async function installedSkills(scopes: Scope[]): Promise<InstalledSummary
 }
 
 /**
+ * The installed skills each agent sees, agents by name, skills by name. A skill
+ * in the shared `.agents/skills` directory shows under every agent that reads it.
+ */
+export function skillsByAgent(installed: InstalledSummary[]): { agent: string; name: string; skills: InstalledSummary[] }[] {
+  const byAgent = new Map<string, InstalledSummary[]>();
+  for (const s of installed) for (const a of s.agents) byAgent.set(a, [...(byAgent.get(a) ?? []), s]);
+  return [...byAgent]
+    .map(([agent, skills]) => ({ agent, name: AGENTS.find((a) => a.id === agent)?.displayName ?? agent, skills: skills.sort((x, y) => x.name.localeCompare(y.name)) }))
+    .sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/**
  * Global skills with a newer version on GitHub. Updating one is installing it
  * again: `skills-atlas install <id> -g -a <its agents> -y`.
  */

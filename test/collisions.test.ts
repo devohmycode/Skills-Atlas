@@ -17,3 +17,16 @@ describe('name collisions', () => {
     expect(nameCollisions(['a/b@notes'], ['local@notes'])).toMatchObject([{ replaced: 'local@notes', installed: true }]);
   });
 });
+
+describe('skills by agent', () => {
+  it('lists, under each agent, the skills it sees', async () => {
+    const { skillsByAgent } = await import('../src/agent-api.js');
+    const { agentList } = await import('../src/ui/TreeSelect.js');
+    const groups = skillsByAgent([
+      { id: 'a/b@zeta', name: 'zeta', source: 'a/b', scope: 'global', agents: ['codex', 'claude-code'] },
+      { id: 'a/b@alpha', name: 'alpha', source: 'a/b', scope: 'project', agents: ['codex'] },
+    ]);
+    expect(groups.map((g) => [g.name, g.skills.map((s) => s.name)])).toEqual([['Claude Code', ['zeta']], ['Codex', ['alpha', 'zeta']]]);
+    expect(agentList(['Zed', 'Codex', 'Cursor', 'Claude Code', 'Amp'])).toBe('Amp, Claude Code, Codex +2');
+  });
+});

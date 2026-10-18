@@ -489,6 +489,8 @@ describe('installed skills in the wizard', () => {
     expect(lastFrame()).toContain('scope: project + global');
     await press(stdin, KEY.right, KEY.down);
     expect(lastFrame()).toContain('● project + global');
+    // The details panel names the agents that see it.
+    expect(lastFrame()).toContain('→ Claude Code');
     // Untick pentest: it goes from both scopes.
     await press(stdin, ' ');
     expect(lastFrame()).toContain('will be uninstalled');

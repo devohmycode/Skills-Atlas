@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Per agent.** `skills-atlas installed` lists the installed skills under each agent that sees them; `-a codex claude-code` shows only those, side by side, and `--json` is available. In the tree, an installed skill's details name its agents.
+- **Shell completion** for bash, zsh, fish and PowerShell: `skills-atlas completion <shell>` prints the script. It completes commands, options, skill ids, agents, themes and languages, from the cached catalog.
 - **Same name, one folder.** The skills CLI installs by name, so a skill from another repository silently replaced an installed one of the same name, or another one selected in the same run. The review screen now lists such replacements, `install` and `import` warn before running, and the MCP server refuses them unless `replace: true`.
 - **Risk check.** The `p` preview, `show` and the MCP server's `show_skill` point at what a `SKILL.md` asks for beyond its description: downloading and running code, credential files, broad deletions, instructions to hide things from the user (high); administrator commands, secrets read from the environment, data sent to a server (medium); packages or scripts run (info). A pattern check on the text, tuned on the 150 most installed skills, which it leaves without a false high alert; it points at lines to read, it does not prove a skill safe.
 - **🔥 Trending.** Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form a Trending theme, right after Recommended, sorted by growth, with the gain shown in the details.

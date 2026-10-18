@@ -8,7 +8,7 @@ import { loadLatestCatalog } from './catalog/remote.js';
 import { withRecommendations } from './catalog/recommended.js';
 import { withTrending } from './catalog/trending.js';
 import pkg from '../package.json' with { type: 'json' };
-import { groupByTheme, popularityLabel, querySkills, resolveTheme, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
+import { groupByTheme, popularityLabel, querySkills, resolveTheme, sortSkills, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
 import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, systemLang, t, themeLabel, type Lang } from './i18n/index.js';
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
@@ -17,8 +17,9 @@ import { findUpdates } from './install/updates.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
 import { readFileSync } from 'node:fs';
-import { outdatedSkills, showSkill } from './agent-api.js';
+import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './agent-api.js';
 import { serveMcp } from './mcp.js';
+import { complete, completionScript, type CompletionContext } from './completion.js';
 import { browseLoop } from './browse.js';
 import { parseSelection, toSelection } from './selection.js';
 import { newerVersion } from './version.js';
@@ -484,6 +485,66 @@ installOptions(program.command('install'))
   .argument('<ids...>', c.ids)
   .description(c.install)
   .action((ids: string[], opts: InstallFlags) => installIds(ids, opts));
+
+program
+  .command('completion')
+  .argument('<shell>', 'bash, zsh, fish or powershell')
+  .description(c.completionCmd)
+  .action((shell: string) => {
+    const script = completionScript(shell);
+    if (!script) fail(c.completionShell(shell));
+    process.stdout.write(script);
+  });
+
+// Called by the completion scripts on Tab: one candidate per line, nothing else on stdout.
+program
+  .command('__complete', { hidden: true })
+  .argument('[words...]')
+  .allowUnknownOption()
+  .action(async (words: string[]) => {
+    let catalog: Promise<Catalog> | undefined;
+    // Offline: Tab must answer at once, from the cached or bundled snapshot.
+    const load = () => (catalog ??= loadLatestCatalog({ offline: true }));
+    const flags = (cmd: Command) => cmd.options.flatMap((o) => [o.short, o.long].filter((f): f is string => !!f));
+    const ctx: CompletionContext = {
+      commands: program.commands.filter((cmd) => !cmd.name().startsWith('_')).map((cmd) => ({ name: cmd.name(), options: flags(cmd) })),
+      globalOptions: flags(program),
+      agents: [...AGENTS.map((a) => a.id), '*'],
+      langs: Object.keys(LANGUAGES),
+      themes: () => [],
+      ids: () => [],
+    };
+    const needsCatalog = words.length > 1 && ['install', 'show', 'browse', 'list'].some((w) => words.includes(w));
+    if (needsCatalog) {
+      const c = await load();
+      const sorted = sortSkills(c.skills, 'installs');
+      ctx.themes = () => c.themes.map((th) => th.id);
+      ctx.ids = (prefix: string) => sorted.filter((s) => s.id.toLowerCase().startsWith(prefix.toLowerCase())).slice(0, 50).map((s) => s.id);
+    }
+    const out = complete(words.length ? words : [''], ctx);
+    if (out.length) process.stdout.write(`${out.join('\n')}\n`);
+  });
+
+program
+  .command('installed')
+  .description(c.installedCmd)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('-a, --agent <ids...>', c.agent)
+  .option('--json', c.json)
+  .action(async (opts: { global?: boolean; project?: boolean; agent?: string[]; json?: boolean }) => {
+    const scopes: Scope[] = opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
+    const only = opts.agent?.flatMap((a) => a.split(',')).map((a) => a.trim()).filter(Boolean);
+    const unknown = only ? unknownAgents(only) : [];
+    if (unknown.length) fail(m.errors.unknownAgents(unknown.join(', ')));
+    const groups = skillsByAgent(await installedSkills(scopes)).filter((g) => !only || only.includes(g.agent));
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(groups, null, 2)}\n`);
+    if (!groups.length) return console.log(paint('dim', c.noneInstalled));
+    for (const g of groups) {
+      console.log(`\n${paint('bold', g.name)} ${paint('dim', `${g.agent} · ${formatNumber(g.skills.length)}`)}`);
+      for (const s of g.skills) console.log(`  ${padEnd(s.name, 34)} ${paint('dim', `${padEnd(s.source ?? 'local', 36)} ${t().tree.where[s.scope]}`)}`);
+    }
+  });
 
 program
   .command('mcp')

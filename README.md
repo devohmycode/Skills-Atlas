@@ -57,7 +57,20 @@ skills-atlas import my-skills.json -a claude-code -g  # install the same skills 
 skills-atlas show obra/superpowers@brainstorming      # a skill's SKILL.md, read from GitHub (--json available)
 skills-atlas outdated                         # global skills with a newer version on GitHub (--json available)
 skills-atlas mcp                              # MCP server on stdio, for Claude and other agents
+skills-atlas installed -a claude-code codex   # installed skills by agent: what each one sees (--json available)
+skills-atlas completion bash                  # shell completion script (bash, zsh, fish, powershell)
 ```
+
+**Shell completion** completes commands, options, skill ids, agents, themes and languages. Load it from your shell's startup file:
+
+| Shell | Line to add |
+|---|---|
+| bash (`~/.bashrc`) | `eval "$(skills-atlas completion bash)"` |
+| zsh (`~/.zshrc`) | `eval "$(skills-atlas completion zsh)"` |
+| fish (`~/.config/fish/config.fish`) | `skills-atlas completion fish \| source` |
+| PowerShell (`$PROFILE`) | `skills-atlas completion powershell \| Out-String \| Invoke-Expression` |
+
+It needs `skills-atlas` installed (`npm i -g skills-atlas`), not run through npx. Skill ids come from the cached catalog, so Tab never waits for the network.
 
 `export` writes the installed skills that have a GitHub source as `{ "skillsAtlas": 1, "skills": ["owner/repo@skill", …] }`; home-made skills are listed on stderr and left out. `import` takes the same options as `install` and asks for what they leave open. A selection file is checked before anything runs: a malformed id, or a name that could pass for a flag, stops the import.
 
