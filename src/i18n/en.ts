@@ -1,5 +1,15 @@
 /** English messages: the reference every other language must match (see `Messages`). */
 export const en = {
+  doctor: {
+    command: 'diagnose installed skills without changing any files',
+    healthy: 'No installation issues found.',
+    issues: {
+      'unreadable-directory': 'Cannot read the skills directory', 'broken-link': 'Broken skill link',
+      'missing-skill-md': 'Missing SKILL.md', 'unreadable-skill': 'Cannot read SKILL.md',
+      'invalid-lock': 'Invalid skill lock file', 'unreadable-lock': 'Cannot read the skill lock file',
+      'stale-lock-entry': 'Lock entry has no readable installed skill',
+    },
+  },
   tagline: 'Every public Agent Skill, by theme — pick, install, uninstall.',
 
   steps: { scope: 'Scope', select: 'Select', agents: 'Agents', method: 'Method', confirm: 'Confirm' },
