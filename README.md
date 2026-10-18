@@ -1,4 +1,4 @@
-<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/logo.png?v=0.7.1" alt="skills-atlas" width="600"></h1>
+<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/banner@2x.png" alt="skills-atlas: browse, read and install 75,000 Agent Skills with npx skills-atlas, in the terminal, the browser, over MCP or as a Claude Code plugin" width="1000"></h1>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/v/skills-atlas?color=FF8AD8" alt="npm version"></a>
