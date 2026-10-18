@@ -290,6 +290,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 @keyframes spin { to { transform: rotate(360deg); } }
 .dlg footer { display: flex; justify-content: flex-end; margin-top: 14px; }
 .dlg footer .primary { width: auto; height: 40px; padding: 0 22px; font-size: 15px; }
+#pack-form label { display: block; margin: 0 0 4px; color: var(--ink-2); font-size: 13px; }
+#pack-form footer { gap: 10px; align-items: center; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
@@ -353,6 +355,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   </section>
   <aside id="panel"><div class="panel-body" id="panel-body"></div><div class="panel-foot" id="panel-foot" hidden></div></aside>
 </main>
+<dialog id="pack-dialog" aria-labelledby="pack-title"><form class="dlg" id="pack-form"></form></dialog>
 <dialog id="progress" aria-live="polite"><div class="dlg" id="progress-body"></div></dialog>
 <dialog id="details" aria-labelledby="details-title"><div class="dlg"><h3 id="details-title"></h3><div id="details-body" aria-live="polite"></div><footer><button class="primary" id="details-close"></button></footer></div></dialog>
 <script>
@@ -675,6 +678,46 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     load(false);
   });
 
+  // ---- personal packs --------------------------------------------------------------------
+  function packSelection() {
+    return S.installed.filter(function (s) { return s.catalog && !removes.has(s.id); }).map(function (s) { return s.id; }).concat(Array.from(adds.keys()));
+  }
+  function packButton() {
+    return '<button class="link" data-act="save-pack"' + (!S.canSavePacks || !packSelection().length ? ' disabled' : '') + '>' + esc(M.savePack) + '</button>' +
+      (!S.canSavePacks ? '<p class="intro">' + esc(M.packDemo) + '</p>' : '');
+  }
+  var packIds = [], savingPack = false;
+  function openPack() {
+    if (!S.canSavePacks || savingPack) return;
+    packIds = packSelection();
+    if (!packIds.length) return;
+    $('pack-form').innerHTML = '<h3 id="pack-title">' + esc(M.savePack) + '</h3><p class="sub">' + esc(tr('packHint', { n: packIds.length })) + '</p>' +
+      '<label for="pack-id">' + esc(M.packId) + '</label><input class="agents-search" id="pack-id" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off">' +
+      '<label for="pack-name">' + esc(M.packName) + '</label><input class="agents-search" id="pack-name" required maxlength="60">' +
+      '<label for="pack-description">' + esc(M.packDescription) + '</label><input class="agents-search" id="pack-description" required>' +
+      '<p class="warn" id="pack-error" role="alert"></p><footer><button type="button" class="link" id="pack-cancel">' + esc(M.close) +
+      '</button><button type="submit" class="primary" id="pack-save">' + esc(M.savePack) + '</button></footer>';
+    $('pack-cancel').onclick = function () { $('pack-dialog').close(); };
+    $('pack-dialog').showModal();
+    $('pack-id').focus();
+  }
+  function savePackSelection() {
+    if (!S.canSavePacks || savingPack) return;
+    savingPack = true;
+    $('pack-save').disabled = true;
+    $('pack-error').textContent = '';
+    return apiJson('/api/packs', { id: $('pack-id').value, name: $('pack-name').value,
+      description: $('pack-description').value, skills: packIds }).then(function (r) {
+      return apiJson('/api/state').then(function (st) {
+        setState(st); view.theme = 'pack:' + r.pack.id;
+        $('pack-dialog').close(); renderPanel(); return load(false);
+      });
+    }).catch(function (err) { $('pack-error').textContent = err.message; }).finally(function () {
+      savingPack = false; $('pack-save').disabled = false;
+    });
+  }
+  $('pack-form').addEventListener('submit', function (e) { e.preventDefault(); savePackSelection(); });
+
   // ---- changes panel ---------------------------------------------------------------------
   function selectedAgents() { return S.agents.filter(function (a) { return opts.agents.has(a.id); }).map(function (a) { return a.id; }); }
 
@@ -686,7 +729,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
         '<svg class="intro-art" width="220" height="90" viewBox="0 0 220 90" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">' +
         '<path d="M8 70c30-26 52 8 84-14s46-40 78-22 34 20 44 14"/><path d="M8 82c34-24 56 6 88-12s48-34 80-18 30 18 38 14" opacity=".6"/>' +
         '<path d="M20 56c24-20 44 4 70-12s40-30 66-18" opacity=".35"/><circle cx="156" cy="34" r="4" fill="currentColor"/></svg>';
-      $('panel-body').innerHTML = h;
+      $('panel-body').innerHTML = h + packButton();
       $('panel-foot').hidden = true;
       return;
     }
@@ -702,7 +745,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       var s = installedById.get(id);
       h += '<button class="minus" data-rm="' + esc(id) + '" title="' + esc(tr('undo', { name: id })) + '"><span>' + esc(s ? s.name : id) + '</span><span class="x" aria-hidden="true">×</span></button>';
     });
-    h += '</div>';
+    h += '</div>' + packButton();
     if (nAdd) {
       h += '<h2>' + esc(M.scopeTitle) + '</h2>' +
         choice('scope', 'project', M.scopeProject, tr('scopeProjectHint', { cwd: S.cwd })) +
@@ -778,6 +821,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     else if (t.dataset.rm) { removes.delete(t.dataset.rm); changed.push(t.dataset.rm); }
     else if (t.dataset.act === 'clear') { changed = Array.from(adds.keys()).concat(Array.from(removes)); adds.clear(); removes.clear(); auditOverrides.clear(); }
     else if (t.dataset.act === 'all-agents') showAllAgents = !showAllAgents;
+    else if (t.dataset.act === 'save-pack') return openPack();
     else if (t.dataset.act === 'apply') return apply();
     changed.forEach(updateRow); renderPanel();
   });

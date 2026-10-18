@@ -1,5 +1,5 @@
 import { request } from 'node:http';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -298,5 +298,38 @@ describe('web server', () => {
     expect(ran.at(-1)![0]!.skills).toEqual(['tailwind', 'react-hooks']);
     const config = JSON.parse(readFileSync(join(configDir, 'skills-atlas', 'config.json'), 'utf8'));
     expect(config).toMatchObject({ agents: ['claude-code'], scope: 'project', method: 'symlink' });
+  });
+});
+
+describe('personal pack API', () => {
+  it('authenticates, validates and immediately serves saved pack themes and members', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atlas-web-pack-'));
+    const packsPath = join(dir, 'packs.json');
+    const local = await startServer({ skills, catalogSkills: skills, themes: [{ id: 'frontend', label: 'Frontend' }],
+      skillsVersion: '1.7.0', port: 0, packsPath, listInstalled: async () => [] });
+    const url = 'http://127.0.0.1:' + local.port;
+    const pack = { id: 'my-pack', name: '<img src=x onerror=bad()>', description: '<script>bad</script>', skills: ['a/b@tailwind'] };
+    const save = (body: unknown, token = local.token) => fetch(url + '/api/packs', {
+      method: 'POST', headers: { 'x-atlas-token': token, 'content-type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const read = (path: string) => fetch(url + path, { headers: { 'x-atlas-token': local.token } }).then((r) => r.json());
+    try {
+      expect((await save(pack, 'bad')).status).toBe(401);
+      for (const bad of [{ ...pack, id: '../bad' }, { ...pack, name: '' }, { ...pack, skills: ['x/y@unknown'] },
+        { ...pack, skills: ['a/b@--global'] }, { ...pack, skills: [] }, { ...pack, path: join(dir, 'evil.json') }]) {
+        expect((await save(bad)).status).toBe(400);
+      }
+      await read('/api/skills'); // Prime cached results before adding a theme.
+      expect((await save(pack)).status).toBe(201);
+      const state = await read('/api/state');
+      expect(state.themes.find((th: { id: string }) => th.id === 'pack:my-pack')).toMatchObject({ label: '📦 ' + pack.name, description: pack.description });
+      const page = await read('/api/skills?theme=pack:my-pack');
+      expect(page.items.map((s: Skill) => s.id)).toEqual(pack.skills);
+      expect(page.counts['pack:my-pack']).toBe(1);
+      expect((await save(pack)).status).toBe(409);
+      writeFileSync(packsPath, '{bad');
+      expect((await save({ ...pack, id: 'another' })).status).toBe(500);
+      expect(readFileSync(packsPath, 'utf8')).toBe('{bad');
+    } finally { await local.close(); rmSync(dir, { recursive: true, force: true }); }
   });
 });

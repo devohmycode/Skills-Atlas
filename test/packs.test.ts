@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { curated } from '../src/catalog/curated.js';
-import { packStatus, readPacks, withPacks } from '../src/catalog/packs.js';
+import { packStatus, readPacks, savePack, withPacks } from '../src/catalog/packs.js';
 import type { Catalog, Skill } from '../src/types.js';
 
 const skill = (id: string): Skill => {
@@ -53,5 +53,42 @@ describe('packs', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('saving a personal pack', () => {
+  it('preserves defaults and personal packs, rejects duplicate ids, and leaves no temporary files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atlas-save-packs-'));
+    const path = join(dir, 'nested', 'packs.json');
+    const pack = { id: 'mine', name: ' My pack ', description: ' Useful skills ', skills: ['a/b@one'] };
+    try {
+      const defaults = readPacks(path);
+      savePack(pack, catalog.skills, path);
+      expect(readPacks(path)).toEqual([...defaults, { ...pack, name: 'My pack', description: 'Useful skills' }]);
+      savePack({ ...pack, id: 'second' }, catalog.skills, path);
+      expect(readPacks(path).map((p) => p.id)).toEqual([...defaults.map((p) => p.id), 'mine', 'second']);
+      const before = readFileSync(path, 'utf8');
+      expect(() => savePack(pack, catalog.skills, path)).toThrow(/already exists/);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(readdirSync(join(dir, 'nested'))).toEqual(['packs.json']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it('rejects invalid inputs and leaves malformed configuration untouched', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atlas-save-packs-'));
+    const path = join(dir, 'packs.json');
+    const pack = { id: 'mine', name: 'My pack', description: 'Useful', skills: ['a/b@one'] };
+    try {
+      for (const bad of [{ ...pack, id: '../oops' }, { ...pack, name: '' }, { ...pack, description: ' ' },
+        { ...pack, skills: [] }, { ...pack, skills: ['a/b@--global'] }, { ...pack, skills: ['x/y@missing'] },
+        { ...pack, skills: ['a/b@one', 'a/b@one'] }, { ...pack, path: '/tmp/evil' }]) {
+        expect(() => savePack(bad, catalog.skills, path)).toThrow();
+      }
+      for (const content of ['{', '{}', '[{}]']) {
+        writeFileSync(path, content);
+        expect(() => savePack(pack, catalog.skills, path)).toThrow(/packs/);
+        expect(readFileSync(path, 'utf8')).toBe(content);
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

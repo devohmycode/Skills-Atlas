@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import bundled from '../../data/packs.json' with { type: 'json' };
 import { configPath } from '../config.js';
 import { parseSkillId } from '../install/plan.js';
 import { checkSkillName } from '../selection.js';
-import type { Catalog } from '../types.js';
+import type { Catalog, Skill } from '../types.js';
 
 /** A curated set of skills for one kind of work, installed as a block. */
 export interface Pack {
@@ -15,12 +16,13 @@ export interface Pack {
   skills: string[];
 }
 
-const Packs = z.array(z.object({
+const PackInput = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
   name: z.string().trim().min(1).max(60),
   description: z.string().trim().min(1),
   skills: z.array(z.string()).min(1).max(100),
-}));
+});
+const Packs = z.array(PackInput);
 
 /** Theme id of a pack in the tree and on the web page. */
 export const packTheme = (id: string) => `pack:${id}`;
@@ -49,6 +51,32 @@ export function readPacks(path = join(dirname(configPath()), 'packs.json')): Pac
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return parsePacks(bundled);
     throw new Error(`Could not read packs from ${path}`, { cause: error });
   }
+}
+
+/** Invalid requests and duplicate ids are distinct from filesystem/configuration failures. */
+export class PackSaveError extends Error {
+  constructor(readonly status: 400 | 409, message: string) { super(message); }
+}
+
+/** Add a personal pack without losing defaults, existing packs, or an invalid file. */
+export function savePack(raw: unknown, catalogSkills: Skill[], path = join(dirname(configPath()), 'packs.json')): Pack {
+  const parsed = PackInput.strict().safeParse(raw);
+  if (!parsed.success) throw new PackSaveError(400, 'invalid pack');
+  const pack = parsed.data;
+  try { parsePacks([pack]); }
+  catch { throw new PackSaveError(400, 'invalid pack skill ids'); }
+  const known = new Set(catalogSkills.map((s) => s.id));
+  if (pack.skills.some((id) => !known.has(id))) throw new PackSaveError(400, 'unknown pack skills');
+  if (new Set(pack.skills.map((id) => id.toLowerCase())).size !== pack.skills.length) throw new PackSaveError(400, 'duplicate pack skills');
+  const existing = readPacks(path);
+  if (existing.some((p) => p.id === pack.id)) throw new PackSaveError(409, 'pack id already exists');
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = path + '.' + randomBytes(12).toString('hex') + '.tmp';
+  try {
+    writeFileSync(temporary, JSON.stringify([...existing, pack], null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    renameSync(temporary, path);
+  } finally { rmSync(temporary, { force: true }); }
+  return pack;
 }
 
 /**
