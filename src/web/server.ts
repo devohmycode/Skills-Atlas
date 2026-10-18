@@ -8,8 +8,12 @@ import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog
 import { byGrowth } from '../catalog/trending.js';
 import { createSearchIndex, SORT_ORDERS } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
+import { auditEnabled, auditSkills, failsAudit } from '../audit.js';
+import { fetchSkillMarkdown } from '../github.js';
+import { scanRisks } from '../risks.js';
+import { nameCollisions } from '../install/collisions.js';
 import { getLang, locale, t, themeLabel } from '../i18n/index.js';
-import { formatCommand, planInstall, planRemovals, type InstallCommand } from '../install/plan.js';
+import { formatCommand, planInstall, planRemovals } from '../install/plan.js';
 import { isSuccess, listInstalled, phaseOf, runAll, type CommandOutcome, type InstalledSkill, type Phase } from '../install/run.js';
 import { SCOPES, type Catalog, type InstallOptions, type Removal, type Skill, type Theme } from '../types.js';
 import { PAGE_HTML } from './page.js';
@@ -30,6 +34,7 @@ export interface ServerOptions {
   /** Injected in tests, so that nothing is installed for real. */
   listInstalled?: (scope: 'project' | 'global', cwd?: string) => Promise<InstalledSkill[]>;
   runAll?: typeof runAll;
+  readSkill?: typeof fetchSkillMarkdown;
 }
 
 export interface AtlasServer {
@@ -49,6 +54,7 @@ const MAX_BODY = 1_000_000;
 const Body = z.object({
   install: z.array(z.string()).max(2000),
   remove: z.array(z.string()).max(2000),
+  auditOverrides: z.array(z.string()).max(2000).default([]),
   options: z.object({
     agents: z.array(z.string()).max(100),
     scope: z.enum(['project', 'global']),
@@ -90,6 +96,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   const cwd = opts.cwd ?? process.cwd();
   const list = opts.listInstalled ?? listInstalled;
   const run = opts.runAll ?? runAll;
+  const readSkill = opts.readSkill ?? fetchSkillMarkdown;
   const token = randomBytes(24).toString('hex');
   const search = createSearchIndex(opts.skills);
   let queryCache: { key: string; matching: Skill[]; counts: Record<string, number> } | undefined;
@@ -101,6 +108,11 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     return mergeInstalled(opts.catalogSkills, opts.skills, found);
   }
 
+  function replacements(ids: string[], entries: Map<string, InstalledEntry>, scope: 'project' | 'global') {
+    return nameCollisions(ids, [...entries].filter(([, e]) => e.scopes.includes(scope)).map(([id]) => id))
+      .map((c) => ({ ...c, message: t().confirm.replaces(c.incoming, c.replaced, c.installed) }));
+  }
+
   async function state() {
     const inst = await installed();
     const config = readConfig();
@@ -110,8 +122,10 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     return {
       lang: getLang(),
       locale: locale(),
-      messages: t().web,
       sources: opts.sources,
+      messages: { ...t().web, risks: t().tree.risks, riskLevels: t().tree.riskLevels,
+        noRisk: t().tree.noRisk, previewLoading: t().tree.previewLoading,
+        auditOff: t().confirm.auditOff, auditUnread: t().confirm.auditUnread, auditToggle: t().confirm.auditToggle },
       cwd,
       skillsVersion: opts.skillsVersion,
       themes: [INSTALLED_THEME, ...opts.themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
@@ -146,10 +160,12 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   }
 
   /** Checks a request body against the catalog and what is installed, then plans the commands. */
-  async function plan(raw: unknown): Promise<{ commands: InstallCommand[]; options: InstallOptions; installs: number }> {
+  async function plan(raw: unknown) {
     const parsed = Body.safeParse(raw);
     if (!parsed.success) throw new HttpError(400, 'invalid request');
-    const { install, remove, options } = parsed.data;
+    const { install: requested, remove, options, auditOverrides } = parsed.data;
+    const install = [...new Set(requested)];
+    if (auditOverrides.some((id) => !install.includes(id))) throw new HttpError(400, 'invalid audit overrides');
     const inst = await installed();
     const known = new Set(opts.catalogSkills.map((s) => s.id));
     const unknown = install.filter((id) => !known.has(id));
@@ -159,6 +175,14 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     if (install.length && !options.agents.length) throw new HttpError(400, t().web.needAgent);
     const badAgents = unknownAgents(options.agents);
     if (badAgents.length) throw new HttpError(400, `unknown agents: ${badAgents.join(', ')}`);
+    const enabled = auditEnabled(readConfig());
+    const byId = new Map(opts.catalogSkills.map((s) => [s.id, s]));
+    const results = enabled ? await auditSkills(install.map((id) => byId.get(id)!), readSkill) : [];
+    const failing = results.filter(failsAudit).map((r) => r.id);
+    if (auditOverrides.some((id) => !failing.includes(id))) throw new HttpError(400, 'invalid audit overrides');
+    const blocked = failing.filter((id) => !auditOverrides.includes(id));
+    const allowed = install.filter((id) => !blocked.includes(id));
+    const collisions = replacements(install, inst.installed, options.scope);
     const full: InstallOptions = { ...options, skillsVersion: opts.skillsVersion };
     const removals: Removal[] = remove.map((id) => {
       const e = inst.installed.get(id) as InstalledEntry;
@@ -166,14 +190,15 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     });
     const commands = [
       ...planRemovals(removals, opts.skillsVersion),
-      ...(install.length ? planInstall([...new Set(install)], full) : []),
+      ...(allowed.length ? planInstall(allowed, full) : []),
     ];
-    return { commands, options: full, installs: install.length };
+    return { commands, options: full, installs: install.length, blocked, audit: { enabled, results }, collisions };
   }
 
   /** Runs the plan, streaming one JSON line per event: start, phase, done, then end. */
   async function apply(raw: unknown, res: ServerResponse) {
-    const { commands, options, installs } = await plan(raw);
+    const { commands, options, installs, blocked, audit, collisions } = await plan(raw);
+    if (blocked.length) throw new HttpError(409, `${t().web.auditBlocked}: ${blocked.join(', ')}`);
     if (!commands.length) throw new HttpError(400, 'nothing to do');
     if (running) throw new HttpError(409, t().web.busy);
     running = true;
@@ -181,6 +206,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     if (installs) writeConfig({ ...readConfig(), agents: options.agents, scope: options.scope, method: options.method });
     res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
     const send = (event: object) => res.write(`${JSON.stringify(event)}\n`);
+    send({ type: 'audit', audit, collisions });
     const phases = commands.map((): Phase => 'queued');
     const stderr = commands.map(() => '');
     try {
@@ -232,9 +258,24 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     if (!validToken(req.headers['x-atlas-token'])) throw new HttpError(401, 'bad token');
     if (req.method === 'GET' && url.pathname === '/api/state') return json(req, res, await state());
     if (req.method === 'GET' && url.pathname === '/api/skills') return json(req, res, skillsPage(url.searchParams));
+    if (req.method === 'GET' && url.pathname === '/api/preview') {
+      const id = url.searchParams.get('id');
+      const scope = url.searchParams.get('scope') ?? 'project';
+      if (scope !== 'project' && scope !== 'global') throw new HttpError(400, 'invalid scope');
+      const inst = await installed();
+      const skill = opts.catalogSkills.find((s) => s.id === id) ?? inst.skills.find((s) => s.id === id);
+      if (!skill) throw new HttpError(404, 'unknown skill');
+      const collisions = replacements([skill.id], inst.installed, scope);
+      try {
+        const markdown = await readSkill(skill);
+        return json(req, res, { id: skill.id, markdown, risks: scanRisks(markdown), collisions });
+      } catch (err) {
+        return json(req, res, { id: skill.id, risks: [], collisions, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
     if (req.method === 'POST' && url.pathname === '/api/plan') {
-      const { commands } = await plan(await readJson(req));
-      return json(req, res, { commands: commands.map(formatCommand) });
+      const { commands, audit, blocked, collisions } = await plan(await readJson(req));
+      return json(req, res, { commands: commands.map(formatCommand), audit, blocked, collisions });
     }
     if (req.method === 'POST' && url.pathname === '/api/apply') return apply(await readJson(req), res);
     throw new HttpError(404, 'not found');
