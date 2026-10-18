@@ -23,6 +23,7 @@ export const en = {
     done: 'done',
     clear: 'clear',
     update: 'update',
+    updateAll: "update all",
     preview: 'preview',
   },
 
@@ -236,6 +237,8 @@ export const en = {
     showFailed: (id: string, msg: string) => `Cannot read the SKILL.md of ${id}: ${msg}`,
     upToDate: "Every global skill is up to date.",
     outdatedHint: "Update one by installing it again: skills-atlas install <id> -g -a <agents> -y (or press u in the tree).",
+    updateCmd: "update outdated global skills: all of them, or the ones named",
+    updateAllHint: "Update them all: skills-atlas update",
     theme: 'only these themes (id or label)',
     search: 'filter by text (id, description)',
     minInstalls: 'minimum installs',

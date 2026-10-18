@@ -49,6 +49,8 @@ describe('planInstall', () => {
       'p/q -s c -a cursor -g --copy -y --json',
       'p/q -s d -a claude-code -g --copy -y --json',
     ]);
+    // Agent ids, as `outdated` gives them, work as well as display names.
+    expect(planUpdates([{ id: 'o/r@a', agents: ['codex'] }], base)[0]!.args.slice(3).join(' ')).toBe('o/r -s a -a codex -g -y --json');
   });
 
   it('never builds a command without agents', () => {

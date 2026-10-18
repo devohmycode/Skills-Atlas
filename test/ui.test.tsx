@@ -519,6 +519,11 @@ describe('installed skills in the wizard', () => {
     expect(lastFrame()).toContain('↑ update available');
     await press(stdin, 'u');
     expect(lastFrame()).toContain('↑ will be updated');
+    // U marks every outdated skill at once, and unmarks them when they all are.
+    await press(stdin, 'U');
+    expect(lastFrame()).toContain('↑ update available');
+    await press(stdin, 'U');
+    expect(lastFrame()).toContain('↑ will be updated');
     // An update alone asks nothing: straight to the review.
     await press(stdin, KEY.enter);
     expect(lastFrame()).toContain('Update 1 skill to the latest version (global)');

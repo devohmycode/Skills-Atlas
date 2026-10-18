@@ -562,7 +562,7 @@ program
       themes: () => [],
       ids: () => [],
     };
-    const needsCatalog = words.length > 1 && ['install', 'show', 'browse', 'list'].some((w) => words.includes(w));
+    const needsCatalog = words.length > 1 && ['install', 'show', 'update', 'browse', 'list'].some((w) => words.includes(w));
     if (needsCatalog) {
       const c = await load();
       const sorted = sortSkills(c.skills, 'installs');
@@ -630,6 +630,22 @@ program
     }
   });
 
+installOptions(program.command('update'))
+  .argument('[ids...]', c.ids)
+  .description(c.updateCmd)
+  .action(async (ids: string[], opts: InstallFlags) => {
+    const outdated = await outdatedSkills();
+    const wanted = ids.map((id) => id.toLowerCase());
+    // Named skills are updated only if they are outdated: a reinstall of an up-to-date one would change nothing.
+    const chosen = ids.length ? outdated.filter((s) => wanted.includes(s.id.toLowerCase())) : outdated;
+    if (!chosen.length) return console.log(paint('dim', c.upToDate));
+    for (const s of chosen) console.log(`  ${paint('pink', '↑')} ${s.id}`);
+    const { defaults } = resolveDefaults();
+    // Each skill keeps its own agents; these options only fill in what a skill's scan did not name.
+    const options: InstallOptions = { agents: defaults.agents, scope: 'global', method: opts.copy ? 'copy' : opts.symlink ? 'symlink' : defaults.method, skillsVersion: opts.skillsVersion };
+    await apply([], [], options, opts, chosen.map((s) => ({ id: s.id, agents: s.agents })));
+  });
+
 program
   .command('outdated')
   .description(c.outdatedCmd)
@@ -640,6 +656,7 @@ program
     if (!outdated.length) return console.log(paint('dim', c.upToDate));
     for (const s of outdated) console.log(`  ${padEnd(s.id, 60)} ${paint('dim', s.agents.join(', '))}`);
     console.log(paint('dim', `\n${c.outdatedHint}`));
+    console.log(paint('dim', c.updateAllHint));
   });
 
 program

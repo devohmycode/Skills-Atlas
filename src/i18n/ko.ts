@@ -25,6 +25,7 @@ export const ko: Messages = {
     done: '완료',
     clear: '지우기',
     update: '업데이트',
+    updateAll: "모두 업데이트",
     preview: '미리보기',
   },
 
@@ -237,6 +238,8 @@ export const ko: Messages = {
     showFailed: (id, msg) => `${id}의 SKILL.md를 읽을 수 없습니다: ${msg}`,
     upToDate: "모든 전역 스킬이 최신입니다.",
     outdatedHint: "업데이트하려면 다시 설치: skills-atlas install <id> -g -a <agents> -y (트리에서는 u)",
+    updateCmd: "오래된 전역 스킬 업데이트: 전부 또는 지정한 것",
+    updateAllHint: "모두 업데이트: skills-atlas update",
     theme: '이 테마만 (ID 또는 이름)',
     search: '텍스트로 필터 (ID, 설명)',
     minInstalls: '최소 설치 수',

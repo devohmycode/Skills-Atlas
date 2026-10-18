@@ -424,6 +424,7 @@ export function TreeSelect({
     else if (input === 'g') openFocusedGitHub();
     else if (input === 'p') openPreview();
     else if (input === 'u' && row) toggleUpdate(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
+    else if (input === 'U') toggleUpdate([...updates]);
     else if (key.escape && live.current.filter) setFilter('');
     else if (key.return && changes(live.current.selected)) submit();
     else if (key.return && row?.kind === 'theme') setOpen(row.theme.id, !row.expanded);
@@ -445,7 +446,7 @@ export function TreeSelect({
         ['s', m.keys.sort, cycleSort],
         ['o', m.keys.official, toggleOfficial],
         ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint, ['p', m.keys.preview, openPreview] as Hint] : []),
-        ...(updates.size ? [['u', m.keys.update] as Hint] : []),
+        ...(updates.size ? [['u', m.keys.update] as Hint, ['U', m.keys.updateAll, () => toggleUpdate([...updates])] as Hint] : []),
         [m.keyNames.enter, m.keys.continue, canSubmit ? submit : undefined],
         ['q', m.keys.quit, onCancel],
       ];

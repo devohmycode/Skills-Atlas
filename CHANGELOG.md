@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Update everything.** `skills-atlas update` updates every outdated global skill, or only the ones named, each for its own agents (`--dry-run` available). In the tree, `U` marks every outdated skill at once.
+
 ## 0.10.0 — 2026-10-18
 
 - **📦 Packs.** Curated sets of skills to install together: Frontend dev, Security review, Code quality & testing, Writing & docs. Each is a theme in the tree and on the web page (tick it to take the pack), `skills-atlas packs` lists them and `install --pack <id>` installs one. A personal `packs.json` replaces them.

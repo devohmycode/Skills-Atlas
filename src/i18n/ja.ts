@@ -25,6 +25,7 @@ export const ja: Messages = {
     done: '完了',
     clear: 'クリア',
     update: '更新',
+    updateAll: "すべて更新",
     preview: 'プレビュー',
   },
 
@@ -237,6 +238,8 @@ export const ja: Messages = {
     showFailed: (id, msg) => `${id} の SKILL.md を読めません: ${msg}`,
     upToDate: "すべてのグローバルスキルは最新です。",
     outdatedHint: "更新するには再インストール: skills-atlas install <id> -g -a <agents> -y（ツリーでは u キー）",
+    updateCmd: "古いグローバルスキルを更新（すべて、または指定したもの）",
+    updateAllHint: "すべて更新: skills-atlas update",
     theme: 'これらのテーマのみ（ID または名前）',
     search: 'テキストで絞り込み（ID、説明）',
     minInstalls: '最小インストール数',

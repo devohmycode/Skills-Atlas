@@ -27,6 +27,7 @@ export const de: Messages = {
     done: 'fertig',
     clear: 'leeren',
     update: 'aktualisieren',
+    updateAll: "alle aktualisieren",
     preview: 'Vorschau',
   },
 
@@ -239,6 +240,8 @@ export const de: Messages = {
     showFailed: (id, msg) => `SKILL.md von ${id} nicht lesbar: ${msg}`,
     upToDate: "Alle globalen Skills sind aktuell.",
     outdatedHint: "Zum Aktualisieren neu installieren: skills-atlas install <id> -g -a <agents> -y (oder u im Baum).",
+    updateCmd: "aktualisiert veraltete globale Skills: alle oder die genannten",
+    updateAllHint: "Alle aktualisieren: skills-atlas update",
     theme: 'nur diese Themen (ID oder Name)',
     search: 'nach Text filtern (ID, Beschreibung)',
     minInstalls: 'Mindestzahl an Installationen',

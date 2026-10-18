@@ -4,7 +4,7 @@ import { SCOPES, type InstallOptions, type Removal, type Scope } from '../types.
 /** An installed skill to reinstall at its latest version, for the agents that have it. */
 export interface Update {
   id: string;
-  /** Agent display names, as the installed-skill scan reports them. */
+  /** Agent display names, as the installed-skill scan reports them, or agent ids. */
   agents: string[];
 }
 
@@ -65,7 +65,8 @@ export function planInstall(ids: string[], opts: InstallOptions): InstallCommand
 export function planUpdates(updates: Update[], opts: InstallOptions): InstallCommand[] {
   const byAgents = new Map<string, string[]>();
   for (const u of updates) {
-    const ids = u.agents.map((name) => AGENTS.find((a) => a.displayName === name)?.id).filter((id): id is string => !!id);
+    // Display names from the tree's scan, or agent ids from `outdated`.
+    const ids = u.agents.map((name) => AGENTS.find((a) => a.displayName === name || a.id === name)?.id).filter((id): id is string => !!id);
     const key = [...new Set(ids.length ? ids : opts.agents)].sort().join(' ');
     byAgents.set(key, [...(byAgents.get(key) ?? []), u.id]);
   }

@@ -25,6 +25,7 @@ export const zh: Messages = {
     done: '完成',
     clear: '清除',
     update: '更新',
+    updateAll: "全部更新",
     preview: '预览',
   },
 
@@ -237,6 +238,8 @@ export const zh: Messages = {
     showFailed: (id, msg) => `无法读取 ${id} 的 SKILL.md：${msg}`,
     upToDate: "所有全局技能均为最新。",
     outdatedHint: "更新方法是重新安装：skills-atlas install <id> -g -a <agents> -y（或在树中按 u）",
+    updateCmd: "更新过时的全局技能：全部，或指定的技能",
+    updateAllHint: "全部更新：skills-atlas update",
     theme: '仅显示这些主题（ID 或名称）',
     search: '按文本筛选（ID、描述）',
     minInstalls: '最少安装次数',

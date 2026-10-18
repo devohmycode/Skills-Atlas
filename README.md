@@ -61,6 +61,7 @@ skills-atlas export > my-skills.json          # installed skills as a selection 
 skills-atlas import my-skills.json -a claude-code -g  # install the same skills on another machine or project
 skills-atlas show obra/superpowers@brainstorming      # a skill's SKILL.md, read from GitHub (--json available)
 skills-atlas outdated                         # global skills with a newer version on GitHub (--json available)
+skills-atlas update                           # update them all (or name some; --dry-run available)
 skills-atlas mcp                              # MCP server on stdio, for Claude and other agents
 skills-atlas installed -a claude-code codex   # installed skills by agent: what each one sees (--json available)
 skills-atlas packs                            # curated packs: frontend, security, quality, writing
@@ -227,6 +228,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 | `g` | open the focused skill's GitHub repository |
 | `p` | preview the focused skill's `SKILL.md` before installing it, with its warning signs (↑↓ scroll, esc back) |
 | `u` | mark the focused outdated skill, or the outdated skills of a group, for update |
+| `U` | mark every outdated skill for update |
 | enter | continue |
 | `q` | quit |
 
