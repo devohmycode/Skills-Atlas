@@ -1,3 +1,4 @@
+import { checkRevision } from './install/plan.js';
 import { openBrowser } from './browser.js';
 import { guessPaths } from './catalog/enrich.js';
 import { fetchText } from './catalog/http.js';
@@ -20,13 +21,16 @@ export function openGitHub(skill: Pick<Skill, 'source'>): void {
  * The text is untrusted: control characters and escape sequences are removed
  * so that it cannot drive the terminal it is shown in.
  */
-export async function fetchSkillMarkdown(skill: Pick<Skill, 'source' | 'name' | 'path'>): Promise<string> {
+export async function fetchSkillMarkdown(skill: Pick<Skill, 'source' | 'name' | 'path'>, revision?: string): Promise<string> {
   if (!githubUrl(skill)) throw new Error('no GitHub repository');
+  const ref = revision === undefined ? 'HEAD' : checkRevision(revision);
   let lastError: unknown = new Error('SKILL.md not found');
   // skillDir: snapshots older than its fix may hold the SKILL.md's own path.
   for (const dir of skill.path !== undefined ? [skillDir(skill.path)] : guessPaths(skill.name)) {
+    if (revision !== undefined && (dir.split('/').some(p => p === '.' || p === '..') || /[?#\\\u0000-\u001f]/.test(dir))) throw new Error('invalid pinned skill path');
     try {
-      const url = `https://raw.githubusercontent.com/${skill.source}/HEAD/${dir ? `${dir}/` : ''}SKILL.md`;
+      const path = revision === undefined ? dir : dir.split('/').map(encodeURIComponent).join('/');
+      const url = `https://raw.githubusercontent.com/${skill.source}/${ref}/${path ? `${path}/` : ''}SKILL.md`;
       return stripControls(await fetchText(url, { retries: 1, timeoutMs: 15_000 }));
     } catch (err) {
       lastError = err;

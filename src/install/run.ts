@@ -56,10 +56,30 @@ export interface NpxRun {
   stderr: string;
 }
 
+const pinnedSource = /^https:\/\/github\.com\/[^/]+\/[^/]+\/tree\/[a-f0-9]{40}$/i;
+
+/**
+ * Child environment for a command. Pinned installs are verified byte for byte
+ * against Git blobs, so their checkout must not convert line endings; the
+ * overrides are appended after any GIT_CONFIG_* entries already set so they win.
+ */
+export function commandEnv(command: InstallCommand, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base, FORCE_COLOR: '0' };
+  if (command.kind !== 'add' || !pinnedSource.test(command.source)) return env;
+  const count = /^\d+$/.test(base.GIT_CONFIG_COUNT ?? '') ? Number(base.GIT_CONFIG_COUNT) : 0;
+  const overrides = [['core.autocrlf', 'false'], ['core.eol', 'lf']] as const;
+  overrides.forEach(([key, value], i) => {
+    env[`GIT_CONFIG_KEY_${count + i}`] = key;
+    env[`GIT_CONFIG_VALUE_${count + i}`] = value;
+  });
+  env.GIT_CONFIG_COUNT = String(count + overrides.length);
+  return env;
+}
+
 /** Runs `npx <args>` without a shell, capturing its output. */
 export function runNpx(
   npxArgs: string[],
-  opts: { cwd?: string; verbose?: boolean; onStderr?: (text: string) => void } = {},
+  opts: { cwd?: string; verbose?: boolean; onStderr?: (text: string) => void; env?: NodeJS.ProcessEnv } = {},
 ): Promise<NpxRun> {
   const { file, prefix, shell } = npxLauncher();
   const args = [...prefix, ...npxArgs];
@@ -68,7 +88,7 @@ export function runNpx(
       cwd: opts.cwd,
       shell,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '0' },
+      env: opts.env ?? { ...process.env, FORCE_COLOR: '0' },
     });
     let stdout = '';
     let stderr = '';
@@ -110,7 +130,7 @@ export async function runCommand(
   command: InstallCommand,
   opts: { cwd?: string; verbose?: boolean; onStderr?: (text: string) => void } = {},
 ): Promise<CommandOutcome> {
-  const run = await runNpx(command.args, opts);
+  const run = await runNpx(command.args, { ...opts, env: commandEnv(command) });
   if (command.kind === 'add') {
     return { command, exitCode: run.exitCode, results: parseResults(run.stdout), stderr: run.stderr };
   }

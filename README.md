@@ -125,6 +125,27 @@ With `agents` in the file (or `-a` on the command line), `sync` checks each targ
 
 The web interface and `skills-atlas packs` show how many pack members are present in the current catalog and list any missing ids. An absent catalog entry may still be installable; direct pack installation keeps the pack's original member list.
 
+For reproducible project installs, resolve each repository's current HEAD to a full commit SHA:
+
+```sh
+skills-atlas lock --dry-run  # review old/new commits and GitHub compare links; writes nothing
+skills-atlas lock            # write revisions only after every repository resolves
+skills-atlas sync -y
+skills-atlas sync --check    # also detect pinned file drift; exit 1 on a mismatch
+```
+
+The version-1 manifest accepts an optional mapping:
+
+```json
+{"skillsAtlas":1,"agents":["codex"],"skills":["owner/repo@skill"],"revisions":{"owner/repo@skill":"0123456789abcdef0123456789abcdef01234567"}}
+```
+
+Each pin must be a full 40-character Git commit SHA and name a listed skill. Omit a pin to keep the existing latest-version workflow. Locking reuses one HEAD lookup per repository and preserves other manifest fields. It does not install anything or roll back an installation.
+
+Pinned sync audits SKILL.md at the pinned revision, passes that same revision to `skills@1.7.0`, and checks installed file bytes against GitHub's tree at that revision. It checks canonical files and discovered agent copies, including supporting and extra files, before declaring success. The project's `skills-lock.json` must retain the installer's `ref` and `skillPath` fields; commit both manifests. Unreadable pinned audits block installation unless auditing was explicitly disabled with `--no-audit` or configuration.
+
+Pinned verification requires network access to GitHub. Missing verification metadata, incomplete Git trees, symbolic links/submodules inside a skill, repository Git attributes or filters that transform checked-out bytes, and agent formats that rewrite skill content fail explicitly; they never fall back to HEAD. Pinned installs run with `core.autocrlf=false` and `core.eol=lf` for their checkout only; your Git configuration is not changed. Git file modes are not checked. Upstream excludes `metadata.json`, `.git`, `__pycache__`, and `__pypackages__` from installed content; these are excluded from the expected tree. Existing manifests without revisions keep presence-only sync behavior.
+
 ### Trending
 
 Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form **🔥 Trending**, right after Recommended, sorted by growth. The theme appears once two snapshots with install counts can be compared.

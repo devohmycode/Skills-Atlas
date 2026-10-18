@@ -248,6 +248,7 @@ export const en = {
     completionCmd: "print the shell completion script (bash, zsh, fish, powershell)",
     packOption: "install the skills of these packs too (see `skills-atlas packs`)",
     packsCmd: "list the curated packs: skills to install together",
+    lockCmd: "pin project skills to current repository commits",
     syncCmd: "install the skills listed in this project's skills-atlas.json that are missing",
     noAudit: "install without the security audit (the risk check of each SKILL.md)",
     auditCmd: "show or set the security audit run before installs: on or off",

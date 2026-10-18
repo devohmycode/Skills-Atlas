@@ -248,6 +248,7 @@ export const ja: Messages = {
     completionCmd: "シェル補完スクリプトを出力（bash, zsh, fish, powershell）",
     packOption: "これらのパックのスキルもインストール（`skills-atlas packs` を参照）",
     packsCmd: "パック一覧: まとめてインストールするスキル",
+    lockCmd: "プロジェクトのスキルを現在のコミットに固定",
     syncCmd: "このプロジェクトの skills-atlas.json にあって未インストールのスキルをインストール",
     noAudit: "セキュリティ監査なしでインストール（各 SKILL.md のリスク検査）",
     auditCmd: "インストール前のセキュリティ監査を表示・設定: on または off",

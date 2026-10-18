@@ -10,7 +10,7 @@ export interface Update {
 
 export interface InstallCommand {
   kind: 'add' | 'remove';
-  /** `owner/repo` for `add`; empty for `remove`, which works on installed names. */
+  /** `owner/repo` or a pinned GitHub tree URL for `add`; empty for `remove`, which works on installed names. */
   source: string;
   skills: string[];
   /** Arguments passed to `npx`. */
@@ -24,10 +24,15 @@ export function parseSkillId(id: string): { source: string; name: string } {
   const at = id.lastIndexOf('@');
   if (at <= 0 || at === id.length - 1) throw new Error(`invalid skill id "${id}" — expected owner/repo@skill`);
   const source = id.slice(0, at);
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(source)) {
+  if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]+$/.test(source) || source.split('/').some(p => p === '.' || p === '..')) {
     throw new Error(`invalid source "${source}" in "${id}" — expected owner/repo`);
   }
   return { source, name: id.slice(at + 1) };
+}
+
+export function checkRevision(value: unknown): string {
+  if (typeof value !== 'string' || !/^[a-f0-9]{40}$/i.test(value)) throw new Error('revision must be a full Git commit SHA');
+  return value.toLowerCase();
 }
 
 /**
@@ -38,11 +43,14 @@ export function parseSkillId(id: string): { source: string; name: string } {
  * everything after them up to the next flag is taken as a value. `-a` is
  * always passed — without it `-y` installs to every detected agent.
  */
-export function planInstall(ids: string[], opts: InstallOptions): InstallCommand[] {
+export function planInstall(ids: string[], opts: InstallOptions, revisions: Record<string, string> = {}): InstallCommand[] {
   if (opts.agents.length === 0) throw new Error('at least one agent is required');
   const bySource = new Map<string, string[]>();
   for (const id of ids) {
-    const { source, name } = parseSkillId(id);
+    const parsed = parseSkillId(id);
+    const revision = revisions[id.toLowerCase()];
+    const source = revision === undefined ? parsed.source : `https://github.com/${parsed.source}/tree/${checkRevision(revision)}`;
+    const name = parsed.name;
     const list = bySource.get(source) ?? [];
     if (!list.includes(name)) list.push(name);
     bySource.set(source, list);

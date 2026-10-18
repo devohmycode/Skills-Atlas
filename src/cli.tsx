@@ -22,6 +22,8 @@ import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './age
 import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
 import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
+import { lockSelection, projectRevisionDrift, type Revisions } from './revisions.js';
+import { fetchSkillMarkdown } from './github.js';
 import { browseLoop } from './browse.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
@@ -165,11 +167,11 @@ function presetFromFlags(flags: InstallFlags): Partial<Pick<InstallOptions, 'age
  * Uninstalls `remove` (from each of their scopes), installs `ids` and reinstalls
  * `update`, reporting each skill. Returns the summary line it printed (empty for a dry run).
  */
-async function apply(ids: string[], remove: Removal[], options: InstallOptions, flags: InstallFlags, update: Update[] = []): Promise<string> {
+async function apply(ids: string[], remove: Removal[], options: InstallOptions, flags: InstallFlags, update: Update[] = [], revisions?: Revisions): Promise<string> {
   const r = t().run;
   const commands = [
     ...planRemovals(remove, options.skillsVersion),
-    ...(ids.length ? planInstall(ids, options) : []),
+    ...(ids.length ? planInstall(ids, options, revisions) : []),
     ...planUpdates(update, options),
   ];
   if (flags.dryRun) {
@@ -452,17 +454,18 @@ program
  * The security audit without a person at the keyboard: prints each skill's warning signs and
  * leaves out those that fail it. With the audit off, every id goes through.
  */
-async function auditGate(ids: string[], flags: InstallFlags): Promise<string[]> {
+async function auditGate(ids: string[], flags: InstallFlags, revisions?: Revisions): Promise<string[]> {
   if (!ids.length || !auditEnabled(readConfig(), flags.audit)) return ids;
   // Offline: the catalog only gives each skill's path, the SKILL.md itself comes from GitHub.
   const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
   const known = new Map(catalog?.skills.map((s) => [s.id.toLowerCase(), s]));
   const left = new Set<string>();
-  for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)))) {
+  for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)), s => fetchSkillMarkdown(s, revisions?.[s.id.toLowerCase()]))) {
     for (const x of r.risks.filter((x) => x.level !== 'info')) {
       console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  ${r.id}  SKILL.md:${x.line}`));
     }
     if (r.error) console.error(paint('yellow', `  ? ${r.id}: ${m.confirm.auditUnread}`));
+    if (r.error && revisions?.[r.id.toLowerCase()]) fail(`cannot audit pinned skill ${r.id}: ${r.error}`);
     if (failsAudit(r)) {
       console.error(paint('red', `✗ ${c.auditSkipped(r.id)}`));
       left.add(r.id);
@@ -472,7 +475,7 @@ async function auditGate(ids: string[], flags: InstallFlags): Promise<string[]> 
 }
 
 /** Installs skills given by id, asking only for the options the flags left open (the tree is skipped). */
-async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
+async function installIds(ids: string[], opts: InstallFlags, revisions?: Revisions): Promise<void> {
   for (const id of ids) {
     try {
       parseSkillId(id);
@@ -505,7 +508,7 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
         detectedAgents={detected}
         skillsVersion={opts.skillsVersion}
         initialIds={ids}
-        audit={auditEnabled(readConfig(), opts.audit)}
+        audit={auditEnabled(readConfig(), opts.audit) && !revisions}
         onDone={(r) => (result = r)}
       />,
     );
@@ -518,12 +521,16 @@ async function installIds(ids: string[], opts: InstallFlags): Promise<void> {
     // What the review screen kept: the audit may have left skills out.
     ids = chosen.ids;
   }
-  if (!wizard) ids = await auditGate(ids, opts);
+  if (!wizard || revisions) {
+    const audited = await auditGate(ids, opts, revisions);
+    if (revisions && audited.length !== ids.length) process.exitCode = 1;
+    ids = audited;
+  }
   if (!ids.length) return console.log(paint('dim', m.run.noChange));
   // shortcut: warns but goes on, as -y asked for no question; offer to stop here if users get caught by it.
   const inScope = (await listInstalled(options.scope)).map((s) => `${s.source ?? 'local'}@${s.name}`);
   for (const c of nameCollisions(ids, inScope)) console.error(paint('yellow', `⚠ ${m.confirm.replaces(c.incoming, c.replaced, c.installed)}`));
-  await apply(ids, [], options, opts);
+  await apply(ids, [], options, opts, [], revisions);
 }
 
 installOptions(program.command('install'))
@@ -539,11 +546,24 @@ installOptions(program.command('install'))
     return installIds([...new Set([...ids, ...fromPacks])], opts);
   });
 
+
+program.command('lock')
+  .description(c.lockCmd)
+  .option('--dry-run', c.dryRun)
+  .action(async (opts: { dryRun?: boolean }) => {
+    try {
+      for (const change of await lockSelection(PROJECT_FILE, !!opts.dryRun)) {
+        console.log(`${change.id}: ${change.previous ?? '-'} -> ${change.revision}`);
+        if (change.compare) console.log(`  ${change.compare}`);
+      }
+    } catch (err) { fail((err as Error).message); }
+  });
+
 installOptions(program.command('sync'))
   .description(c.syncCmd)
   .option('--check', c.syncCheck)
   .action(async (opts: InstallFlags & { check?: boolean }) => {
-    let file: { ids: string[]; agents?: string[] } = { ids: [] };
+    let file: ReturnType<typeof parseSelectionFile> = { ids: [] };
     try {
       file = parseSelectionFile(readFileSync(PROJECT_FILE, 'utf8'));
     } catch (err) {
@@ -553,9 +573,14 @@ installOptions(program.command('sync'))
     if (targets && !targets.length) fail(m.errors.agentRequired);
     // Check the requested destinations, even if another agent already has the skill.
     const installed = await listInstalled('project');
-    const groups = targets
+    const groups: { agents: string[] | undefined; ids: string[] }[] = targets
       ? missingSkillsByAgent(file.ids, installed, targets)
       : [{ agents: undefined, ids: missingSkills(file.ids, installed.map((s) => `${s.source ?? 'local'}@${s.name}`)) }];
+    // Pinned skills whose installed files drifted from their revision: reinstalled for every target.
+    try {
+      const drift = (await projectRevisionDrift(file.ids, file.revisions ?? {}, installed)).filter((id) => !groups.some((g) => g.ids.includes(id)));
+      if (drift.length) groups.push({ agents: targets, ids: drift });
+    } catch (err) { fail((err as Error).message); }
     const missing = new Set(groups.flatMap((g) => g.ids));
     if (!missing.size) return console.log(paint('dim', c.syncUpToDate(file.ids.length)));
     if (opts.check) {
@@ -565,7 +590,14 @@ installOptions(program.command('sync'))
       return;
     }
     for (const group of groups) {
-      if (group.ids.length) await installIds(group.ids, { ...opts, project: true, global: false, agent: group.agents });
+      if (group.ids.length) await installIds(group.ids, { ...opts, project: true, global: false, agent: group.agents }, file.revisions);
+    }
+    if (file.revisions && !opts.dryRun && !process.exitCode) {
+      const installed = await listInstalled('project');
+      try {
+        const absent = missingSkills(file.ids, installed.map(s => `${s.source ?? 'local'}@${s.name}`));
+        if (absent.length || (await projectRevisionDrift(file.ids, file.revisions, installed)).length) fail('pinned sync verification failed');
+      } catch (err) { fail((err as Error).message); }
     }
   });
 
@@ -758,14 +790,14 @@ installOptions(program.command('import'))
   .argument('<file>', c.fileArg)
   .description(c.importCmd)
   .action(async (file: string, opts: InstallFlags) => {
-    let ids: string[] = [];
+    let selection: ReturnType<typeof parseSelectionFile> = { ids: [] };
     try {
-      ids = parseSelection(readFileSync(file, 'utf8'));
+      selection = parseSelectionFile(readFileSync(file, 'utf8'));
     } catch (err) {
       fail(c.importFailed(file, err instanceof Error ? err.message : String(err)));
     }
-    if (!ids.length) return console.log(paint('dim', m.run.noChange));
-    await installIds(ids, opts);
+    if (!selection.ids.length) return console.log(paint('dim', m.run.noChange));
+    await installIds(selection.ids, opts, selection.revisions);
   });
 
 await program.parseAsync();
