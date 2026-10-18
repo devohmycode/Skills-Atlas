@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.12.0 — 2026-10-18
+
+- **Pinned project skills.** `skills-atlas.json` takes optional `revisions`, a full commit SHA per skill. `skills-atlas lock` writes them, and `lock --dry-run` shows the old and new commits with compare links. `sync` then installs and audits that exact revision and checks every installed copy byte for byte against it. `sync --check` also reports drifted content.
+- **`sync` checks every target agent.** A skill installed for Cursor alone no longer satisfies a request for Claude Code. Only the missing skill/agent combinations are installed. `-a` overrides the file's agents, and `-a '*'` means every supported agent.
+- **`skills-atlas doctor`** diagnoses installed skills without changing anything: dangling links, unreadable folders or `SKILL.md`, a malformed lock file, and lock entries whose skill is gone. Use `-p` or `-g` for one scope, and `--json` for scripts. It exits with 1 when it finds issues.
+- **Better search.** Search ignores case and accents and checks names, descriptions and labels. Every word must match. Name matches rank first, and installs break ties. This applies to the CLI, the tree, the web page, the demo and MCP.
+- **Web page: details and audit.** **Details** (or `p`) shows a skill's `SKILL.md`, its warning signs and any replacements. The changes panel runs the security audit. A skill that fails it is blocked until you tick **install anyway** for that skill, and Apply audits again before running.
+- **Web page: retry what failed.** After a partial failure or a lost connection, the page keeps only what is still outstanding. **Retry remaining changes** installs only for the agents that still lack the skill.
+- **Web page: save as pack.** The checked catalog skills become a personal pack in `packs.json`. It is available right away, and existing packs are never overwritten.
+- **Catalog health.** A snapshot records each source's status. The tree and the web page warn when a source was unavailable during the crawl. Packs show how many of their members are in the catalog and which are missing, in `skills-atlas packs` too.
+
+Validation: 229 tests and TypeScript checks.
+
 ## 0.11.0 — 2026-10-18
 
 - **Security audit before installing.** The risk check now runs on every skill to install or update. A skill with a high warning sign fails: on the review screen it is listed unticked, with its warning signs, and space installs it anyway; without a person at the keyboard (`install -y`, `import`, `sync`, `update`) it is left out; the MCP server refuses it unless `ignore_audit: true`. `skills-atlas audit on|off` sets it for good, `--no-audit` for one command.

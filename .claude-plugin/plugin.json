@@ -1,6 +1,6 @@
 {
   "name": "skills-atlas",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Find, read, install and update public Agent Skills from a catalog of about 75,000: a skill, MCP tools and a /skills-atlas command.",
   "author": {
     "name": "DevOhMyCode",
