@@ -21,14 +21,15 @@ function browser(preview: unknown = { markdown: '<img src=x onerror=bad()>', ris
   const context: any = {
     location: { hash: '#test' },
     document: { activeElement: null, getElementById: element, addEventListener: vi.fn(), querySelector: () => element('list') },
-    window: { open }, fetch: (path: string, init: any) => path.startsWith('/api/preview')
+    window: { open }, fetch: vi.fn((path: string, init: any) => path.startsWith('/api/preview')
       ? Promise.resolve({ ok: true, json: async () => preview }) : path === '/api/plan' && plan
-        ? Promise.resolve({ ok: true, json: async () => plan(JSON.parse(init.body)) }) : respond(path, init),
+        ? Promise.resolve({ ok: true, json: async () => plan(JSON.parse(init.body)) }) : respond(path, init)),
     TextDecoder, Intl, URLSearchParams, CSS: { escape: (s: string) => s }, setTimeout: plan ? setTimeout : () => 0, clearTimeout,
   };
   const script = [...PAGE_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)![1]!;
   new Script(script.replace(/\}\)\(\);\s*$/, `
     globalThis.ui = { view, opts, apply, body, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl, installedMatches, previewSkill,
+      renderPanel, packSelection, openPack, savePackSelection,
       init: function (state, messages) { M = messages; setState(state); } };
   })();`)).runInNewContext(context);
   context.ui.init({
@@ -43,7 +44,7 @@ function browser(preview: unknown = { markdown: '<img src=x onerror=bad()>', ris
   const pin = { checked: false };
   const row = { dataset: { id: skill.id }, classList: { toggle: vi.fn() }, querySelector: () => pin, closest: (selector: string): unknown => selector === '.row' ? row : null, tagName: 'DIV' };
   rows.set(skill.id, row);
-  return { ui: context.ui, element, skill, row, pin, open,
+  return { ui: context.ui, element, skill, row, pin, open, context,
     respond(fn: typeof respond) { respond = fn; } };
 }
 
@@ -355,5 +356,60 @@ describe('retrying web operations', () => {
     b.response([{ type: 'end', ok: false }]);
     await b.ui.apply();
     expect(b.ui.body().install).toEqual(['owner/repo@skill']);
+  });
+});
+
+describe('saving packs in the web interface', () => {
+  it('saves checked catalog skills, refreshes navigation and keeps pending changes', async () => {
+    const { ui, element, skill, context } = browser();
+    const known = { ...skill, id: 'owner/repo@installed', catalog: true };
+    const local = { ...skill, id: 'local@custom', catalog: false };
+    const themes = [{ id: 'code', label: 'Code' }];
+    ui.init({ installed: [known, local], agents: [], cwd: '.', themes, canSavePacks: true }, { savePack: 'Save as pack' });
+    ui.renderPanel();
+    expect(element('panel-body').innerHTML).toContain('data-act="save-pack">');
+    ui.toggle(known);
+    expect(ui.packSelection()).toEqual([]);
+    ui.toggle(known);
+    ui.toggle(skill);
+    expect(ui.packSelection()).toEqual([known.id, skill.id]);
+    ui.openPack();
+    expect(element('pack-dialog').showModal).toHaveBeenCalledOnce();
+    expect(element('pack-id').focus).toHaveBeenCalledOnce();
+    element('pack-id').value = 'mine';
+    element('pack-name').value = '<img src=x onerror=bad()>';
+    element('pack-description').value = 'My selection';
+    context.fetch = vi.fn(async (url: string) => ({ ok: true, json: async () =>
+      url === '/api/packs' ? { pack: { id: 'mine' } } :
+      url === '/api/state' ? { installed: [known, local], agents: [], cwd: '.', themes: [...themes, { id: 'pack:mine', label: '<script>bad</script>' }], canSavePacks: true } :
+      { items: [skill], counts: { 'pack:mine': 1 }, total: 1, all: 1 },
+    }));
+    await ui.savePackSelection();
+    const call = context.fetch.mock.calls.find((c: any[]) => c[0] === '/api/packs');
+    expect(JSON.parse(call[1].body)).toEqual({ id: 'mine', name: '<img src=x onerror=bad()>', description: 'My selection', skills: [known.id, skill.id] });
+    expect(element('pack-dialog').close).toHaveBeenCalledOnce();
+    expect(element('themes').innerHTML).toContain('pack:mine');
+    expect(element('themes').innerHTML).toContain('&lt;script&gt;bad&lt;/script&gt;');
+    expect(element('themes').innerHTML).not.toContain('<script>');
+    expect(ui.packSelection()).toContain(skill.id);
+  });
+
+  it('shows save errors in the dialog and explicitly disables saving in the demo', async () => {
+    const { ui, element, skill, context } = browser();
+    ui.init({ installed: [], agents: [], cwd: '.', themes: [], canSavePacks: true }, { packDemo: 'Saving unavailable in demo' });
+    ui.toggle(skill);
+    ui.openPack();
+    context.fetch = vi.fn(async () => ({ ok: false, json: async () => ({ error: '<script>duplicate</script>' }) }));
+    await ui.savePackSelection();
+    expect(element('pack-error').textContent).toBe('<script>duplicate</script>');
+    expect(element('pack-dialog').close).not.toHaveBeenCalled();
+    ui.init({ installed: [], agents: [], cwd: '.', themes: [], canSavePacks: false }, { packDemo: 'Saving unavailable in demo' });
+    ui.renderPanel();
+    expect(element('panel-body').innerHTML).toContain('Saving unavailable in demo');
+    expect(element('panel-body').innerHTML).toMatch(/data-act=.save-pack.[^>]*disabled/);
+    context.fetch.mockClear();
+    ui.openPack();
+    expect(context.fetch).not.toHaveBeenCalled();
+    expect(element('pack-dialog').showModal).toHaveBeenCalledOnce();
   });
 });

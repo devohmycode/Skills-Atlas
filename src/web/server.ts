@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { AGENTS, detectAgents, unknownAgents } from '../agents.js';
 import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog/installed.js';
+import { PackSaveError, packTheme, savePack } from '../catalog/packs.js';
 import { byGrowth } from '../catalog/trending.js';
 import { createSearchIndex, SORT_ORDERS } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
@@ -35,6 +36,8 @@ export interface ServerOptions {
   listInstalled?: (scope: 'project' | 'global', cwd?: string) => Promise<InstalledSkill[]>;
   runAll?: typeof runAll;
   readSkill?: typeof fetchSkillMarkdown;
+  /** Personal pack destination; injected tests never touch the user profile. */
+  packsPath?: string;
 }
 
 export interface AtlasServer {
@@ -103,7 +106,11 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   const run = opts.runAll ?? runAll;
   const readSkill = opts.readSkill ?? fetchSkillMarkdown;
   const token = randomBytes(24).toString('hex');
-  const search = createSearchIndex(opts.skills);
+  let skills = opts.skills;
+  let themes = opts.themes;
+  let catalogSkills = opts.catalogSkills;
+  const catalogIds = new Set(catalogSkills.map((s) => s.id));
+  let search = createSearchIndex(skills);
   let queryCache: { key: string; matching: Skill[]; counts: Record<string, number> } | undefined;
   let running = false;
 
@@ -115,11 +122,11 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     const found = await Promise.all(SCOPES.map((sc) => list(sc, cwd)));
     const coverage = new Map<string, Partial<Record<Scope, string[]>>>();
     SCOPES.forEach((sc, i) => {
-      for (const [id, e] of mergeInstalled(opts.catalogSkills, [], found[i]!).installed) {
+      for (const [id, e] of mergeInstalled(catalogSkills, [], found[i]!).installed) {
         coverage.set(id, { ...coverage.get(id), [sc]: agentIds(e.agents) });
       }
     });
-    return { ...mergeInstalled(opts.catalogSkills, opts.skills, found.flat()), coverage };
+    return { ...mergeInstalled(catalogSkills, skills, found.flat()), coverage };
   }
 
   function replacements(ids: string[], entries: Map<string, InstalledEntry>, scope: 'project' | 'global') {
@@ -142,14 +149,15 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
         auditOff: t().confirm.auditOff, auditUnread: t().confirm.auditUnread, auditToggle: t().confirm.auditToggle },
       cwd,
       skillsVersion: opts.skillsVersion,
-      themes: [INSTALLED_THEME, ...opts.themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
+      canSavePacks: true,
+      themes: [INSTALLED_THEME, ...themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
       agents: AGENTS.map((a) => ({ id: a.id, name: a.displayName, detected: detected.has(a.id) })),
       defaults: {
         agents: config.agents?.length ? config.agents : detectedList,
         scope: config.scope ?? 'project',
         method: config.method ?? 'symlink',
       },
-      installed: [...inst.installed].map(([id, e]) => ({ ...slim(byId.get(id)!), installedName: e.name, scopes: e.scopes, agentsByScope: inst.coverage.get(id) ?? {} })),
+      installed: [...inst.installed].map(([id, e]) => ({ ...slim(byId.get(id)!), installedName: e.name, scopes: e.scopes, agentsByScope: inst.coverage.get(id) ?? {}, catalog: catalogIds.has(id) })),
     };
   }
 
@@ -181,8 +189,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     const install = [...new Set(requested)];
     if (auditOverrides.some((id) => !install.includes(id))) throw new HttpError(400, 'invalid audit overrides');
     const inst = await installed();
-    const known = new Set(opts.catalogSkills.map((s) => s.id));
-    const unknown = install.filter((id) => !known.has(id));
+    const unknown = install.filter((id) => !catalogIds.has(id));
     if (unknown.length) throw new HttpError(400, `unknown skills: ${unknown.join(', ')}`);
     const notInstalled = remove.filter((id) => !inst.installed.has(id));
     if (notInstalled.length) throw new HttpError(400, `not installed: ${notInstalled.join(', ')}`);
@@ -190,7 +197,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     const badAgents = unknownAgents(options.agents);
     if (badAgents.length) throw new HttpError(400, `unknown agents: ${badAgents.join(', ')}`);
     const enabled = auditEnabled(readConfig());
-    const byId = new Map(opts.catalogSkills.map((s) => [s.id, s]));
+    const byId = new Map(catalogSkills.map((s) => [s.id, s]));
     const results = enabled ? await auditSkills(install.map((id) => byId.get(id)!), readSkill) : [];
     const failing = results.filter(failsAudit).map((r) => r.id);
     if (auditOverrides.some((id) => !failing.includes(id))) throw new HttpError(400, 'invalid audit overrides');
@@ -258,7 +265,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
 
   const server = createServer((req, res) => {
     handle(req, res).catch((err: unknown) => {
-      const status = err instanceof HttpError ? err.status : 500;
+      const status = err instanceof HttpError || err instanceof PackSaveError ? err.status : 500;
       if (res.headersSent) return res.end();
       json(req, res, { error: err instanceof Error ? err.message : String(err) }, status);
     });
@@ -289,7 +296,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       const scope = url.searchParams.get('scope') ?? 'project';
       if (scope !== 'project' && scope !== 'global') throw new HttpError(400, 'invalid scope');
       const inst = await installed();
-      const skill = opts.catalogSkills.find((s) => s.id === id) ?? inst.skills.find((s) => s.id === id);
+      const skill = catalogSkills.find((s) => s.id === id) ?? inst.skills.find((s) => s.id === id);
       if (!skill) throw new HttpError(404, 'unknown skill');
       const collisions = replacements([skill.id], inst.installed, scope);
       try {
@@ -298,6 +305,19 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       } catch (err) {
         return json(req, res, { id: skill.id, risks: [], collisions, error: err instanceof Error ? err.message : String(err) });
       }
+    }
+    if (req.method === 'POST' && url.pathname === '/api/packs') {
+      const pack = savePack(await readJson(req), catalogSkills, opts.packsPath);
+      const theme = packTheme(pack.id);
+      const ids = new Set(pack.skills);
+      const decorate = (s: Skill) => ids.has(s.id) ? { ...s, themes: [...new Set([...s.themes, theme])] } : s;
+      skills = skills.map(decorate);
+      catalogSkills = catalogSkills.map(decorate);
+      const after = Math.max(...themes.map((th, i) => th.id.startsWith('pack:') || th.id === 'recommended' || th.id === 'trending' ? i : -1)) + 1;
+      themes = [...themes.slice(0, after), { id: theme, label: `📦 ${pack.name}`, description: pack.description }, ...themes.slice(after)];
+      search = createSearchIndex(skills);
+      queryCache = undefined;
+      return json(req, res, { pack }, 201);
     }
     if (req.method === 'POST' && url.pathname === '/api/plan') {
       const { commands, audit, blocked, collisions } = await plan(await readJson(req));

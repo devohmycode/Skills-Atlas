@@ -36,6 +36,7 @@ const state = {
     summaryFailed: 'Demo only',
     summaryFailedHint: 'Nothing is installed from this page. Copy the commands, or run npx skills-atlas ui on your machine.',
   },
+  canSavePacks: false,
   cwd: '~/your-project',
   sources: catalog.stats.sources,
   skillsVersion: '1.7.0',
@@ -77,6 +78,7 @@ const shim = `<script>
           body.options.scope === 'global' ? ['-g'] : [], body.options.method === 'copy' ? ['--copy'] : [], ['-y --json']).join(' ');
       }) });
     }
+    if (url.pathname.endsWith('/api/packs')) return json({ error: DEMO.state.messages.packDemo }, 403);
     if (url.pathname.endsWith('/api/apply')) return json({ error: 'This is a demo: run npx skills-atlas ui to install skills.' }, 400);
     return Promise.reject(new Error('not available in the demo'));
   };

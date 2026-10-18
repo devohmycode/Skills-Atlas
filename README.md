@@ -109,6 +109,8 @@ It is a pattern check on the text, tuned on the 150 most installed skills: it po
 
 A pack is a set of skills meant to be installed together: **📦 Frontend dev**, **📦 Security review**, **📦 Code quality & testing** and **📦 Writing & docs**. Each one is a theme in the tree and on the web page, after Recommended and Trending: tick the theme to take the whole pack, or open it to pick. `skills-atlas packs` lists them and `install --pack <id>` installs one.
 
+In the web interface, **Save as pack** saves the checked catalog skills, including installed ones that remain checked, as a personal pack. Enter a unique lowercase id (letters, digits and hyphens), a name and description; a pack contains 1–100 skills. Saving adds to your personal file, preserves bundled packs on the first save, and opens the new pack immediately without restarting. Duplicate ids and invalid existing files are rejected without overwriting them. The offline demo explicitly disables saving.
+
 The packs ship in [`data/packs.json`](data/packs.json). As for Recommended, a personal `~/.config/skills-atlas/packs.json` replaces them, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; `[]` hides them.
 
 ### A project's skills: skills-atlas.json
