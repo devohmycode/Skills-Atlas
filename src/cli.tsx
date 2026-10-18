@@ -22,7 +22,7 @@ import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
 import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
 import { browseLoop } from './browse.js';
-import { missingSkills, parseSelection, parseSelectionFile, toSelection } from './selection.js';
+import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
 /** The skills a project expects, at its root, versioned with its code. */
 const PROJECT_FILE = 'skills-atlas.json';
@@ -541,17 +541,24 @@ installOptions(program.command('sync'))
     } catch (err) {
       fail(c.syncFailed(PROJECT_FILE, (err as NodeJS.ErrnoException).code === 'ENOENT' ? c.syncNoFile : (err as Error).message));
     }
-    // The project's skills, in the project: they travel with the code.
-    const installed = (await listInstalled('project')).map((s) => `${s.source ?? 'local'}@${s.name}`);
-    const missing = missingSkills(file.ids, installed);
-    if (!missing.length) return console.log(paint('dim', c.syncUpToDate(file.ids.length)));
+    const targets = presetFromFlags({ ...opts, agent: opts.agent ?? file.agents }).agents;
+    if (targets && !targets.length) fail(m.errors.agentRequired);
+    // Check the requested destinations, even if another agent already has the skill.
+    const installed = await listInstalled('project');
+    const groups = targets
+      ? missingSkillsByAgent(file.ids, installed, targets)
+      : [{ agents: undefined, ids: missingSkills(file.ids, installed.map((s) => `${s.source ?? 'local'}@${s.name}`)) }];
+    const missing = new Set(groups.flatMap((g) => g.ids));
+    if (!missing.size) return console.log(paint('dim', c.syncUpToDate(file.ids.length)));
     if (opts.check) {
-      for (const id of missing) console.log(`  ${id}`);
-      console.error(paint('yellow', c.syncMissing(missing.length)));
+      for (const group of groups) for (const id of group.ids) console.log(`  ${id}${group.agents ? `  [${group.agents.join(', ')}]` : ''}`);
+      console.error(paint('yellow', c.syncMissing(missing.size)));
       process.exitCode = 1;
       return;
     }
-    await installIds(missing, { ...opts, project: true, global: false, agent: opts.agent ?? file.agents });
+    for (const group of groups) {
+      if (group.ids.length) await installIds(group.ids, { ...opts, project: true, global: false, agent: group.agents });
+    }
   });
 
 program

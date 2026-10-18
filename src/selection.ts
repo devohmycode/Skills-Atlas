@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { parseSkillId } from './install/plan.js';
 import type { InstalledSkill } from './install/run.js';
+import { AGENTS, unknownAgents } from './agents.js';
 
 /** What `export` writes and `import` reads: skill ids, so that `skills add` can install them anywhere. */
 export interface Selection {
@@ -49,6 +50,24 @@ export const parseSelection = (text: string): string[] => parseSelectionFile(tex
 export function missingSkills(wanted: string[], installedIds: string[]): string[] {
   const have = new Set(installedIds.map((id) => id.toLowerCase()));
   return wanted.filter((id) => !have.has(id.toLowerCase()));
+}
+
+/** Missing project skills per target, grouped so an agent never reinstalls a skill it already has. */
+export function missingSkillsByAgent(wanted: string[], installed: InstalledSkill[], targets: string[]): { agents: string[]; ids: string[] }[] {
+  const unknown = unknownAgents(targets);
+  if (unknown.length) throw new Error(`unknown agents: ${unknown.join(', ')}`);
+  const agents = targets.includes('*') ? AGENTS : [...new Set(targets)].map((id) => AGENTS.find((a) => a.id === id)!);
+  const groups = new Map<string, { agents: string[]; ids: string[] }>();
+  for (const agent of agents) {
+    const have = installed.filter((s) => s.agents.some((a) => a === agent.id || a === agent.displayName));
+    const ids = missingSkills(wanted, have.map((s) => `${s.source ?? 'local'}@${s.name}`));
+    if (!ids.length) continue;
+    const key = JSON.stringify(ids);
+    const group = groups.get(key) ?? { agents: [], ids };
+    group.agents.push(agent.id);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
 
 /**
