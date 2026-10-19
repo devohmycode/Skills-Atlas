@@ -372,3 +372,10 @@ npm run demo       # docs/demo/index.html: the web interface with embedded data,
 ```
 
 The CLI defaults to React's production runtime (also with `npm run dev`) with a maximum of 60 frames per second. It uses Ink's standard renderer because the incremental renderer in Ink 6.8 can duplicate lines. Set `NODE_ENV=development` explicitly when debugging React. The compiled `dist/cli.js` launcher and its sibling chunks must stay together.
+
+## Related projects
+
+The same tree, flags and review for the other kinds of agent extensions:
+
+- [mcp-atlas](https://github.com/devohmycode/mcp-atlas): MCP servers, written into the config of Claude Code, Claude Desktop, Cursor, Codex and Grok.
+- [plugins-atlas](https://github.com/devohmycode/plugins-atlas): agent plugins from marketplaces (skills, commands, subagents, hooks, MCP servers).
