@@ -84,6 +84,8 @@ export const ko: Messages = {
     noNewRisk: '설치된 버전 이후 새 경고 신호 없음',
     noRisk: "경고 신호 없음 (패턴 검사이며 보장은 아님)",
     growth: (n) => `지난 스냅샷 이후 설치 +${n}`,
+    needs: '필요',
+    updated: (date) => `${date} 업데이트`,
   },
 
   agents: {
@@ -295,6 +297,7 @@ export const ko: Messages = {
     minInstalls: '최소 설치 수',
     all: '설치 수나 스타가 없는 스킬도 포함',
     official: '공식 스킬만 (벤더가 게시한 것, officialskills.sh 기준)',
+    ready: '명시된 프로그램이 모두 이 컴퓨터에 설치된 skill만',
     sort: '정렬: installs (설치 많은 순) 또는 name (이름)',
     agent: "대상 에이전트 (ID는 `skills-atlas agents` 참고, '*' = 전체)",
     global: '사용자 단위로 설치 (모든 프로젝트)',

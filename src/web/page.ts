@@ -167,6 +167,7 @@ nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 a.source:hover { color: var(--accent); text-decoration: underline; }
 .tag { font-size: 12px; white-space: nowrap; }
 .tag.official { color: var(--official); }
+.tag.needs, .tag.updated { color: var(--ink-3); }
 .tag.recommended { color: var(--gold); }
 .tag.installed { color: var(--accent); }
 .tag.drop { color: var(--remove); font-weight: 600; }
@@ -463,6 +464,12 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     if (inst) tags += on
       ? '<span class="tag installed">● ' + esc(tr('installedIn', { where: inst.scopes.map(function (x) { return M[x]; }).join(' + ') })) + '</span>'
       : '<span class="tag drop">' + esc(M.willRemove) + '</span>';
+    var req = s.requires || {};
+    if ((req.bins && req.bins.length) || req.compatibility) {
+      tags += '<span class="tag needs"' + (req.compatibility ? ' title="' + esc(req.compatibility) + '"' : '') + '>⚙ ' +
+        esc(req.bins && req.bins.length ? (M.needs || 'needs') + ' ' + req.bins.join(', ') : req.compatibility) + '</span>';
+    }
+    if (s.updatedAt) tags += '<span class="tag updated">' + esc(tr('updated', { date: s.updatedAt })) + '</span>';
     var url = githubUrl(s);
     var source = url ? '<a class="source" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="g · ' + esc(M.github) + '">' + esc(s.source) + '</a>'
                      : '<span class="source">' + esc(s.source) + '</span>';

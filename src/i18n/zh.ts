@@ -84,6 +84,8 @@ export const zh: Messages = {
     noNewRisk: '相对你的版本没有新的警示信号',
     noRisk: "未发现警示信号（模式检查，并非保证）",
     growth: (n) => `自上次快照以来新增 ${n} 次安装`,
+    needs: '需要',
+    updated: (date) => `更新于 ${date}`,
   },
 
   agents: {
@@ -295,6 +297,7 @@ export const zh: Messages = {
     minInstalls: '最少安装次数',
     all: '包括没有安装量或星标的技能',
     official: '仅官方技能（由厂商发布，依据 officialskills.sh）',
+    ready: '仅显示所需程序均已在本机安装的 skill',
     sort: '排序：installs（安装最多优先）或 name（名称）',
     agent: "目标智能体（ID 见 `skills-atlas agents`，'*' 表示全部）",
     global: '为当前用户安装（所有项目可用）',

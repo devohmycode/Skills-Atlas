@@ -96,7 +96,7 @@ The `SKILL.md` preview (`p`), `skills-atlas show` and the MCP server's `show_ski
 | medium | needs a program missing from this machine, runs commands as administrator, reads secrets from the environment, sends data to a server |
 | info | installs or runs packages or bundled scripts, states its requirements |
 
-Prerequisites come from the frontmatter: the programs listed under `requires.bins` (OpenClaw metadata) are looked up on your `PATH`, and the spec's `compatibility` text (agent versions, tools, network) is shown as is. A missing program does not block the install, but the review screen and `install -y` name it before any command runs. Skills rarely declare either field, so no warning does not mean nothing is needed.
+The catalog already carries them for the 3,000 most installed skills, read at each crawl, with the day their folder last changed for the top 1,000: the tree's details show `needs gh, ✗ jq` (missing programs in red), the `compatibility` text and `updated 2026-09-30`; the web page shows the same as tags, and MCP's `search_skills` returns `requires` and `updated_at`. Prerequisites come from the frontmatter: the programs listed under `requires.bins` (OpenClaw metadata) are looked up on your `PATH`, and the spec's `compatibility` text (agent versions, tools, network) is shown as is. A missing program does not block the install, but the review screen and `install -y` name it before any command runs. Skills rarely declare either field, so no warning does not mean nothing is needed.
 
 It is a pattern check on the text, tuned on the 150 most installed skills: it points at lines worth reading, it does not prove a skill safe. `show` prints the warning signs on stderr, so that stdout stays the `SKILL.md` alone; `show --json` adds them as `risks`.
 
@@ -302,6 +302,7 @@ The mouse works too: the wheel moves through the list, a click ticks a skill, op
 | `--all`, `--min-installs <n>` | include skills with no installs or stars / minimum installs |
 | `-s, --sort <order>` | `installs` (default) or `name`; also for `list` |
 | `--official` | only official skills; also for `list` and `themes` |
+| `--ready` | only skills whose stated programs are all on your `PATH` (skills that state none stay); also for `list` |
 | `-l, --lang <code>` | interface language, remembered |
 
 Any option left out is asked after the selection, pre-filled with your last choices (`~/.config/skills-atlas/config.json`) and the agents detected on the machine.

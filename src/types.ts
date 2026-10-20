@@ -31,6 +31,10 @@ export interface Skill {
   rank?: number;
   /** Installs gained since the previous snapshot (crawl time). */
   growth?: number;
+  /** What its SKILL.md frontmatter says it needs: programs (`requires.bins`) and the spec's `compatibility` text. */
+  requires?: { bins?: string[]; compatibility?: string };
+  /** Day its folder last changed on GitHub (YYYY-MM-DD), for the most installed skills. */
+  updatedAt?: string;
   /** Published by the vendor itself (its GitHub owner is listed on officialskills.sh). */
   official?: boolean;
   /** Personal editorial selection, independent of popularity or official status. */
