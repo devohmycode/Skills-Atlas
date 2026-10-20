@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Prerequisites.** The risk check reads what a `SKILL.md` frontmatter says it needs. Programs under `requires.bins` that are not on your `PATH` are a medium warning, named on the review screen and by `install -y` before any command runs. The `compatibility` field is shown as information in `p`, `show` and MCP's `show_skill`.
+
 ## 0.12.0 — 2026-10-18
 
 - **Pinned project skills.** `skills-atlas.json` takes optional `revisions`, a full commit SHA per skill. `skills-atlas lock` writes them, and `lock --dry-run` shows the old and new commits with compare links. `sync` then installs and audits that exact revision and checks every installed copy byte for byte against it. `sync --check` also reports drifted content.

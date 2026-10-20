@@ -375,7 +375,7 @@ function Confirm({ ids, remove, update, collisions, options, audit, targets, rea
   const riskLine = (r: AuditResult, level: 'high' | 'medium') =>
     r.risks.filter((x) => x.level === level).slice(0, 2).map((x) => (
       <Text key={x.rule} color={level === 'high' ? PALETTE.danger : PALETTE.gold} wrap="truncate-end">
-        {`      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  `}
+        {`      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  `}
         <Text dimColor>{`SKILL.md:${x.line}`}</Text>
       </Text>
     ));

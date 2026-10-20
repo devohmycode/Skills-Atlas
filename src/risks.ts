@@ -5,8 +5,10 @@
  * interface translates it by id.
  */
 
+import { onPath, prerequisites } from './prereqs.js';
+
 export type RiskLevel = 'high' | 'medium' | 'info';
-export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode';
+export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode' | 'missingBin' | 'requires';
 
 export interface Risk {
   rule: RiskRule;
@@ -48,7 +50,7 @@ const RULES: { rule: RiskRule; level: RiskLevel; label: string; re: RegExp }[] =
 const ORDER: Record<RiskLevel, number> = { high: 0, medium: 1, info: 2 };
 
 /** The rules a SKILL.md matches, most serious first, each with its first line. */
-export function scanRisks(markdown: string): Risk[] {
+export function scanRisks(markdown: string, has: (bin: string) => boolean = onPath): Risk[] {
   const found = new Map<RiskRule, Risk>();
   markdown.split('\n').forEach((text, i) => {
     for (const r of RULES) {
@@ -58,6 +60,11 @@ export function scanRisks(markdown: string): Risk[] {
       else found.set(r.rule, { rule: r.rule, level: r.level, label: r.label, line: i + 1, count: 1, excerpt: text.trim().slice(0, 160) });
     }
   });
+  // What the frontmatter says the skill needs: a missing program makes its first real task fail.
+  const pre = prerequisites(markdown);
+  const missing = pre.bins?.names.filter((b) => !has(b)) ?? [];
+  if (missing.length) found.set('missingBin', { rule: 'missingBin', level: 'medium', label: 'needs a program not found on this machine', line: pre.bins!.line, count: 1, excerpt: `missing: ${missing.join(', ')} (needs ${pre.bins!.names.join(', ')})` });
+  if (pre.compatibility) found.set('requires', { rule: 'requires', level: 'info', label: 'states its requirements', line: pre.compatibility.line, count: 1, excerpt: pre.compatibility.text });
   return [...found.values()].sort((a, b) => ORDER[a.level] - ORDER[b.level] || a.line - b.line);
 }
 

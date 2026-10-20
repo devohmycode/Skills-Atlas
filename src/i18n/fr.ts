@@ -78,7 +78,7 @@ export const fr: Messages = {
     updates: (n) => `${n} ${s(n, 'mise à jour', 'mises à jour')} (u)`,
     previewLoading: 'Chargement du SKILL.md…',
     previewFailed: (msg) => `Impossible de charger le SKILL.md : ${msg}`,
-    risks: { pipeShell: "télécharge et exécute du code", credentials: "touche à des fichiers d’identifiants", destructive: "supprime largement", hidden: "demande à l’agent de cacher des choses ou d’ignorer ses consignes", sudo: "lance des commandes en administrateur", secrets: "lit des secrets dans l’environnement", sendsData: "envoie des données à un serveur", runsCode: "installe ou lance des paquets ou des scripts" },
+    risks: { pipeShell: "télécharge et exécute du code", credentials: "touche à des fichiers d’identifiants", destructive: "supprime largement", hidden: "demande à l’agent de cacher des choses ou d’ignorer ses consignes", sudo: "lance des commandes en administrateur", secrets: "lit des secrets dans l’environnement", sendsData: "envoie des données à un serveur", runsCode: "installe ou lance des paquets ou des scripts", missingBin: "demande un programme absent de cette machine", requires: "indique ses prérequis" },
     riskLevels: { high: "élevé", medium: "moyen", info: "info" },
     risksFound: (n) => `${n} ${s(n, 'signal d’alerte', 'signaux d’alerte')} (contrôle par motifs, pas une garantie)`,
     noRisk: "Aucun signal d’alerte (contrôle par motifs, pas une garantie)",

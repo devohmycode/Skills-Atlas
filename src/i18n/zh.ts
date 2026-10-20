@@ -76,7 +76,7 @@ export const zh: Messages = {
     updates: (n) => `${n} 个更新 (u)`,
     previewLoading: '正在加载 SKILL.md…',
     previewFailed: (msg) => `无法加载 SKILL.md：${msg}`,
-    risks: { pipeShell: "下载并执行代码", credentials: "触及凭据文件", destructive: "大范围删除", hidden: "要求代理隐瞒或忽略其指令", sudo: "以管理员身份运行命令", secrets: "从环境变量读取机密", sendsData: "向服务器发送数据", runsCode: "安装或运行软件包或脚本" },
+    risks: { pipeShell: "下载并执行代码", credentials: "触及凭据文件", destructive: "大范围删除", hidden: "要求代理隐瞒或忽略其指令", sudo: "以管理员身份运行命令", secrets: "从环境变量读取机密", sendsData: "向服务器发送数据", runsCode: "安装或运行软件包或脚本", missingBin: "需要本机缺少的程序", requires: "说明了运行要求" },
     riskLevels: { high: "高", medium: "中", info: "信息" },
     risksFound: (n) => `${n} 个警示信号（模式检查，并非保证）`,
     noRisk: "未发现警示信号（模式检查，并非保证）",

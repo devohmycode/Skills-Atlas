@@ -41,3 +41,21 @@ describe('risk check', () => {
     expect(riskReport([])).toMatch(/no warning sign/);
   });
 });
+
+describe('prerequisites', () => {
+  const md = (front: string) => `---\nname: x\n${front}\n---\n# X\n`;
+  it('reads requires.bins in JSON or YAML form and flags the missing ones', async () => {
+    const { prerequisites } = await import('../src/prereqs.js');
+    expect(prerequisites(md('metadata: {"openclaw":{"requires":{"bins":["gh","jq"]}}}')).bins?.names).toEqual(['gh', 'jq']);
+    expect(prerequisites(md('metadata:\n  requires:\n    bins:\n      - ffmpeg\n      - "yt-dlp"')).bins?.names).toEqual(['ffmpeg', 'yt-dlp']);
+    expect(prerequisites(md('bins: [gh, "bad name;rm"]')).bins?.names).toEqual(['gh']);
+    expect(prerequisites('# no frontmatter\nbins: [gh]').bins).toBeUndefined();
+    const risks = scanRisks(md('metadata: {"requires":{"bins":["gh","jq"]}}'), (b) => b === 'gh');
+    expect(risks).toEqual([expect.objectContaining({ rule: 'missingBin', level: 'medium', line: 3, excerpt: 'missing: jq (needs gh, jq)' })]);
+    expect(scanRisks(md('metadata: {"requires":{"bins":["gh"]}}'), () => true)).toEqual([]);
+  });
+  it('reports the compatibility field as information', () => {
+    expect(scanRisks(md('compatibility: "Requires Claude Code 2.1+ and git"'), () => true))
+      .toEqual([expect.objectContaining({ rule: 'requires', level: 'info', excerpt: 'Requires Claude Code 2.1+ and git' })]);
+  });
+});

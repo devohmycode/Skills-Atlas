@@ -92,8 +92,10 @@ The `SKILL.md` preview (`p`), `skills-atlas show` and the MCP server's `show_ski
 | Level | Warning sign |
 |---|---|
 | high | downloads and runs code (`curl … \| sh`, `base64 -d \| sh`), reads or sends credential files (`~/.ssh`, `~/.aws`…), deletes broadly (`rm -rf ~`), asks the agent to hide things from the user or ignore its instructions |
-| medium | runs commands as administrator, reads secrets from the environment, sends data to a server |
-| info | installs or runs packages or bundled scripts |
+| medium | needs a program missing from this machine, runs commands as administrator, reads secrets from the environment, sends data to a server |
+| info | installs or runs packages or bundled scripts, states its requirements |
+
+Prerequisites come from the frontmatter: the programs listed under `requires.bins` (OpenClaw metadata) are looked up on your `PATH`, and the spec's `compatibility` text (agent versions, tools, network) is shown as is. A missing program does not block the install, but the review screen and `install -y` name it before any command runs. Skills rarely declare either field, so no warning does not mean nothing is needed.
 
 It is a pattern check on the text, tuned on the 150 most installed skills: it points at lines worth reading, it does not prove a skill safe. `show` prints the warning signs on stderr, so that stdout stays the `SKILL.md` alone; `show --json` adds them as `risks`.
 

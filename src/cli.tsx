@@ -462,7 +462,7 @@ async function auditGate(ids: string[], flags: InstallFlags, revisions?: Revisio
   const left = new Set<string>();
   for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)), s => fetchSkillMarkdown(s, revisions?.[s.id.toLowerCase()]))) {
     for (const x of r.risks.filter((x) => x.level !== 'info')) {
-      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  ${r.id}  SKILL.md:${x.line}`));
+      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  ${r.id}  SKILL.md:${x.line}`));
     }
     if (r.error) console.error(paint('yellow', `  ? ${r.id}: ${m.confirm.auditUnread}`));
     if (r.error && revisions?.[r.id.toLowerCase()]) fail(`cannot audit pinned skill ${r.id}: ${r.error}`);
