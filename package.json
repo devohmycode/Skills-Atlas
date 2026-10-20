@@ -19,6 +19,7 @@
     "dev": "tsx src/launch.ts",
     "crawl": "tsx scripts/crawl.ts",
     "demo": "tsx scripts/build-demo.ts",
+    "check:shared": "tsx scripts/check-shared.ts",
     "sync-agents": "tsx scripts/sync-agents.ts",
     "reclassify": "tsx scripts/reclassify.ts",
     "typecheck": "tsc --noEmit",

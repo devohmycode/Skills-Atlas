@@ -1,0 +1,26 @@
+name: shared files
+
+# The three atlases copy a few terminal primitives byte for byte: catch a copy left behind.
+on:
+  pull_request:
+    paths: ['src/browser.ts', 'src/ui/mouse.ts', 'src/ui/palette.ts', 'src/ui/render.ts', 'src/ui/width.ts', 'src/ui/ListSelect.tsx', 'scripts/check-shared.ts', '.github/workflows/shared.yml']
+  # A sibling can change too: check once a week against their main branches.
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:shared
