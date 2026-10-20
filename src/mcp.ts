@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { installedSkills, outdatedSkills, searchSkills, showSkill } from './agent-api.js';
 import { unknownAgents } from './agents.js';
 import { auditSkills, auditTarget, failsAudit } from './audit.js';
+import { updateDiff } from './install/diff.js';
 import { readPacks } from './catalog/packs.js';
 import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
-import { isSuccess, runAll } from './install/run.js';
+import { isSuccess, listInstalled, runAll } from './install/run.js';
 import { riskReport, riskWhere } from './risks.js';
 import { checkSkillName } from './selection.js';
 import { SCOPES, type Catalog, type Scope, type Skill } from './types.js';
@@ -77,7 +78,7 @@ const TOOLS = {
     annotations: { readOnlyHint: true },
   },
   outdated_skills: {
-    description: 'List global skills with a newer version on GitHub. Update one with install_skills, scope global, with its own agents.',
+    description: 'List global skills with a newer version on GitHub, with the lines the update changes in SKILL.md and the warning signs it adds (new_risks). Tell the user about new_risks before updating. Update one with install_skills, scope global, with its own agents.',
     schema: z.object({}),
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -132,8 +133,17 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       return json(readPacks());
     case 'list_installed':
       return json(await (opts.installed ?? installedSkills)(input.scope ? [input.scope as Scope] : SCOPES));
-    case 'outdated_skills':
-      return json(await outdatedSkills());
+    case 'outdated_skills': {
+      // Each update with what it changes: line counts and the warning signs the new version adds.
+      const outdated = await outdatedSkills();
+      const local = await listInstalled('global');
+      const c = await catalog();
+      const known = new Map(c.skills.map((s) => [s.id.toLowerCase(), s]));
+      return json(await Promise.all(outdated.map(async (s) => {
+        const diff = await updateDiff(auditTarget(s.id, known), local).catch(() => undefined);
+        return diff ? { ...s, lines_added: diff.added, lines_removed: diff.removed, new_risks: diff.risks.map(({ rule, level, label, line, excerpt }) => ({ rule, level, label, line, excerpt })) } : s;
+      })));
+    }
     case 'install_skills': {
       for (const id of input.ids as string[]) checkSkillName(parseSkillId(id).name, id);
       const unknown = unknownAgents(input.agents);
