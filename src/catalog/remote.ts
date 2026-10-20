@@ -5,7 +5,7 @@ import type { Catalog } from '../types.js';
 import { decodeCatalog, defaultCatalogPath } from './load.js';
 
 /** Snapshot refreshed every other day by the crawl workflow. */
-export const REMOTE_CATALOG_URL = 'https://raw.githubusercontent.com/devohmycode/skills-atlas/main/data/catalog.json.gz';
+export const REMOTE_CATALOG_URL = 'https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/data/catalog.json.gz';
 /** How long a downloaded catalog is used before asking GitHub again. */
 export const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 /** After a failed download, wait this long before trying again. */
