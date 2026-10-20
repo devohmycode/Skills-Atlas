@@ -11,6 +11,8 @@ export interface QueryOptions {
   official?: boolean;
   /** Only skills whose stated programs are all on this machine (or that state none). */
   ready?: (bin: string) => boolean;
+  /** Leave out skills of archived repositories and of those not pushed to for over a year. */
+  active?: boolean;
   sort?: SortOrder;
 }
 
@@ -18,11 +20,18 @@ export interface QueryOptions {
 export const SORT_ORDERS = ['installs', 'name'] as const;
 export type SortOrder = (typeof SORT_ORDERS)[number];
 
-/** Returns a sorted copy. */
+/** A repository archived, or not pushed to for over a year: its skills are unlikely to be kept up. */
+export function isStale(s: Pick<Skill, 'repo'>, now = Date.now()): boolean {
+  return !!s.repo && (!!s.repo.archived || (!!s.repo.pushedAt && now - Date.parse(s.repo.pushedAt) > 365 * 86_400_000));
+}
+
+/** Returns a sorted copy; skills of stale repositories come after the others (see isStale). */
 export function sortSkills(skills: Skill[], order: SortOrder): Skill[] {
-  if (order === 'name') return [...skills].sort((a, b) => a.name.localeCompare(b.name) || a.source.localeCompare(b.source));
+  const now = Date.now();
+  const stale = new Map(skills.map((s) => [s, isStale(s, now) ? 1 : 0]));
+  if (order === 'name') return [...skills].sort((a, b) => stale.get(a)! - stale.get(b)! || a.name.localeCompare(b.name) || a.source.localeCompare(b.source));
   // Stable sort: equal counts (and skills without any) keep the catalog order.
-  return [...skills].sort((a, b) => (b.installs ?? 0) - (a.installs ?? 0) || (b.stars ?? 0) - (a.stars ?? 0));
+  return [...skills].sort((a, b) => stale.get(a)! - stale.get(b)! || (b.installs ?? 0) - (a.installs ?? 0) || (b.stars ?? 0) - (a.stars ?? 0));
 }
 
 /** Matches a theme by id or label in any language, case- and accent-insensitive. */
@@ -51,7 +60,10 @@ export function createSearchIndex(skills: Skill[]) {
       const scores = new Map(found.map((e) => [e.skill,
         e.name === query ? 3 : e.name.startsWith(query) ? 2 : terms.every((term) => e.name.includes(term)) ? 1 : 0,
       ]));
-      found.sort((a, b) => scores.get(b.skill)! - scores.get(a.skill)! || (b.skill.installs ?? 0) - (a.skill.installs ?? 0) || (b.skill.stars ?? 0) - (a.skill.stars ?? 0));
+      const now = Date.now();
+      const stale = new Map(found.map((e) => [e.skill, isStale(e.skill, now) ? 1 : 0]));
+      // At equal relevance, maintained repositories first.
+      found.sort((a, b) => scores.get(b.skill)! - scores.get(a.skill)! || stale.get(a.skill)! - stale.get(b.skill)! || (b.skill.installs ?? 0) - (a.skill.installs ?? 0) || (b.skill.stars ?? 0) - (a.skill.stars ?? 0));
     }
     const result = found.map((e) => e.skill);
     return order ? sortSkills(result, order) : result;
@@ -67,6 +79,7 @@ export function querySkills(catalog: Catalog, q: QueryOptions = {}): Skill[] {
   const found = catalog.skills.filter((s) => {
     if (q.official && !s.official) return false;
     if (q.ready && !(s.requires?.bins ?? []).every(q.ready)) return false;
+    if (q.active && isStale(s)) return false;
     if (!q.all && !s.recommendation && !s.installs && !s.stars && s.rank === undefined) return false;
     if (q.minInstalls && (s.installs ?? 0) < q.minInstalls) return false;
     if (q.themes?.length && !s.themes.some((t) => q.themes!.includes(t))) return false;

@@ -87,6 +87,8 @@ export const ko: Messages = {
     needs: '필요',
     updated: (date) => `${date} 업데이트`,
     growthSuspect: (n) => `트렌딩 제외: 같은 skill이 다른 저장소 ${n}곳에서 함께 증가`,
+    archived: '보관됨',
+    stale: (date) => `${date} 이후 push 없음`,
   },
 
   agents: {
@@ -299,6 +301,7 @@ export const ko: Messages = {
     all: '설치 수나 스타가 없는 스킬도 포함',
     official: '공식 스킬만 (벤더가 게시한 것, officialskills.sh 기준)',
     ready: '명시된 프로그램이 모두 이 컴퓨터에 설치된 skill만',
+    active: '보관되었거나 1년 넘게 push가 없는 저장소의 skill 제외',
     sort: '정렬: installs (설치 많은 순) 또는 name (이름)',
     agent: "대상 에이전트 (ID는 `skills-atlas agents` 참고, '*' = 전체)",
     global: '사용자 단위로 설치 (모든 프로젝트)',

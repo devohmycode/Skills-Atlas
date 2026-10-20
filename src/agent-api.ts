@@ -27,6 +27,9 @@ export interface SkillSummary {
   url?: string;
   requires?: { bins?: string[]; compatibility?: string };
   updated_at?: string;
+  license?: string;
+  archived?: boolean;
+  last_push?: string;
 }
 
 export function summarize(s: Skill): SkillSummary {
@@ -34,6 +37,7 @@ export function summarize(s: Skill): SkillSummary {
     id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs,
     official: s.official || undefined, recommended: s.recommendation ? true : undefined, themes: s.themes, url: githubUrl(s),
     requires: s.requires, updated_at: s.updatedAt,
+    license: s.repo?.license, archived: s.repo?.archived, last_push: s.repo?.pushedAt,
   };
 }
 

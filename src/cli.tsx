@@ -73,6 +73,7 @@ interface FilterOptions extends CommonOptions {
   all?: boolean;
   official?: boolean;
   ready?: boolean;
+  active?: boolean;
   sort?: SortOrder;
 }
 interface InstallFlags {
@@ -149,7 +150,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
 
 function toQuery(catalog: Catalog, opts: FilterOptions): QueryOptions {
   const themes = opts.theme?.map((th) => resolveTheme(catalog, th)?.id ?? fail(t().errors.unknownTheme(th)));
-  return { themes, search: opts.search, minInstalls: opts.minInstalls, all: opts.all, official: opts.official, ready: opts.ready ? onPath : undefined, sort: opts.sort ?? (opts.search?.trim() ? undefined : 'installs') };
+  return { themes, search: opts.search, minInstalls: opts.minInstalls, all: opts.all, official: opts.official, ready: opts.ready ? onPath : undefined, active: opts.active, sort: opts.sort ?? (opts.search?.trim() ? undefined : 'installs') };
 }
 
 /** Options fixed by flags; anything left undefined is asked (or defaulted with -y). */
@@ -299,6 +300,7 @@ const filterOptions = (cmd: Command) =>
     .option('--all', c.all)
     .option('--official', c.official)
     .option('--ready', c.ready)
+    .option('--active', c.active)
     .addOption(new Option('-s, --sort <order>', c.sort).choices(SORT_ORDERS))
     .addOption(catalogOption())
     .addOption(offlineOption())

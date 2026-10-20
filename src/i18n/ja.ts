@@ -87,6 +87,8 @@ export const ja: Messages = {
     needs: '必要',
     updated: (date) => `${date} 更新`,
     growthSuspect: (n) => `トレンド対象外: 同じ skill がほかの ${n} 個のリポジトリで同時に増加`,
+    archived: 'アーカイブ済み',
+    stale: (date) => `${date} 以降 push なし`,
   },
 
   agents: {
@@ -299,6 +301,7 @@ export const ja: Messages = {
     all: 'インストール数やスターのないスキルも含める',
     official: '公式スキルのみ（ベンダーが公開したもの、officialskills.sh に基づく）',
     ready: '記載されたプログラムがすべてここにインストール済みの skill のみ',
+    active: 'アーカイブ済み、または 1 年以上 push のないリポジトリの skill を除外',
     sort: '並び順：installs（インストール数の多い順）または name（名前）',
     agent: "対象エージェント（ID は `skills-atlas agents` を参照、'*' = すべて）",
     global: 'ユーザー単位でインストール（すべてのプロジェクト）',

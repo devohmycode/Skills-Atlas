@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS } from '../src/agents.js';
 import { loadCatalog } from '../src/catalog/load.js';
-import { createSearchIndex, querySkills, sortSkills } from '../src/catalog/query.js';
+import { createSearchIndex, isStale, querySkills, sortSkills } from '../src/catalog/query.js';
 import { curated } from '../src/catalog/curated.js';
 import { getLang, setLang, t, themeLabel } from '../src/i18n/index.js';
 import { PAGE_HTML } from '../src/web/page.js';
@@ -23,7 +23,7 @@ const catalog = curated(await loadCatalog());
 const all = querySkills(catalog, {});
 const top = sortSkills(all, 'installs').slice(0, TOP);
 const skills = [...new Map([...all.filter((s) => s.recommendation || s.themes.some((th) => th === 'trending' || th.startsWith('pack:'))), ...top].map((s) => [s.id, s])).values()].map((s) => ({
-  id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth, requires: s.requires, updatedAt: s.updatedAt,
+  id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth, requires: s.requires, updatedAt: s.updatedAt, repo: s.repo,
   rank: s.rank, official: s.official, recommendation: s.recommendation, themes: s.themes, labels: s.labels,
 }));
 const state = {
@@ -33,6 +33,8 @@ const state = {
     ...t().web,
     needs: t().tree.needs,
     updated: t().tree.updated('{date}'),
+    archived: t().tree.archived,
+    stale: t().tree.stale('{date}'),
     tagline: `Live demo with ${skills.length.toLocaleString('en')} of ${all.length.toLocaleString('en')} skills — nothing installs here. Run npx skills-atlas ui for the real thing.`,
     // Apply always answers with the demo notice: say so, rather than "some changes failed".
     summaryFailed: 'Demo only',
@@ -51,6 +53,7 @@ const state = {
 // Answers the page's /api calls like the local server does, on the embedded skills.
 const shim = `<script>
 (function () {
+  ${isStale}
   ${sortSkills}
   ${createSearchIndex}
   var DEMO = ${JSON.stringify({ state, skills }).replace(/</g, '\\u003c')};

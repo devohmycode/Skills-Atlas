@@ -151,6 +151,10 @@ Pinned sync audits SKILL.md at the pinned revision, passes that same revision to
 
 Pinned verification requires network access to GitHub. Missing verification metadata, incomplete Git trees, symbolic links/submodules inside a skill, repository Git attributes or filters that transform checked-out bytes, and agent formats that rewrite skill content fail explicitly; they never fall back to HEAD. Pinned installs run with `core.autocrlf=false` and `core.eol=lf` for their checkout only; your Git configuration is not changed. Git file modes are not checked. Upstream excludes `metadata.json`, `.git`, `__pycache__`, and `__pypackages__` from installed content; these are excluded from the expected tree. Existing manifests without revisions keep presence-only sync behavior.
 
+### Repository health
+
+Each crawl asks GitHub, 50 repositories a query, for the license, archive state and last push of the 5,000 repositories with the most installed skills. Skills of an archived repository, or of one not pushed to for over a year, come after the others in every order, at equal relevance in a search; `--active` leaves them out. The tree's details and the web page show the license and `archived` or `no push since …`; MCP results carry `license`, `archived` and `last_push`.
+
 ### Trending
 
 Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form **🔥 Trending**, right after Recommended, sorted by growth. The theme appears once two snapshots with install counts can be compared.
@@ -305,6 +309,7 @@ The mouse works too: the wheel moves through the list, a click ticks a skill, op
 | `-s, --sort <order>` | `installs` (default) or `name`; also for `list` |
 | `--official` | only official skills; also for `list` and `themes` |
 | `--ready` | only skills whose stated programs are all on your `PATH` (skills that state none stay); also for `list` |
+| `--active` | leave out skills of archived repositories and of those not pushed to for over a year; also for `list` |
 | `-l, --lang <code>` | interface language, remembered |
 
 Any option left out is asked after the selection, pre-filled with your last choices (`~/.config/skills-atlas/config.json`) and the agents detected on the machine.

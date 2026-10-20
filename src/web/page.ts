@@ -9,7 +9,7 @@
  * sets titles and figures.
  */
 import { groupByRepository } from '../catalog/groups.js';
-import { createSearchIndex, sortSkills } from '../catalog/query.js';
+import { createSearchIndex, isStale, sortSkills } from '../catalog/query.js';
 import { PALETTE } from '../ui/palette.js';
 
 export const PAGE_HTML = String.raw`<!doctype html>
@@ -168,6 +168,8 @@ a.source:hover { color: var(--accent); text-decoration: underline; }
 .tag { font-size: 12px; white-space: nowrap; }
 .tag.official { color: var(--official); }
 .tag.needs, .tag.updated { color: var(--ink-3); }
+.tag.stale { color: var(--gold); }
+.tag.license { color: var(--ink-3); }
 .tag.recommended { color: var(--gold); }
 .tag.installed { color: var(--accent); }
 .tag.drop { color: var(--remove); font-weight: 600; }
@@ -362,6 +364,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
 <script>
 (function () {
   'use strict';
+  ${isStale}
   ${sortSkills}
   ${createSearchIndex}
   var token = location.hash.slice(1);
@@ -470,6 +473,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
         esc(req.bins && req.bins.length ? (M.needs || 'needs') + ' ' + req.bins.join(', ') : req.compatibility) + '</span>';
     }
     if (s.updatedAt) tags += '<span class="tag updated">' + esc(tr('updated', { date: s.updatedAt })) + '</span>';
+    if (s.repo && s.repo.archived) tags += '<span class="tag stale">' + esc(M.archived || 'archived') + '</span>';
+    else if (isStale(s)) tags += '<span class="tag stale">' + esc(tr('stale', { date: s.repo.pushedAt })) + '</span>';
+    if (s.repo && s.repo.license) tags += '<span class="tag license">' + esc(s.repo.license) + '</span>';
     var url = githubUrl(s);
     var source = url ? '<a class="source" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="g · ' + esc(M.github) + '">' + esc(s.source) + '</a>'
                      : '<span class="source">' + esc(s.source) + '</span>';

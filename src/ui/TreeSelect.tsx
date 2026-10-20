@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByRepository } from '../catalog/groups.js';
 import { byGrowth, TRENDING_THEME } from '../catalog/trending.js';
-import { createSearchIndex, groupByTheme, popularityLabel, SORT_ORDERS, type SortOrder } from '../catalog/query.js';
+import { createSearchIndex, groupByTheme, isStale, popularityLabel, SORT_ORDERS, type SortOrder } from '../catalog/query.js';
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
 import { scanRisks, type Risk, type RiskLevel } from '../risks.js';
 import { diffText, updateDiff, type UpdateDiff } from '../install/diff.js';
@@ -678,6 +678,9 @@ export function TreeSelect({
               <Text>
                 {row.skill.growth ? <Text color={row.skill.growthSuspect ? PALETTE.gold : PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}${row.skill.growthSuspect ? ` (${m.tree.growthSuspect(row.skill.growthSuspect)})` : ''}   `}</Text> : null}
                 {row.skill.updatedAt ? <Text dimColor>{`${m.tree.updated(row.skill.updatedAt)}  ·  `}</Text> : null}
+                {row.skill.repo?.license ? <Text dimColor>{`${row.skill.repo.license}  ·  `}</Text> : null}
+                {row.skill.repo?.archived ? <Text color={PALETTE.gold}>{`${m.tree.archived}  ·  `}</Text>
+                  : isStale(row.skill) ? <Text color={PALETTE.gold}>{`${m.tree.stale(row.skill.repo!.pushedAt!)}  ·  `}</Text> : null}
                 <Text dimColor>{popularityLong(row.skill)}</Text>
               </Text>
             </Box>
