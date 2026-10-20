@@ -8,7 +8,7 @@
 import { onPath, prerequisites } from './prereqs.js';
 
 export type RiskLevel = 'high' | 'medium' | 'info';
-export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode' | 'missingBin' | 'requires';
+export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode' | 'missingBin' | 'requires' | 'unaudited';
 
 export interface Risk {
   rule: RiskRule;
@@ -18,6 +18,8 @@ export interface Risk {
   line: number;
   count: number;
   excerpt: string;
+  /** The skill file it was found in, relative to the skill folder; absent for SKILL.md. */
+  file?: string;
 }
 
 const RULES: { rule: RiskRule; level: RiskLevel; label: string; re: RegExp }[] = [
@@ -65,12 +67,19 @@ export function scanRisks(markdown: string, has: (bin: string) => boolean = onPa
   const missing = pre.bins?.names.filter((b) => !has(b)) ?? [];
   if (missing.length) found.set('missingBin', { rule: 'missingBin', level: 'medium', label: 'needs a program not found on this machine', line: pre.bins!.line, count: 1, excerpt: `missing: ${missing.join(', ')} (needs ${pre.bins!.names.join(', ')})` });
   if (pre.compatibility) found.set('requires', { rule: 'requires', level: 'info', label: 'states its requirements', line: pre.compatibility.line, count: 1, excerpt: pre.compatibility.text });
-  return [...found.values()].sort((a, b) => ORDER[a.level] - ORDER[b.level] || a.line - b.line);
+  return sortRisks([...found.values()]);
 }
+
+/** Most serious first, then SKILL.md before other files, then by line. */
+export const sortRisks = (risks: Risk[]): Risk[] =>
+  risks.sort((a, b) => ORDER[a.level] - ORDER[b.level] || (a.file ?? '').localeCompare(b.file ?? '') || a.line - b.line);
 
 /** One line for an agent: `Risk check: …` or that nothing matched. */
 export function riskReport(risks: Risk[]): string {
   if (!risks.length) return 'skills-atlas risk check: no warning sign found (a pattern check, not a guarantee).';
-  const lines = risks.map((r) => `- ${r.level}: ${r.label} (line ${r.line}${r.count > 1 ? `, ${r.count} lines` : ''}): ${r.excerpt}`);
+  const lines = risks.map((r) => `- ${r.level}: ${r.label} (${riskWhere(r)}${r.count > 1 ? `, ${r.count} lines` : ''}): ${r.excerpt}`);
   return ['skills-atlas risk check (a pattern check, not a guarantee):', ...lines].join('\n');
 }
+
+/** Where a finding is, for people: `scripts/setup.sh:12`, or `SKILL.md:3`. */
+export const riskWhere = (r: Pick<Risk, 'file' | 'line'>): string => `${r.file ?? 'SKILL.md'}${r.line ? `:${r.line}` : ''}`;

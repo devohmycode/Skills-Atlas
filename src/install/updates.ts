@@ -57,7 +57,7 @@ export function outdated(skills: LockedSkill[], trees: Map<string, Map<string, s
 }
 
 /** GITHUB_TOKEN or GH_TOKEN, else the GitHub CLI's token when it is logged in. */
-function githubToken(): string | undefined {
+export function githubToken(): string | undefined {
   const env = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   if (env) return env;
   try {

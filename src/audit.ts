@@ -1,6 +1,6 @@
 import pLimit from 'p-limit';
-import { fetchSkillMarkdown } from './github.js';
-import { scanRisks, type Risk } from './risks.js';
+import { fetchSkillFiles, fetchSkillMarkdown, type SkillFiles } from './github.js';
+import { scanRisks, sortRisks, type Risk } from './risks.js';
 import type { Skill } from './types.js';
 
 /**
@@ -27,21 +27,47 @@ export function auditTarget(id: string, known?: Map<string, Target>): Target {
   return { id, source: id.slice(0, at), name: id.slice(at + 1) };
 }
 
-/** Audits the skills, a few at a time; results keep the order of `targets`. */
-export async function auditSkills(targets: Target[], read: (s: Target) => Promise<string> = fetchSkillMarkdown): Promise<AuditResult[]> {
+type ReadFiles = (s: Target) => Promise<SkillFiles>;
+const noFiles: ReadFiles = async () => ({ files: [], skipped: [] });
+
+/**
+ * Audits the skills, a few at a time; results keep the order of `targets`. Besides the
+ * SKILL.md, the other text files of the skill folder are checked: a script it runs can
+ * hold what the SKILL.md does not show. With a `read` of its own (tests), no other file
+ * is read unless `readFiles` is given too.
+ */
+export async function auditSkills(
+  targets: Target[],
+  read: (s: Target) => Promise<string> = fetchSkillMarkdown,
+  readFiles: ReadFiles = read === fetchSkillMarkdown ? fetchSkillFiles : noFiles,
+): Promise<AuditResult[]> {
   const limit = pLimit(8);
   return Promise.all(
     targets.map((t) =>
       limit(async () => {
+        let risks: Risk[];
         try {
-          return { id: t.id, risks: scanRisks(await read(t)) };
+          risks = scanRisks(await read(t));
         } catch (err) {
           return { id: t.id, risks: [], error: err instanceof Error ? err.message : String(err) };
         }
+        try {
+          const { files, skipped } = await readFiles(t);
+          for (const f of files) risks.push(...scanRisks(f.text, () => true).map((r) => ({ ...r, file: f.path })));
+          if (skipped.length) risks.push(unaudited(skipped));
+        } catch (err) {
+          risks.push(unaudited([`other files (${err instanceof Error ? err.message : String(err)})`]));
+        }
+        return { id: t.id, risks: sortRisks(risks) };
       }),
     ),
   );
 }
+
+const unaudited = (paths: string[]): Risk => ({
+  rule: 'unaudited', level: 'info', label: 'files not audited', line: 0, count: paths.length,
+  excerpt: paths.slice(0, 5).join(', ') + (paths.length > 5 ? ` (+${paths.length - 5})` : ''),
+});
 
 /** Whether to audit: on unless the config or the command line turns it off. */
 export const auditEnabled = (config: { audit?: boolean }, flag?: boolean): boolean => flag !== false && config.audit !== false;

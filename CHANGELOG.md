@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The audit reads the whole skill folder.** Besides the `SKILL.md`, the skill's other text files (scripts, references, configs) are checked: a clean `SKILL.md` that runs a `curl | sh` script now fails. Findings name their file (`scripts/setup.sh:12`) on the review screen, with `install -y`, `show`, the web page and MCP. Binaries, large files and unreadable ones are reported as not audited.
 - **Prerequisites.** The risk check reads what a `SKILL.md` frontmatter says it needs. Programs under `requires.bins` that are not on your `PATH` are a medium warning, named on the review screen and by `install -y` before any command runs. The `compatibility` field is shown as information in `p`, `show` and MCP's `show_skill`.
 
 ## 0.12.0 — 2026-10-18

@@ -23,7 +23,8 @@ import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
 import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
 import { lockSelection, projectRevisionDrift, type Revisions } from './revisions.js';
-import { fetchSkillMarkdown } from './github.js';
+import { fetchSkillFiles, fetchSkillMarkdown } from './github.js';
+import { riskWhere } from './risks.js';
 import { browseLoop } from './browse.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
@@ -460,9 +461,9 @@ async function auditGate(ids: string[], flags: InstallFlags, revisions?: Revisio
   const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
   const known = new Map(catalog?.skills.map((s) => [s.id.toLowerCase(), s]));
   const left = new Set<string>();
-  for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)), s => fetchSkillMarkdown(s, revisions?.[s.id.toLowerCase()]))) {
+  for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)), s => fetchSkillMarkdown(s, revisions?.[s.id.toLowerCase()]), s => fetchSkillFiles(s, revisions?.[s.id.toLowerCase()]))) {
     for (const x of r.risks.filter((x) => x.level !== 'info')) {
-      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  ${r.id}  SKILL.md:${x.line}`));
+      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  ${r.id}  ${riskWhere(x)}`));
     }
     if (r.error) console.error(paint('yellow', `  ? ${r.id}: ${m.confirm.auditUnread}`));
     if (r.error && revisions?.[r.id.toLowerCase()]) fail(`cannot audit pinned skill ${r.id}: ${r.error}`);
@@ -734,7 +735,7 @@ program
       // The warning signs go to stderr: stdout stays the SKILL.md alone, to pipe or save.
       const tree = m.tree;
       console.error(risks.length ? paint('yellow', `⚠ ${tree.risksFound(risks.length)}`) : paint('dim', `✓ ${tree.noRisk}`));
-      for (const r of risks) console.error(paint(r.level === 'high' ? 'red' : 'dim', `  ${tree.riskLevels[r.level]} · ${tree.risks[r.rule]}  SKILL.md:${r.line}  ${r.excerpt}`));
+      for (const r of risks) console.error(paint(r.level === 'high' ? 'red' : 'dim', `  ${tree.riskLevels[r.level]} · ${tree.risks[r.rule]}  ${riskWhere(r)}  ${r.excerpt}`));
       process.stdout.write(`${markdown.trimEnd()}\n`);
     } catch (err) {
       fail(c.showFailed(id, err instanceof Error ? err.message : String(err)));

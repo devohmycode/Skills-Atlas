@@ -1,10 +1,11 @@
 import { AGENTS } from './agents.js';
 import { querySkills } from './catalog/query.js';
-import { fetchSkillMarkdown, githubUrl } from './github.js';
+import { auditSkills } from './audit.js';
+import { fetchSkillFiles, fetchSkillMarkdown, githubUrl } from './github.js';
 import { parseSkillId } from './install/plan.js';
 import { listInstalled } from './install/run.js';
 import { findUpdates } from './install/updates.js';
-import { scanRisks, type Risk } from './risks.js';
+import type { Risk } from './risks.js';
 import type { Catalog, Scope, Skill } from './types.js';
 
 /**
@@ -52,11 +53,13 @@ export function findSkill(catalog: Catalog, id: string): Skill {
   return { id, name, source, labels: [], origins: [], themes: [] };
 }
 
-/** A skill's SKILL.md, from its GitHub repository (escape sequences removed), and the warning signs it shows. */
+/** A skill's SKILL.md, from its GitHub repository (escape sequences removed), and the warning signs of its folder. */
 export async function showSkill(catalog: Catalog, id: string): Promise<{ skill: SkillSummary; markdown: string; risks: Risk[] }> {
   const skill = findSkill(catalog, id);
   const markdown = await fetchSkillMarkdown(skill);
-  return { skill: summarize(skill), markdown, risks: scanRisks(markdown) };
+  // The audit's view: the other files of the folder too, the SKILL.md read once.
+  const [audit] = await auditSkills([skill], async () => markdown, fetchSkillFiles);
+  return { skill: summarize(skill), markdown, risks: audit!.risks };
 }
 
 /** An installed skill, with the agent ids an install command needs. */

@@ -5,6 +5,7 @@ import { INSTALLED_THEME, type TreeData } from '../catalog/installed.js';
 import type { SortOrder } from '../catalog/query.js';
 import { t } from '../i18n/index.js';
 import { nameCollisions, type Collision } from '../install/collisions.js';
+import { riskWhere } from '../risks.js';
 import { auditSkills, auditTarget, failsAudit, type AuditResult } from '../audit.js';
 import { formatCommand, planInstall, planRemovals, planUpdates, type Update } from '../install/plan.js';
 import { SCOPES, type InstallMethod, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
@@ -376,7 +377,7 @@ function Confirm({ ids, remove, update, collisions, options, audit, targets, rea
     r.risks.filter((x) => x.level === level).slice(0, 2).map((x) => (
       <Text key={x.rule} color={level === 'high' ? PALETTE.danger : PALETTE.gold} wrap="truncate-end">
         {`      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  `}
-        <Text dimColor>{`SKILL.md:${x.line}`}</Text>
+        <Text dimColor>{riskWhere(x)}</Text>
       </Text>
     ));
   const row = (label: string, value: string) => (

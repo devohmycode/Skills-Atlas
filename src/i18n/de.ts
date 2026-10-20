@@ -78,7 +78,7 @@ export const de: Messages = {
     updates: (n) => `${n} ${n === 1 ? 'Update' : 'Updates'} (u)`,
     previewLoading: 'SKILL.md wird geladen…',
     previewFailed: (msg) => `SKILL.md konnte nicht geladen werden: ${msg}`,
-    risks: { pipeShell: "lädt Code herunter und führt ihn aus", credentials: "greift auf Zugangsdaten zu", destructive: "löscht großflächig", hidden: "fordert den Agenten auf, etwas zu verbergen oder Anweisungen zu ignorieren", sudo: "führt Befehle als Administrator aus", secrets: "liest Geheimnisse aus der Umgebung", sendsData: "sendet Daten an einen Server", runsCode: "installiert oder startet Pakete oder Skripte", missingBin: "braucht ein Programm, das auf diesem Rechner fehlt", requires: "nennt seine Voraussetzungen" },
+    risks: { pipeShell: "lädt Code herunter und führt ihn aus", credentials: "greift auf Zugangsdaten zu", destructive: "löscht großflächig", hidden: "fordert den Agenten auf, etwas zu verbergen oder Anweisungen zu ignorieren", sudo: "führt Befehle als Administrator aus", secrets: "liest Geheimnisse aus der Umgebung", sendsData: "sendet Daten an einen Server", runsCode: "installiert oder startet Pakete oder Skripte", missingBin: "braucht ein Programm, das auf diesem Rechner fehlt", requires: "nennt seine Voraussetzungen", unaudited: "nicht geprüfte Dateien" },
     riskLevels: { high: "hoch", medium: "mittel", info: "info" },
     risksFound: (n) => `${n} ${n === 1 ? 'Warnsignal' : 'Warnsignale'} (Musterprüfung, keine Garantie)`,
     noRisk: "Kein Warnsignal gefunden (Musterprüfung, keine Garantie)",

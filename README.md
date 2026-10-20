@@ -99,7 +99,7 @@ Prerequisites come from the frontmatter: the programs listed under `requires.bin
 
 It is a pattern check on the text, tuned on the 150 most installed skills: it points at lines worth reading, it does not prove a skill safe. `show` prints the warning signs on stderr, so that stdout stays the `SKILL.md` alone; `show --json` adds them as `risks`.
 
-**The security audit** runs this check before every install and update. A skill **fails** it with at least one high warning sign; medium ones are shown and do not block.
+**The security audit** runs this check before every install and update, on the `SKILL.md` and on the other text files of the skill folder (scripts, references, configs: up to 30 files of 64 KB, listed with one GitHub call per repository), since a script the skill runs can hold what its `SKILL.md` does not show. Each finding names its file (`scripts/setup.sh:12`); binaries, larger files and files that could not be read are listed as *not audited*, never as passed. `show` and the MCP server's `show_skill` report the same. A skill **fails** it with at least one high warning sign; medium ones are shown and do not block.
 
 - **In the tree and with `install`'s questions**, the review screen lists the skills that fail, **unticked**: they are left out. Read one (`p` in the list, or `skills-atlas show <id>`), then tick it with space to install it anyway.
 - **Without a person at the keyboard** (`install -y`, `import`, `sync`, `update`), a failing skill is left out with its warning signs printed; `--no-audit` installs it anyway.
