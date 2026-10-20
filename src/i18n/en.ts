@@ -83,6 +83,8 @@ export const en = {
     noNewRisk: 'No new warning sign since your version',
     noRisk: "No warning sign found (a pattern check, not a guarantee)",
     growth: (n: string) => `+${n} installs since the last snapshot`,
+    needs: 'needs',
+    updated: (date: string) => `updated ${date}`,
   },
 
   agents: {
@@ -295,6 +297,7 @@ export const en = {
     minInstalls: 'minimum installs',
     all: 'include skills with no installs or stars',
     official: 'only official skills (published by the vendor, per officialskills.sh)',
+    ready: 'only skills whose stated programs are all installed here',
     sort: 'order: installs (most installed first) or name',
     agent: "target agents (ids from `skills-atlas agents`, '*' = all)",
     global: 'install for your user (every project)',

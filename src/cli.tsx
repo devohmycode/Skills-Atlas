@@ -15,6 +15,7 @@ import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, ty
 import { nameCollisions } from './install/collisions.js';
 import { findUpdates } from './install/updates.js';
 import { dropRevision, readHistory, recordBeforeUpdate } from './install/history.js';
+import { onPath } from './prereqs.js';
 import { diagnoseInstalled } from './install/doctor.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
@@ -71,6 +72,7 @@ interface FilterOptions extends CommonOptions {
   minInstalls?: number;
   all?: boolean;
   official?: boolean;
+  ready?: boolean;
   sort?: SortOrder;
 }
 interface InstallFlags {
@@ -147,7 +149,7 @@ async function openCatalog(opts: CommonOptions): Promise<Catalog> {
 
 function toQuery(catalog: Catalog, opts: FilterOptions): QueryOptions {
   const themes = opts.theme?.map((th) => resolveTheme(catalog, th)?.id ?? fail(t().errors.unknownTheme(th)));
-  return { themes, search: opts.search, minInstalls: opts.minInstalls, all: opts.all, official: opts.official, sort: opts.sort ?? (opts.search?.trim() ? undefined : 'installs') };
+  return { themes, search: opts.search, minInstalls: opts.minInstalls, all: opts.all, official: opts.official, ready: opts.ready ? onPath : undefined, sort: opts.sort ?? (opts.search?.trim() ? undefined : 'installs') };
 }
 
 /** Options fixed by flags; anything left undefined is asked (or defaulted with -y). */
@@ -296,6 +298,7 @@ const filterOptions = (cmd: Command) =>
     .option('--min-installs <n>', c.minInstalls, (v) => Number.parseInt(v, 10))
     .option('--all', c.all)
     .option('--official', c.official)
+    .option('--ready', c.ready)
     .addOption(new Option('-s, --sort <order>', c.sort).choices(SORT_ORDERS))
     .addOption(catalogOption())
     .addOption(offlineOption())

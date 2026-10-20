@@ -6,6 +6,7 @@ import { createSearchIndex, groupByTheme, popularityLabel, SORT_ORDERS, type Sor
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
 import { scanRisks, type Risk, type RiskLevel } from '../risks.js';
 import { diffText, updateDiff, type UpdateDiff } from '../install/diff.js';
+import { onPath } from '../prereqs.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
 import type { InstalledEntry } from '../catalog/installed.js';
 import type { Scope, Skill, Theme } from '../types.js';
@@ -72,6 +73,8 @@ export interface TreeSelectProps {
   loadDiff?: (skill: Skill) => Promise<UpdateDiff>;
   /** The SKILL.md shown by `p`; fetched from GitHub by default. */
   loadPreview?: (skill: Skill) => Promise<string>;
+  /** Whether a program a skill needs is on this machine; the PATH by default. */
+  hasBin?: (bin: string) => boolean;
 }
 
 /** Lines used around the list: header, status, search, details panel, hints (may wrap). */
@@ -149,6 +152,7 @@ export function TreeSelect({
   updates = NO_UPDATES,
   loadPreview = fetchSkillMarkdown,
   loadDiff = (s) => updateDiff(s),
+  hasBin = onPath,
 }: TreeSelectProps) {
   const m = t();
   const { columns, rows: termRows } = useTerminalSize();
@@ -661,14 +665,27 @@ export function TreeSelect({
                   // The agents that see it; many read the shared .agents/skills, so only the first three are named.
                   <Text dimColor>{`  → ${agentList(installed.get(row.skill.id)!.agents)}`}</Text>
                 )}
+                {(row.skill.requires?.bins?.length ?? 0) > 0 && (
+                  // Programs it says it needs; the missing ones in red, before anything is installed.
+                  <Text dimColor>
+                    {`  ${m.tree.needs} `}
+                    {row.skill.requires!.bins!.map((b, i) => (
+                      <Text key={b} color={hasBin(b) ? undefined : PALETTE.danger} dimColor={hasBin(b)}>{`${i ? ', ' : ''}${hasBin(b) ? b : `✗ ${b}`}`}</Text>
+                    ))}
+                  </Text>
+                )}
               </Text>
               <Text>
                 {row.skill.growth ? <Text color={PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}   `}</Text> : null}
+                {row.skill.updatedAt ? <Text dimColor>{`${m.tree.updated(row.skill.updatedAt)}  ·  `}</Text> : null}
                 <Text dimColor>{popularityLong(row.skill)}</Text>
               </Text>
             </Box>
             <Box height={2} overflow="hidden">
-              <Text wrap="wrap">{row.skill.description ?? row.skill.recommendation?.reason ?? m.tree.noDescription}</Text>
+              <Text wrap="wrap">
+                {row.skill.description ?? row.skill.recommendation?.reason ?? m.tree.noDescription}
+                {row.skill.requires?.compatibility ? <Text dimColor>{`  (${row.skill.requires.compatibility})`}</Text> : null}
+              </Text>
             </Box>
           </>
         ) : row?.kind === 'repo' ? (

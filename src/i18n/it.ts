@@ -86,6 +86,8 @@ export const it: Messages = {
     noNewRisk: 'Nessun nuovo segnale di allarme dalla tua versione',
     noRisk: "Nessun segnale di allarme (controllo per schemi, non una garanzia)",
     growth: (n) => `+${n} installazioni dall'ultima istantanea`,
+    needs: 'richiede',
+    updated: (date) => `aggiornato il ${date}`,
   },
 
   agents: {
@@ -297,6 +299,7 @@ export const it: Messages = {
     minInstalls: 'numero minimo di installazioni',
     all: 'includi le skill senza installazioni né stelle',
     official: 'solo skill ufficiali (pubblicate dal produttore, secondo officialskills.sh)',
+    ready: 'solo gli skill i cui programmi indicati sono tutti installati qui',
     sort: 'ordine: installs (più installate per prime) o name (nome)',
     agent: "agenti di destinazione (id da `skills-atlas agents`, '*' = tutti)",
     global: 'installa per il tuo utente (tutti i progetti)',

@@ -9,6 +9,8 @@ export interface QueryOptions {
   all?: boolean;
   /** Only skills published by the vendor itself. */
   official?: boolean;
+  /** Only skills whose stated programs are all on this machine (or that state none). */
+  ready?: (bin: string) => boolean;
   sort?: SortOrder;
 }
 
@@ -64,6 +66,7 @@ export function matchesSearch(s: Skill, search: string): boolean {
 export function querySkills(catalog: Catalog, q: QueryOptions = {}): Skill[] {
   const found = catalog.skills.filter((s) => {
     if (q.official && !s.official) return false;
+    if (q.ready && !(s.requires?.bins ?? []).every(q.ready)) return false;
     if (!q.all && !s.recommendation && !s.installs && !s.stars && s.rank === undefined) return false;
     if (q.minInstalls && (s.installs ?? 0) < q.minInstalls) return false;
     if (q.themes?.length && !s.themes.some((t) => q.themes!.includes(t))) return false;

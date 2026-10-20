@@ -84,6 +84,8 @@ export const ja: Messages = {
     noNewRisk: 'お使いの版から新しい警告サインはありません',
     noRisk: "警告サインなし（パターン検査であり保証ではありません）",
     growth: (n) => `前回のスナップショットから +${n} インストール`,
+    needs: '必要',
+    updated: (date) => `${date} 更新`,
   },
 
   agents: {
@@ -295,6 +297,7 @@ export const ja: Messages = {
     minInstalls: '最小インストール数',
     all: 'インストール数やスターのないスキルも含める',
     official: '公式スキルのみ（ベンダーが公開したもの、officialskills.sh に基づく）',
+    ready: '記載されたプログラムがすべてここにインストール済みの skill のみ',
     sort: '並び順：installs（インストール数の多い順）または name（名前）',
     agent: "対象エージェント（ID は `skills-atlas agents` を参照、'*' = すべて）",
     global: 'ユーザー単位でインストール（すべてのプロジェクト）',

@@ -25,12 +25,15 @@ export interface SkillSummary {
   recommended?: boolean;
   themes: string[];
   url?: string;
+  requires?: { bins?: string[]; compatibility?: string };
+  updated_at?: string;
 }
 
 export function summarize(s: Skill): SkillSummary {
   return {
     id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs,
     official: s.official || undefined, recommended: s.recommendation ? true : undefined, themes: s.themes, url: githubUrl(s),
+    requires: s.requires, updated_at: s.updatedAt,
   };
 }
 

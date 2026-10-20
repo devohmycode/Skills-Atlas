@@ -23,7 +23,7 @@ const catalog = curated(await loadCatalog());
 const all = querySkills(catalog, {});
 const top = sortSkills(all, 'installs').slice(0, TOP);
 const skills = [...new Map([...all.filter((s) => s.recommendation || s.themes.some((th) => th === 'trending' || th.startsWith('pack:'))), ...top].map((s) => [s.id, s])).values()].map((s) => ({
-  id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth,
+  id: s.id, name: s.name, source: s.source, description: s.description, installs: s.installs, stars: s.stars, growth: s.growth, requires: s.requires, updatedAt: s.updatedAt,
   rank: s.rank, official: s.official, recommendation: s.recommendation, themes: s.themes, labels: s.labels,
 }));
 const state = {
@@ -31,6 +31,8 @@ const state = {
   locale: 'en',
   messages: {
     ...t().web,
+    needs: t().tree.needs,
+    updated: t().tree.updated('{date}'),
     tagline: `Live demo with ${skills.length.toLocaleString('en')} of ${all.length.toLocaleString('en')} skills — nothing installs here. Run npx skills-atlas ui for the real thing.`,
     // Apply always answers with the demo notice: say so, rather than "some changes failed".
     summaryFailed: 'Demo only',
