@@ -155,7 +155,7 @@ Pinned verification requires network access to GitHub. Missing verification meta
 
 Each crawl records the installs every skill gained since the previous snapshot. The 50 that gained the most form **🔥 Trending**, right after Recommended, sorted by growth. The theme appears once two snapshots with install counts can be compared.
 
-Copies do not count. A repository that shares at least three growing skill names (each up 1,000 installs or more) with at least two other repositories is taken for a clone network: its skills stay out of Trending, and their details say how many repositories grow the same skills together. In the 2026-10-19 snapshot this left out six copies of one `superpowers` bundle, which filled more than half of the theme; a single fork or a common name such as `code-review` does not reach the threshold.
+Copies do not count. A repository that shares at least three growing skill names (each up 1,000 installs or more) with at least two other repositories is taken for a clone network: its skills stay out of Trending, and their details say how many repositories grow the same skills together. In the 2026-10-19 snapshot this left out six copies of one `superpowers` bundle, which held nearly half of the theme; a single fork or a common name such as `code-review` does not reach the threshold.
 
 ### From Claude and other agents
 
