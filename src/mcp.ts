@@ -7,7 +7,7 @@ import { readPacks } from './catalog/packs.js';
 import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
 import { isSuccess, runAll } from './install/run.js';
-import { riskReport } from './risks.js';
+import { riskReport, riskWhere } from './risks.js';
 import { checkSkillName } from './selection.js';
 import { SCOPES, type Catalog, type Scope, type Skill } from './types.js';
 
@@ -148,7 +148,7 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
         const known = new Map(c.skills.map((s) => [s.id.toLowerCase(), s]));
         const failing = (await auditSkills((input.ids as string[]).map((id) => auditTarget(id, known)), opts.readSkill)).filter(failsAudit);
         if (failing.length) {
-          const list = failing.map((r) => `${r.id}: ${r.risks.filter((x) => x.level === 'high').map((x) => `${x.label} (SKILL.md:${x.line}: ${x.excerpt})`).join('; ')}`);
+          const list = failing.map((r) => `${r.id}: ${r.risks.filter((x) => x.level === 'high').map((x) => `${x.label} (${riskWhere(x)}: ${x.excerpt})`).join('; ')}`);
           throw new Error(`Nothing installed: ${failing.length} skill(s) fail the security audit. ${list.join(' | ')}. Tell the user, and call again with ignore_audit: true only if they say yes.`);
         }
       }

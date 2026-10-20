@@ -600,7 +600,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     if (!result.risks.length) return '<p>' + esc(M.noRisk) + '</p>';
     return '<ul>' + result.risks.map(function (r) {
       return '<li>' + esc((M.riskLevels || {})[r.level] || r.level) + ': ' + esc((M.risks || {})[r.rule] || r.label) +
-        ' (' + r.line + ')<pre class="details-text">' + esc(r.excerpt) + '</pre></li>';
+        ' (' + esc((r.file || 'SKILL.md') + (r.line ? ':' + r.line : '')) + ')<pre class="details-text">' + esc(r.excerpt) + '</pre></li>';
     }).join('') + '</ul>';
   }
   function previewSkill(skill, trigger) {
