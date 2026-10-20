@@ -37,6 +37,8 @@ export interface Skill {
   updatedAt?: string;
   /** Set at load: how many other repositories grow the same skills in lockstep; such growth stays out of Trending. */
   growthSuspect?: number;
+  /** Its repository, per GitHub at crawl time: SPDX license, archived, day of the last push (YYYY-MM-DD). */
+  repo?: { license?: string; archived?: boolean; pushedAt?: string };
   /** Published by the vendor itself (its GitHub owner is listed on officialskills.sh). */
   official?: boolean;
   /** Personal editorial selection, independent of popularity or official status. */

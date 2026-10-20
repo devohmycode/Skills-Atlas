@@ -86,6 +86,8 @@ export const en = {
     needs: 'needs',
     updated: (date: string) => `updated ${date}`,
     growthSuspect: (n: number) => `not in Trending: the same skills grow together in ${n} other repositories`,
+    archived: 'archived',
+    stale: (date: string) => `no push since ${date}`,
   },
 
   agents: {
@@ -299,6 +301,7 @@ export const en = {
     all: 'include skills with no installs or stars',
     official: 'only official skills (published by the vendor, per officialskills.sh)',
     ready: 'only skills whose stated programs are all installed here',
+    active: 'leave out skills of archived repositories and of those not pushed to for over a year',
     sort: 'order: installs (most installed first) or name',
     agent: "target agents (ids from `skills-atlas agents`, '*' = all)",
     global: 'install for your user (every project)',

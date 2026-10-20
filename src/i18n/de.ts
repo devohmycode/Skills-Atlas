@@ -89,6 +89,8 @@ export const de: Messages = {
     needs: 'braucht',
     updated: (date) => `geändert am ${date}`,
     growthSuspect: (n) => `nicht in Trends: dieselben Skills wachsen gleichzeitig in ${n} weiteren Repositories`,
+    archived: 'archiviert',
+    stale: (date) => `kein Push seit ${date}`,
   },
 
   agents: {
@@ -301,6 +303,7 @@ export const de: Messages = {
     all: 'auch Skills ohne Installationen oder Sterne',
     official: 'nur offizielle Skills (vom Hersteller veröffentlicht, laut officialskills.sh)',
     ready: 'nur Skills, deren angegebene Programme hier alle installiert sind',
+    active: 'lässt Skills archivierter oder seit über einem Jahr nicht gepushter Repositories weg',
     sort: 'Reihenfolge: installs (meistinstallierte zuerst) oder name (Name)',
     agent: "Ziel-Agenten (IDs aus `skills-atlas agents`, '*' = alle)",
     global: 'für deinen Benutzer installieren (alle Projekte)',

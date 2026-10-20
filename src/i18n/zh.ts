@@ -87,6 +87,8 @@ export const zh: Messages = {
     needs: '需要',
     updated: (date) => `更新于 ${date}`,
     growthSuspect: (n) => `未计入热门：相同的 skill 在另外 ${n} 个仓库中同步增长`,
+    archived: '已归档',
+    stale: (date) => `自 ${date} 起无推送`,
   },
 
   agents: {
@@ -299,6 +301,7 @@ export const zh: Messages = {
     all: '包括没有安装量或星标的技能',
     official: '仅官方技能（由厂商发布，依据 officialskills.sh）',
     ready: '仅显示所需程序均已在本机安装的 skill',
+    active: '排除已归档或一年以上没有推送的仓库中的 skill',
     sort: '排序：installs（安装最多优先）或 name（名称）',
     agent: "目标智能体（ID 见 `skills-atlas agents`，'*' 表示全部）",
     global: '为当前用户安装（所有项目可用）',

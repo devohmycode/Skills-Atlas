@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { buildCatalog } from '../src/catalog/build.js';
 import { loadCatalog, saveCatalog } from '../src/catalog/load.js';
 import { enrichRequirements } from '../src/catalog/requirements.js';
+import { enrichRepositories } from '../src/catalog/repos.js';
 import { markGrowth } from '../src/catalog/trending.js';
 
 const args = process.argv.slice(2);
@@ -47,6 +48,7 @@ if (requires) {
   const { read, dated } = await enrichRequirements(catalog.skills, { max: requires, maxDates: Math.min(requires, 1000), githubToken: token, previous, log });
   log(`requirements: ${read} SKILL.md read, ${dated} dated, ${catalog.skills.filter((s) => s.requires).length} skills state requirements`);
 }
+log(`repositories: ${await enrichRepositories(catalog.skills, { githubToken: token, max: 5000, previous, log })} looked up on GitHub`);
 await mkdir('data', { recursive: true });
 const bytes = await saveCatalog(catalog, out);
 

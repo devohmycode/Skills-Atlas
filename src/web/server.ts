@@ -86,6 +86,7 @@ const slim = (s: Skill) => ({
   themes: s.themes,
   requires: s.requires,
   updatedAt: s.updatedAt,
+  repo: s.repo,
 });
 
 class HttpError extends Error {
@@ -146,7 +147,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       lang: getLang(),
       locale: locale(),
       sources: opts.sources,
-      messages: { ...t().web, risks: t().tree.risks, riskLevels: t().tree.riskLevels, needs: t().tree.needs, updated: t().tree.updated('{date}'),
+      messages: { ...t().web, risks: t().tree.risks, riskLevels: t().tree.riskLevels, needs: t().tree.needs, updated: t().tree.updated('{date}'), archived: t().tree.archived, stale: t().tree.stale('{date}'),
         noRisk: t().tree.noRisk, previewLoading: t().tree.previewLoading,
         auditOff: t().confirm.auditOff, auditUnread: t().confirm.auditUnread, auditToggle: t().confirm.auditToggle },
       cwd,
