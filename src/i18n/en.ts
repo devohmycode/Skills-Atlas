@@ -85,6 +85,7 @@ export const en = {
     growth: (n: string) => `+${n} installs since the last snapshot`,
     needs: 'needs',
     updated: (date: string) => `updated ${date}`,
+    growthSuspect: (n: number) => `not in Trending: the same skills grow together in ${n} other repositories`,
   },
 
   agents: {

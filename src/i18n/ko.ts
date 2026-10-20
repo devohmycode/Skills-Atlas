@@ -86,6 +86,7 @@ export const ko: Messages = {
     growth: (n) => `지난 스냅샷 이후 설치 +${n}`,
     needs: '필요',
     updated: (date) => `${date} 업데이트`,
+    growthSuspect: (n) => `트렌딩 제외: 같은 skill이 다른 저장소 ${n}곳에서 함께 증가`,
   },
 
   agents: {

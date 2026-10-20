@@ -35,6 +35,8 @@ export interface Skill {
   requires?: { bins?: string[]; compatibility?: string };
   /** Day its folder last changed on GitHub (YYYY-MM-DD), for the most installed skills. */
   updatedAt?: string;
+  /** Set at load: how many other repositories grow the same skills in lockstep; such growth stays out of Trending. */
+  growthSuspect?: number;
   /** Published by the vendor itself (its GitHub owner is listed on officialskills.sh). */
   official?: boolean;
   /** Personal editorial selection, independent of popularity or official status. */

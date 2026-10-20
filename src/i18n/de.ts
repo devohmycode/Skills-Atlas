@@ -88,6 +88,7 @@ export const de: Messages = {
     growth: (n) => `+${n} Installationen seit dem letzten Stand`,
     needs: 'braucht',
     updated: (date) => `geändert am ${date}`,
+    growthSuspect: (n) => `nicht in Trends: dieselben Skills wachsen gleichzeitig in ${n} weiteren Repositories`,
   },
 
   agents: {

@@ -88,6 +88,7 @@ export const it: Messages = {
     growth: (n) => `+${n} installazioni dall'ultima istantanea`,
     needs: 'richiede',
     updated: (date) => `aggiornato il ${date}`,
+    growthSuspect: (n) => `fuori da Tendenze: gli stessi skill crescono insieme in altri ${n} repository`,
   },
 
   agents: {

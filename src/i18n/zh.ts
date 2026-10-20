@@ -86,6 +86,7 @@ export const zh: Messages = {
     growth: (n) => `自上次快照以来新增 ${n} 次安装`,
     needs: '需要',
     updated: (date) => `更新于 ${date}`,
+    growthSuspect: (n) => `未计入热门：相同的 skill 在另外 ${n} 个仓库中同步增长`,
   },
 
   agents: {
