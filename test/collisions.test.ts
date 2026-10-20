@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { skillsByAgent } from '../src/agent-api.js';
 import { nameCollisions } from '../src/install/collisions.js';
+import { agentList } from '../src/ui/TreeSelect.js';
 
 describe('name collisions', () => {
   it('flags a skill that would replace an installed one from another source', () => {
@@ -19,9 +21,7 @@ describe('name collisions', () => {
 });
 
 describe('skills by agent', () => {
-  it('lists, under each agent, the skills it sees', async () => {
-    const { skillsByAgent } = await import('../src/agent-api.js');
-    const { agentList } = await import('../src/ui/TreeSelect.js');
+  it('lists, under each agent, the skills it sees', () => {
     const groups = skillsByAgent([
       { id: 'a/b@zeta', name: 'zeta', source: 'a/b', scope: 'global', agents: ['codex', 'claude-code'] },
       { id: 'a/b@alpha', name: 'alpha', source: 'a/b', scope: 'project', agents: ['codex'] },

@@ -1,4 +1,4 @@
-import { cleanup, render } from 'ink-testing-library';
+import { cleanup, render as inkRender } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mergeInstalled } from '../src/catalog/installed.js';
 import { setLang } from '../src/i18n/index.js';
@@ -32,10 +32,35 @@ const cleanSkill = async () => '# A skill\nNothing risky here.';
 
 const KEY = { up: '\u001B[A', down: '\u001B[B', right: '\u001B[C', left: '\u001B[D', enter: '\r', escape: '\u001B' };
 const tick = () => new Promise((r) => setTimeout(r, 40));
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Each render's frame, found from its stdin, so that `press` can wait for the screen to settle. */
+const frameOf = new WeakMap<object, () => string | undefined>();
+const render: typeof inkRender = (tree) => {
+  const r = inkRender(tree);
+  frameOf.set(r.stdin, r.lastFrame);
+  return r;
+};
+/**
+ * Waits until the frame has not changed for 50 ms (2 s at most). A fixed delay raced on a
+ * loaded machine: a key, its render and an async step after it (the review's audit) can
+ * take longer, and a click computed from a stale frame lands on the wrong row.
+ */
+async function settle(stdin: object) {
+  const frame = frameOf.get(stdin);
+  await tick();
+  if (!frame) return;
+  let last = frame();
+  for (let quiet = 0, waited = 0; quiet < 2 && waited < 2000; waited += 25) {
+    await wait(25);
+    const now = frame();
+    quiet = now === last ? quiet + 1 : 0;
+    last = now;
+  }
+}
 async function press(stdin: { write: (s: string) => void }, ...keys: string[]) {
   for (const k of keys) {
     stdin.write(k);
-    await tick();
+    await settle(stdin);
   }
 }
 
