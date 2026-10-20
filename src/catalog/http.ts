@@ -1,4 +1,4 @@
-const USER_AGENT = 'skills-atlas-crawler (+https://github.com/devohmycode/skills-atlas)';
+const USER_AGENT = 'skills-atlas-crawler (+https://github.com/devohmycode/Skills-Atlas)';
 
 export interface FetchOptions {
   retries?: number;

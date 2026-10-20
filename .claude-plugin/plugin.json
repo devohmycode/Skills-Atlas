@@ -6,8 +6,8 @@
     "name": "DevOhMyCode",
     "url": "https://github.com/devohmycode"
   },
-  "homepage": "https://github.com/devohmycode/skills-atlas",
-  "repository": "https://github.com/devohmycode/skills-atlas",
+  "homepage": "https://github.com/devohmycode/Skills-Atlas",
+  "repository": "https://github.com/devohmycode/Skills-Atlas",
   "license": "MIT",
   "keywords": ["skills", "agent-skills", "SKILL.md", "catalog", "install", "mcp"],
   "mcpServers": {

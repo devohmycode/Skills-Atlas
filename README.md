@@ -1,11 +1,11 @@
-<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/banner@2x.png" alt="skills-atlas: browse, read and install 75,000 Agent Skills with npx skills-atlas, in the terminal, the browser, over MCP or as a Claude Code plugin" width="1000"></h1>
+<h1 align="center"><img src="https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/docs/banner@2x.png" alt="skills-atlas: browse, read and install 75,000 Agent Skills with npx skills-atlas, in the terminal, the browser, over MCP or as a Claude Code plugin" width="1000"></h1>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/v/skills-atlas?color=FF8AD8" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/skills-atlas"><img src="https://img.shields.io/npm/dm/skills-atlas?color=B69BFA" alt="npm downloads"></a>
   <a href="#install-options"><img src="https://img.shields.io/badge/works%20with-79%20agents-A6D5B2" alt="Works with 79 agents"></a>
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/skills-atlas?color=8BD5F5" alt="MIT license"></a>
-  <a href="https://devohmycode.github.io/skills-atlas/demo/"><img src="https://img.shields.io/badge/try%20it-web%20demo-E6BF68" alt="Web demo"></a>
+  <a href="https://devohmycode.github.io/Skills-Atlas/demo/"><img src="https://img.shields.io/badge/try%20it-web%20demo-E6BF68" alt="Web demo"></a>
 </p>
 
 Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible terminal tree or a local web interface. Tick several and install them together through [`npx skills add`](https://github.com/vercel-labs/skills). Installed skills start ticked: untick one to uninstall it.
@@ -19,11 +19,11 @@ Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible ter
 - **From your agent**: a skill, an MCP server and a Claude Code plugin let [Claude and other agents](#from-claude-and-other-agents) search, read and install skills for you.
 - **Everywhere**: 79 agents, a terminal tree and a [web page](#web-interface), nine languages, [shell completion](#usage), and it works offline.
 
-![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/demo.gif?v=0.9.0)
+![Animated terminal session: opening Recommended, ticking two obra/superpowers skills, previewing a SKILL.md with p, then choosing scope, agents and method before the review](https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/docs/demo.gif?v=0.9.0)
 
-*A session: tick skills in ★ Recommended, read a `SKILL.md` with `p`, then review the `npx skills` command. [Try the web interface online](https://devohmycode.github.io/skills-atlas/demo/), nothing installs there.*
+*A session: tick skills in ★ Recommended, read a `SKILL.md` with `p`, then review the `npx skills` command. [Try the web interface online](https://devohmycode.github.io/Skills-Atlas/demo/), nothing installs there.*
 
-![Skills Atlas terminal tree with installed skills, Recommended grouped by repository and two superpowers skills ticked](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/screenshot.png?v=0.7.2)
+![Skills Atlas terminal tree with installed skills, Recommended grouped by repository and two superpowers skills ticked](https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/docs/screenshot.png?v=0.7.2)
 
 *Terminal: installed skills ticked, ★ Recommended opened by repository, candy-pink selections.*
 
@@ -183,7 +183,7 @@ The tools only change your machine through `install_skills` and `remove_skills`,
 
 ### Web interface
 
-![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/web-ui.jpg?v=0.7.2)
+![Skills Atlas web interface with Recommended skills, catalog search and an installation changes panel](https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/docs/web-ui.jpg?v=0.7.2)
 
 *Web: the same catalog and selection workflow, with light, dark and system appearance.*
 
@@ -262,7 +262,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 - **Install**: ticking a skill that is not installed installs it. The scope is asked after the tree, pre-filled with your last choice, unless `-p`/`-g` sets it.
 - **Questions**: the status line shows the balance `+N −M`. Scope, agents and method are only asked when there is something to install.
 
-![Skills Atlas agent step listing every supported agent, with the agents detected on this machine flagged and two of them ticked](https://raw.githubusercontent.com/devohmycode/skills-atlas/main/docs/agents.png?v=0.7.2)
+![Skills Atlas agent step listing every supported agent, with the agents detected on this machine flagged and two of them ticked](https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/docs/agents.png?v=0.7.2)
 
 *Agents step: every agent the skills CLI supports, with those detected on this machine flagged `· detected`.*
 
