@@ -676,7 +676,7 @@ export function TreeSelect({
                 )}
               </Text>
               <Text>
-                {row.skill.growth ? <Text color={PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}   `}</Text> : null}
+                {row.skill.growth ? <Text color={row.skill.growthSuspect ? PALETTE.gold : PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}${row.skill.growthSuspect ? ` (${m.tree.growthSuspect(row.skill.growthSuspect)})` : ''}   `}</Text> : null}
                 {row.skill.updatedAt ? <Text dimColor>{`${m.tree.updated(row.skill.updatedAt)}  ·  `}</Text> : null}
                 <Text dimColor>{popularityLong(row.skill)}</Text>
               </Text>

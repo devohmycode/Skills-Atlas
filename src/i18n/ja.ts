@@ -86,6 +86,7 @@ export const ja: Messages = {
     growth: (n) => `前回のスナップショットから +${n} インストール`,
     needs: '必要',
     updated: (date) => `${date} 更新`,
+    growthSuspect: (n) => `トレンド対象外: 同じ skill がほかの ${n} 個のリポジトリで同時に増加`,
   },
 
   agents: {
