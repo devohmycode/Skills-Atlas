@@ -25,6 +25,7 @@ import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
 import { lockSelection, projectRevisionDrift, type Revisions } from './revisions.js';
 import { fetchSkillFiles, fetchSkillMarkdown } from './github.js';
 import { riskWhere } from './risks.js';
+import { updateDiff } from './install/diff.js';
 import { browseLoop } from './browse.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
@@ -751,7 +752,17 @@ installOptions(program.command('update'))
     // Named skills are updated only if they are outdated: a reinstall of an up-to-date one would change nothing.
     const chosen = ids.length ? outdated.filter((s) => wanted.includes(s.id.toLowerCase())) : outdated;
     if (!chosen.length) return console.log(paint('dim', c.upToDate));
-    for (const s of chosen) console.log(`  ${paint('pink', '↑')} ${s.id}`);
+    // What each update changes, and the warning signs it brings, before anything runs.
+    const local = await listInstalled('global');
+    const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
+    const known = new Map(catalog?.skills.map((s) => [s.id.toLowerCase(), s]));
+    for (const s of chosen) {
+      const diff = await updateDiff(auditTarget(s.id, known), local).catch(() => undefined);
+      console.log(`  ${paint('pink', '↑')} ${s.id}${diff ? paint('dim', `  +${diff.added} −${diff.removed}`) : ''}`);
+      for (const x of diff?.risks.filter((x) => x.level !== 'info') ?? []) {
+        console.log(paint(x.level === 'high' ? 'red' : 'yellow', `      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  SKILL.md:${x.line}  ${x.excerpt}`));
+      }
+    }
     // A new version is new content: it is audited like an install.
     const passed = new Set(await auditGate(chosen.map((s) => s.id), opts));
     chosen.splice(0, chosen.length, ...chosen.filter((s) => passed.has(s.id)));

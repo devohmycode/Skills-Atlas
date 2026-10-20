@@ -4,7 +4,8 @@ import { groupByRepository } from '../catalog/groups.js';
 import { byGrowth, TRENDING_THEME } from '../catalog/trending.js';
 import { createSearchIndex, groupByTheme, popularityLabel, SORT_ORDERS, type SortOrder } from '../catalog/query.js';
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
-import { scanRisks, type RiskLevel } from '../risks.js';
+import { scanRisks, type Risk, type RiskLevel } from '../risks.js';
+import { diffText, updateDiff, type UpdateDiff } from '../install/diff.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
 import type { InstalledEntry } from '../catalog/installed.js';
 import type { Scope, Skill, Theme } from '../types.js';
@@ -67,6 +68,8 @@ export interface TreeSelectProps {
   onOpenGitHub?: (skill: Skill) => void;
   /** Read at start and written on submit: the open groups and the focused row. */
   memory?: TreeMemory;
+  /** `p` on a skill marked for update: what the update changes; the installed copy against GitHub by default. */
+  loadDiff?: (skill: Skill) => Promise<UpdateDiff>;
   /** The SKILL.md shown by `p`; fetched from GitHub by default. */
   loadPreview?: (skill: Skill) => Promise<string>;
 }
@@ -145,6 +148,7 @@ export function TreeSelect({
   memory,
   updates = NO_UPDATES,
   loadPreview = fetchSkillMarkdown,
+  loadDiff = (s) => updateDiff(s),
 }: TreeSelectProps) {
   const m = t();
   const { columns, rows: termRows } = useTerminalSize();
@@ -152,8 +156,9 @@ export function TreeSelect({
   const [selected, setSelectedState] = useState<Set<string>>(new Set(initialSelected));
   const [toUpdate, setToUpdateState] = useState<Set<string>>(new Set());
   // SKILL.md of the skill being previewed, read before installing it.
-  const [preview, setPreview] = useState<{ skill: Skill; text?: string; error?: string; top: number } | null>(null);
+  const [preview, setPreview] = useState<{ skill: Skill; text?: string; error?: string; top: number; diff?: UpdateDiff } | null>(null);
   const previews = useRef(new Map<string, string>());
+  const diffs = useRef(new Map<string, UpdateDiff>());
   const [cursor, setCursorState] = useState(0);
   const [filter, setFilterState] = useState(initialSearch);
   const [editingFilter, setEditingFilterState] = useState(false);
@@ -337,6 +342,22 @@ export function TreeSelect({
     const focused = list[liveCurrent(list)];
     if (focused?.kind !== 'skill' || !githubUrl(focused.skill)) return;
     const skill = focused.skill;
+    if (live.current.toUpdate.has(skill.id)) {
+      const known = diffs.current.get(skill.id);
+      setPreview({ skill, text: known && diffText(known.lines), diff: known, top: 0 });
+      if (known) return;
+      loadDiff(skill).then(
+        (diff) => {
+          diffs.current.set(skill.id, diff);
+          setPreview((p) => (p?.skill === skill ? { ...p, text: diffText(diff.lines), diff } : p));
+        },
+        (err: unknown) => {
+          const error = m.tree.previewFailed(err instanceof Error ? err.message : String(err));
+          setPreview((p) => (p?.skill === skill ? { ...p, error } : p));
+        },
+      );
+      return;
+    }
     const cached = previews.current.get(skill.id);
     setPreview({ skill, text: cached, top: 0 });
     if (cached !== undefined) return;
@@ -353,8 +374,10 @@ export function TreeSelect({
   };
   // The preview fills the list's place: header, text, hints.
   // At most three warnings show above the text; the rest are in `skills-atlas show`.
-  const risks = useMemo(() => (preview?.text !== undefined ? scanRisks(preview.text) : []), [preview?.text]);
-  const riskLines = preview?.text === undefined ? 0 : 1 + Math.min(3, risks.length);
+  // An update shows what it changes, and only the warning signs it brings.
+  const risks: Risk[] = useMemo(() => preview?.diff?.risks ?? (preview?.text !== undefined ? scanRisks(preview.text) : []), [preview?.text, preview?.diff]);
+  const riskTitle = preview?.diff ? 1 : 0;
+  const riskLines = preview?.text === undefined ? 0 : 1 + riskTitle + Math.min(3, risks.length);
   const previewHeight = Math.max(5, termRows - 8 - riskLines);
   const previewLines = preview?.text !== undefined ? wrapLines(preview.text, Math.max(20, columns - 6)) : [];
   const scrollPreview = (delta: number) =>
@@ -468,10 +491,11 @@ export function TreeSelect({
         </Box>
         {preview.text !== undefined && (
           <Box flexDirection="column">
+            {preview.diff && <Text bold>{m.tree.diffSummary(preview.diff.added, preview.diff.removed)}</Text>}
             {risks.length ? (
-              <Text color={levelColor[risks[0]!.level]} bold>{`⚠ ${m.tree.risksFound(risks.length)}`}</Text>
+              <Text color={levelColor[risks[0]!.level]} bold>{`⚠ ${preview.diff ? m.tree.newRisksFound(risks.length) : m.tree.risksFound(risks.length)}`}</Text>
             ) : (
-              <Text color={PALETTE.success}>{`✓ ${m.tree.noRisk}`}</Text>
+              <Text color={PALETTE.success}>{`✓ ${preview.diff ? m.tree.noNewRisk : m.tree.noRisk}`}</Text>
             )}
             {risks.slice(0, 3).map((r) => (
               <Text key={r.rule} wrap="truncate-end">
@@ -488,7 +512,11 @@ export function TreeSelect({
             ) : preview.text === undefined ? (
               <Text color={PALETTE.gold}>{m.tree.previewLoading}</Text>
             ) : (
-              shown.map((line, i) => <Text key={preview.top + i}>{line || ' '}</Text>)
+              shown.map((line, i) => (
+                <Text key={preview.top + i} color={preview.diff && line.startsWith('+ ') ? PALETTE.success : preview.diff && line.startsWith('- ') ? PALETTE.danger : undefined}>
+                  {line || ' '}
+                </Text>
+              ))
             )}
           </Box>
         </Panel>
