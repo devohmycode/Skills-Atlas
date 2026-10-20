@@ -13,6 +13,8 @@ export interface LockedSkill {
   /** Folder of the skill inside its repository. */
   dir: string;
   hash: string;
+  /** When it was last installed or updated, per the lock. */
+  date?: string;
 }
 
 const Lock = z.object({
@@ -21,6 +23,8 @@ const Lock = z.object({
     sourceType: z.string().optional(),
     skillPath: z.string().optional(),
     skillFolderHash: z.string().optional(),
+    installedAt: z.string().optional(),
+    updatedAt: z.string().optional(),
   })),
 });
 const Tree = z.object({ tree: z.array(z.object({ path: z.string(), type: z.string(), sha: z.string() })) });
@@ -41,7 +45,7 @@ export function readLockedSkills(path: string): LockedSkill[] {
   return Object.entries(lock.data.skills).flatMap(([name, e]) => {
     if (e.sourceType !== 'github' || !e.source || !/^[\w.-]+\/[\w.-]+$/.test(e.source)) return [];
     if (!e.skillPath || !e.skillFolderHash) return [];
-    return [{ name, source: e.source, dir: e.skillPath.replace(/\/?SKILL\.md$/i, ''), hash: e.skillFolderHash }];
+    return [{ name, source: e.source, dir: e.skillPath.replace(/\/?SKILL\.md$/i, ''), hash: e.skillFolderHash, date: e.updatedAt ?? e.installedAt }];
   });
 }
 

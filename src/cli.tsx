@@ -14,6 +14,7 @@ import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, sys
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
 import { nameCollisions } from './install/collisions.js';
 import { findUpdates } from './install/updates.js';
+import { dropRevision, readHistory, recordBeforeUpdate } from './install/history.js';
 import { diagnoseInstalled } from './install/doctor.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
@@ -179,6 +180,11 @@ async function apply(ids: string[], remove: Removal[], options: InstallOptions, 
   if (flags.dryRun) {
     for (const c of commands) console.log(formatCommand(c));
     return '';
+  }
+  // The way back: the version each updated skill has now, for `rollback`.
+  if (update.length) {
+    const missed = await recordBeforeUpdate(update.map((u) => u.id));
+    if (missed.length) console.error(paint('dim', t().cli.rollbackMissed(missed.join(', '))));
   }
   const config = readConfig();
   // Removals only: nothing was asked, so there is nothing to remember.
@@ -771,6 +777,35 @@ installOptions(program.command('update'))
     // Each skill keeps its own agents; these options only fill in what a skill's scan did not name.
     const options: InstallOptions = { agents: defaults.agents, scope: 'global', method: opts.copy ? 'copy' : opts.symlink ? 'symlink' : defaults.method, skillsVersion: opts.skillsVersion };
     await apply([], [], options, opts, chosen.map((s) => ({ id: s.id, agents: s.agents })));
+  });
+
+installOptions(program.command('rollback'))
+  .argument('<id>', c.ids)
+  .option('--list', c.rollbackList)
+  .option('--to <sha>', c.rollbackTo)
+  .description(c.rollbackCmd)
+  .action(async (id: string, opts: InstallFlags & { list?: boolean; to?: string }) => {
+    const past = readHistory()[id.toLowerCase()] ?? [];
+    if (opts.list) {
+      if (!past.length) return console.log(paint('dim', c.rollbackNone(id)));
+      console.log(c.rollbackPast(id));
+      for (const r of past) console.log(`  ${r.revision}  ${paint('dim', r.replacedAt.slice(0, 16).replace('T', ' '))}`);
+      return;
+    }
+    const skill = (await installedSkills(['global'])).find((s) => s.id.toLowerCase() === id.toLowerCase());
+    if (!skill) fail(c.rollbackNotInstalled(id));
+    const target = opts.to ? past.find((r) => r.revision.toLowerCase() === opts.to!.toLowerCase()) : past.at(-1);
+    if (!target) fail(opts.to ? c.rollbackUnknown(opts.to, id) : c.rollbackNone(id));
+    const revisions = { [skill!.id.toLowerCase()]: target!.revision };
+    // An old version is content too: audited at that revision, like a pinned install.
+    if (!(await auditGate([skill!.id], opts, revisions)).length) return console.log(paint('dim', m.run.noChange));
+    const { defaults } = resolveDefaults();
+    const options: InstallOptions = { agents: skill!.agents, scope: 'global', method: opts.copy ? 'copy' : opts.symlink ? 'symlink' : defaults.method, skillsVersion: opts.skillsVersion };
+    // A rollback reinstalls for the skill's own agents: they are not the choices to remember.
+    const remembered = readConfig();
+    await apply([skill!.id], [], options, opts, [], revisions);
+    if (!opts.dryRun) writeConfig(remembered);
+    if (!opts.dryRun && !process.exitCode) dropRevision(skill!.id, target!.revision);
   });
 
 program
