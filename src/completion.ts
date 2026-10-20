@@ -43,7 +43,7 @@ export function complete(words: string[], ctx: CompletionContext): string[] {
     return starts([...own, ...ctx.globalOptions]);
   }
   if (!command) return starts(ctx.commands.map((c) => c.name));
-  if (command === 'install' || command === 'show' || command === 'update') return ctx.ids(cur);
+  if (command === 'install' || command === 'show' || command === 'update' || command === 'rollback') return ctx.ids(cur);
   if (command === 'import') return [FILES];
   if (command === 'lang') return starts(ctx.langs);
   if (command === 'completion') return starts(SHELLS);

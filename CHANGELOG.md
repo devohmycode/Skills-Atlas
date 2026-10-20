@@ -4,6 +4,7 @@
 
 - **The audit reads the whole skill folder.** Besides the `SKILL.md`, the skill's other text files (scripts, references, configs) are checked: a clean `SKILL.md` that runs a `curl | sh` script now fails. Findings name their file (`scripts/setup.sh:12`) on the review screen, with `install -y`, `show`, the web page and MCP. Binaries, large files and unreadable ones are reported as not audited.
 - **See what an update changes.** In the tree, `p` on a skill marked for update shows the diff between the installed `SKILL.md` and the new one, with only the warning signs the new version adds. `skills-atlas update` (and `--dry-run`) prints the changed line counts and those warning signs first; MCP's `outdated_skills` returns them.
+- **Roll back an update.** Each update first records the commit the skill was installed from. `skills-atlas rollback <id>` reinstalls it for the skill's own agents, audited at that revision; `--list` shows the recorded versions (five per skill) and `--to <sha>` picks one.
 - **Prerequisites.** The risk check reads what a `SKILL.md` frontmatter says it needs. Programs under `requires.bins` that are not on your `PATH` are a medium warning, named on the review screen and by `install -y` before any command runs. The `compatibility` field is shown as information in `p`, `show` and MCP's `show_skill`.
 
 ## 0.12.0 — 2026-10-18
