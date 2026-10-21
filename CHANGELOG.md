@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.20.0 — 2026-10-21
+
 - **The audit reads the whole skill folder.** Besides the `SKILL.md`, the skill's other text files (scripts, references, configs) are checked: a clean `SKILL.md` that runs a `curl | sh` script now fails. Findings name their file (`scripts/setup.sh:12`) on the review screen, with `install -y`, `show`, the web page and MCP. Binaries, large files and unreadable ones are reported as not audited.
 - **See what an update changes.** In the tree, `p` on a skill marked for update shows the diff between the installed `SKILL.md` and the new one, with only the warning signs the new version adds. `skills-atlas update` (and `--dry-run`) prints the changed line counts and those warning signs first; MCP's `outdated_skills` returns them.
 - **Roll back an update.** Each update first records the commit the skill was installed from. `skills-atlas rollback <id>` reinstalls it for the skill's own agents, audited at that revision; `--list` shows the recorded versions (five per skill) and `--to <sha>` picks one.
@@ -10,6 +12,8 @@
 - **Repository health.** The crawl records each repository's license, archive state and last push (GitHub GraphQL, 5,000 repositories). Skills of archived or year-old repositories sort after the others, `--active` leaves them out, and the tree, the web page and MCP show license and state.
 - The web demo link pointed to `devohmycode.github.io/skills-atlas`, which answers 404 since the repository became `Skills-Atlas` (GitHub Pages paths are case-sensitive). Links, package metadata, the plugin manifest and the catalog URL now use the repository's own name.
 - **Prerequisites.** The risk check reads what a `SKILL.md` frontmatter says it needs. Programs under `requires.bins` that are not on your `PATH` are a medium warning, named on the review screen and by `install -y` before any command runs. The `compatibility` field is shown as information in `p`, `show` and MCP's `show_skill`.
+
+Validation: 249 tests and TypeScript checks.
 
 ## 0.12.0 — 2026-10-18
 
