@@ -28,7 +28,7 @@ function browser(preview: unknown = { markdown: '<img src=x onerror=bad()>', ris
   };
   const script = [...PAGE_HTML.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)![1]!;
   new Script(script.replace(/\}\)\(\);\s*$/, `
-    globalThis.ui = { view, opts, apply, body, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl, installedMatches, previewSkill,
+    globalThis.ui = { view, opts, apply, body, load, renderRows, renderThemes, rowHtml, groupsHtml, toggle, githubUrl, installedMatches, previewSkill,
       renderPanel, packSelection, openPack, savePackSelection,
       init: function (state, messages) { M = messages; setState(state); } };
   })();`)).runInNewContext(context);
@@ -160,6 +160,33 @@ describe('web interface', () => {
     expect(element('rows').insertAdjacentHTML).toHaveBeenCalledOnce();
     expect(element('rows').insertAdjacentHTML.mock.calls[0][1]).toContain('second');
     expect(element('rows').insertAdjacentHTML.mock.calls[0][1]).not.toContain('data-id="owner/repo@skill"');
+  });
+
+  it('keeps the rows shown when the next page fails, and retries from the same offset', async () => {
+    const { ui, element, skill, respond, context } = browser();
+    ui.view.total = 3;
+    ui.renderRows(false);
+    const shown = element('rows').innerHTML;
+    respond(() => Promise.resolve({ ok: false, statusText: 'Bad Gateway', json: async () => ({ error: 'upstream down' }) }));
+    await ui.load(true);
+    expect(element('rows').innerHTML).toBe(shown);
+    expect(element('more-error').hidden).toBe(false);
+    expect(element('more-error').textContent).toBe('Error: upstream down');
+    expect(element('more').disabled).toBe(false);
+    expect(ui.view.items).toEqual([skill]);
+    const next = { ...skill, id: 'owner/repo@second', name: 'second' };
+    respond(() => Promise.resolve({ ok: true, json: async () => ({ items: [next], total: 3, all: 3, counts: {} }) }));
+    await ui.load(true);
+    const urls = context.fetch.mock.calls.map((c: unknown[]) => String(c[0])).filter((u: string) => u.startsWith('/api/skills'));
+    expect(urls.map((u: string) => new URLSearchParams(u.split('?')[1]).get('offset'))).toEqual(['1', '1']);
+    expect(element('rows').insertAdjacentHTML).toHaveBeenCalledOnce();
+    expect(ui.view.items.map((s: { id: string }) => s.id)).toEqual([skill.id, next.id]);
+    expect(element('more-error').hidden).toBe(true);
+    expect(element('more').hidden).toBe(false);
+    // A failed first page still says so in the list.
+    respond(() => Promise.reject(new Error('offline')));
+    await ui.load(false);
+    expect(element('rows').innerHTML).toContain('Error: offline');
   });
 
   it('opens a safe GitHub URL with g on a row and leaves text entry alone', () => {
