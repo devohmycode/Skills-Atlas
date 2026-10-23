@@ -6,7 +6,7 @@ on:
     # run back to back). Minutes are free on public repositories, but each run
     # (~24 min) still shows on the account's Actions usage meter, shared with
     # private repositories on a 2,000-minute plan.
-    - cron: '17 4 */2 * *'
+    - cron: '17 4 */3 * *'
   workflow_dispatch:
 
 permissions:
