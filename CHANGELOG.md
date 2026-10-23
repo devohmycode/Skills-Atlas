@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.30.0 — 2026-10-23
+
 - **Update checks say when they are incomplete.** A repository GitHub does not answer for (HTTP 403 rate limit, timeout, invalid answer), a truncated tree or a skill folder it no longer has is reported instead of read as up to date: the tree shows a warning, `outdated` and `update` name each on stderr and exit with 1, and `update` still runs the updates it confirmed. `outdated --json` keeps its array on stdout. A skill installed at the repository root is now checked too.
 - **MCP `outdated_skills` returns `{ skills, unchecked }`** instead of an array: the skills as before, with their diff, and the repositories that could not be checked. Agents reading the old array must read `skills`.
 - **Rollback records only a proven version.** The commit kept before an update must have the lock's folder hash: a commit found by date alone is checked against GitHub, and after `rollback` the exact commit is remembered (`revisions.json`, next to `history.json`) while the lock keeps that hash. A rollback to an old commit followed by an update now goes back to that commit, not to the latest one on the branch. When no version can be proven, `update` says the skill has no way back.
@@ -11,6 +13,8 @@
 - **An empty crawl fails** instead of replacing the snapshot with zero skills.
 - **Web page:** a failed "Show more" keeps the rows already loaded and shows the error under them; the next try loads from the same place. After a change in the side panel, the focus stays on the same agent, scope or method control (or the panel's first control when it went away).
 - **CI:** types, tests and build run on every pull request.
+
+Validation: 268 tests and TypeScript checks.
 
 ## 0.20.0 — 2026-10-21
 
