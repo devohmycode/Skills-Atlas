@@ -53,6 +53,8 @@ Updates (global skills only):
 npx -y skills-atlas@latest outdated --json   # [{ id, name, source, scope, agents }]
 ```
 
+Exit code 1 means the check is incomplete: the repositories it could not check are named on stderr, and their skills may be outdated too. Tell the user rather than saying everything is up to date.
+
 To update one, install it again with its own agents: `install <id> -g -a <its agents> -y`. Skills installed for the same agents can share one command.
 
 There is no non-interactive uninstall in skills-atlas: use `npx -y skills remove -s <name> -y` (add `-g` for a global skill).
