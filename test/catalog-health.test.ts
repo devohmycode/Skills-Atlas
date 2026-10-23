@@ -9,8 +9,10 @@ vi.mock('../src/catalog/sources/smithery.js', () => ({ fetchSmithery: vi.fn() })
 vi.mock('../src/catalog/sources/claude-plugins-dev.js', () => ({ fetchClaudePluginsDev: vi.fn() }));
 vi.mock('../src/catalog/sources/official.js', () => ({ fetchOfficialOwners: vi.fn(async () => undefined), markOfficial: vi.fn() }));
 
+const one = [{ origin: 'skills.sh' as const, name: 'pdf', source: 'anthropics/skills', installs: 10 }];
+
 beforeEach(() => {
-  vi.mocked(fetchSkillsSh).mockResolvedValue([]);
+  vi.mocked(fetchSkillsSh).mockResolvedValue(one);
   vi.mocked(fetchSmithery).mockResolvedValue([]);
   vi.mocked(fetchClaudePluginsDev).mockResolvedValue([]);
 });
@@ -20,7 +22,7 @@ describe('catalog source health', () => {
     vi.mocked(fetchSmithery).mockRejectedValue(new Error('Registry unavailable'));
     const catalog = await buildCatalog();
     expect(catalog.stats.sources).toEqual({
-      'skills.sh': { status: 'ok', count: 0 },
+      'skills.sh': { status: 'ok', count: 1 },
       'claude-plugins.dev': { status: 'ok', count: 0 },
       smithery: { status: 'error', count: 0, error: 'Registry unavailable' },
     });
@@ -32,5 +34,15 @@ describe('catalog source health', () => {
     vi.mocked(fetchSkillsSh).mockRejectedValue(new Error('down'));
     vi.mocked(fetchClaudePluginsDev).mockRejectedValue(new Error('down'));
     await expect(buildCatalog()).rejects.toThrow('every catalog source failed');
+  });
+
+  it('refuses a collection without any skill: one source empty and the others down, or all empty', async () => {
+    vi.mocked(fetchSkillsSh).mockResolvedValue([]);
+    vi.mocked(fetchSmithery).mockRejectedValue(new Error('down'));
+    vi.mocked(fetchClaudePluginsDev).mockRejectedValue(new Error('down'));
+    await expect(buildCatalog()).rejects.toThrow('the crawl found no skill');
+    vi.mocked(fetchSmithery).mockResolvedValue([]);
+    vi.mocked(fetchClaudePluginsDev).mockResolvedValue([]);
+    await expect(buildCatalog()).rejects.toThrow('the crawl found no skill');
   });
 });
