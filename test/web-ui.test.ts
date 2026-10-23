@@ -189,6 +189,47 @@ describe('web interface', () => {
     expect(element('rows').innerHTML).toContain('Error: offline');
   });
 
+  it('puts the focus back on the same panel control after a rebuild, and leaves focus elsewhere alone', () => {
+    const { ui, element, skill, context } = browser();
+    ui.toggle(skill);
+    const panel = element('panel-body');
+    const control = (attrs: Record<string, string>, extra: object = {}) => ({
+      id: '', type: 'checkbox', name: '', value: '', focus: vi.fn(), setSelectionRange: vi.fn(),
+      hasAttribute: (a: string) => a in attrs, getAttribute: (a: string) => attrs[a], ...extra,
+    });
+    const fresh = new Map<string, any>();
+    panel.contains = (el: unknown) => el !== outside;
+    panel.querySelector = (selector: string) => fresh.get(selector) ?? null;
+    const outside = control({});
+    const cases: [any, string][] = [
+      [control({ 'data-agent': 'codex' }), '[data-agent="codex"]'],
+      [control({}, { type: 'radio', name: 'scope', value: 'global' }), 'input[name="scope"][value="global"]'],
+      [control({}, { type: 'radio', name: 'method', value: 'copy' }), 'input[name="method"][value="copy"]'],
+      [control({}, { id: 'agent-filter', type: 'search', value: 'cod' }), '#agent-filter'],
+    ];
+    for (const [before, selector] of cases) {
+      const after = control({}, { id: before.id, value: before.value });
+      fresh.clear();
+      fresh.set(selector, after);
+      context.document.activeElement = before;
+      ui.renderPanel();
+      expect(after.focus).toHaveBeenCalledOnce();
+    }
+    expect(fresh.get('#agent-filter').setSelectionRange).toHaveBeenCalledWith(3, 3);
+    // The control went away: the panel's first control takes the focus.
+    const first = control({});
+    fresh.clear();
+    fresh.set('button, input', first);
+    context.document.activeElement = control({ 'data-add': 'gone' });
+    ui.renderPanel();
+    expect(first.focus).toHaveBeenCalledOnce();
+    // Focus outside the panel: nothing moves.
+    first.focus.mockClear();
+    context.document.activeElement = outside;
+    ui.renderPanel();
+    expect(first.focus).not.toHaveBeenCalled();
+  });
+
   it('opens a safe GitHub URL with g on a row and leaves text entry alone', () => {
     const { ui, element, row, open } = browser();
     ui.renderRows(false);
