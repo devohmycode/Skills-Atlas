@@ -9,7 +9,6 @@ import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
 import { isSuccess, listInstalled, runAll } from './install/run.js';
 import { riskReport, riskWhere } from './risks.js';
-import { checkSkillName } from './selection.js';
 import { SCOPES, type Catalog, type Scope, type Skill } from './types.js';
 
 /**
@@ -145,7 +144,7 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       })));
     }
     case 'install_skills': {
-      for (const id of input.ids as string[]) checkSkillName(parseSkillId(id).name, id);
+      for (const id of input.ids as string[]) parseSkillId(id);
       const unknown = unknownAgents(input.agents);
       if (unknown.length) throw new Error(`unknown agents: ${unknown.join(', ')}`);
       const commands = planInstall(input.ids, { agents: input.agents, scope: input.scope, method: input.method ?? 'symlink', skillsVersion: opts.skillsVersion });
@@ -170,7 +169,6 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       return json({ ok: outcomes.every(isSuccess), results: outcomes.flatMap((o) => o.results), errors: outcomes.filter((o) => !isSuccess(o)).map((o) => o.stderr.slice(-500)) });
     }
     case 'remove_skills': {
-      for (const n of input.names as string[]) checkSkillName(n);
       const outcomes = await (opts.run ?? runAll)(planRemove(input.names, { scope: input.scope, skillsVersion: opts.skillsVersion }));
       return json({ ok: outcomes.every(isSuccess), results: outcomes.flatMap((o) => o.results) });
     }

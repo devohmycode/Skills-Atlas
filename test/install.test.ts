@@ -20,6 +20,13 @@ describe('parseSkillId', () => {
     expect(() => parseSkillId('pdf@')).toThrow();
     expect(() => parseSkillId('a/b/c@x')).toThrow();
   });
+  it('rejects names npx skills would misread', () => {
+    for (const name of ['--global', '-s', 'a"b', 'a\u0007b', 'x'.repeat(201)]) expect(() => parseSkillId(`o/r@${name}`)).toThrow(/invalid skill name/);
+    expect(parseSkillId(`o/r@${'x'.repeat(200)}`).name).toHaveLength(200);
+    expect(parseSkillId('o/r@my skill.v2').name).toBe('my skill.v2');
+    expect(() => planRemove(['', 'pdf'], { scope: 'project', skillsVersion: '1.7.0' })).toThrow(/invalid skill name/);
+    expect(() => planRemove(['--global'], { scope: 'project', skillsVersion: '1.7.0' })).toThrow(/invalid skill name/);
+  });
 });
 
 describe('planInstall', () => {
