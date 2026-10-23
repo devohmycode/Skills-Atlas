@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { decodeCatalog, loadCatalog } from '../src/catalog/load.js';
 import { assemble } from '../src/catalog/build.js';
 import { classify } from '../src/catalog/classify.js';
 import { compareSkills, dedupe } from '../src/catalog/dedupe.js';
@@ -396,5 +397,40 @@ describe('i18n', () => {
     for (const [lang, messages] of Object.entries(LANGUAGES)) {
       for (const id of ids) expect(messages.themes[id], `${lang}: ${id}`).toBeTruthy();
     }
+  });
+});
+
+describe('decodeCatalog', () => {
+  const skill = { id: 'o/r@x', name: 'x', source: 'o/r', labels: [], origins: ['skills.sh'], themes: ['documents'] };
+  const valid = { version: 1, generatedAt: '2026-10-01', themes: [{ id: 'documents', label: 'Documents' }], skills: [skill], stats: { raw: { 'skills.sh': 1 }, merged: 1, byTheme: { documents: 1 } } };
+  const decode = (c: object) => decodeCatalog(Buffer.from(JSON.stringify(c)));
+
+  it('accepts an old snapshot without recent metadata, and keeps unknown fields', () => {
+    const got = decode({ ...valid, future: 1, skills: [{ ...skill, later: true }] });
+    expect(got.skills).toHaveLength(1);
+    expect((got as any).future).toBe(1);
+    expect((got.skills[0] as any).later).toBe(true);
+    expect(decode({ ...valid, skills: [] }).skills).toEqual([]);
+  });
+
+  it('rejects missing or mistyped required fields with the path', () => {
+    expect(() => decode({ version: 1, skills: [{}] })).toThrow(/invalid catalog/);
+    expect(() => decode({ ...valid, version: 2 })).toThrow(/version/);
+    expect(() => decode({ ...valid, generatedAt: undefined })).toThrow(/generatedAt/);
+    expect(() => decode({ ...valid, themes: [{ id: 'x' }] })).toThrow(/themes\.0\.label/);
+    expect(() => decode({ ...valid, stats: { raw: {}, byTheme: {} } })).toThrow(/stats\.merged/);
+    expect(() => decode({ ...valid, skills: [{ ...skill, labels: 'a' }] })).toThrow(/skills\.0\.labels/);
+    expect(() => decode({ ...valid, skills: [{ ...skill, origins: ['elsewhere'] }] })).toThrow(/skills\.0\.origins/);
+    expect(() => decode({ ...valid, skills: [{ ...skill, installs: '12' }] })).toThrow(/skills\.0\.installs/);
+    expect(() => decode({ ...valid, skills: [{ ...skill, repo: { archived: 'yes' } }] })).toThrow(/skills\.0\.repo\.archived/);
+  });
+
+  it('leaves out entries install would refuse or whose id is not source@name', () => {
+    const bad = [{ ...skill, id: 'o/r@-x', name: '-x' }, { ...skill, id: 'o/r@y' }, { ...skill, id: 'o/r/z@x', source: 'o/r/z' }];
+    expect(decode({ ...valid, skills: [...bad, skill] }).skills.map((s) => s.id)).toEqual(['o/r@x']);
+  });
+
+  it('loads the bundled snapshot', async () => {
+    expect((await loadCatalog()).skills.length).toBeGreaterThan(1000);
   });
 });
