@@ -33,11 +33,29 @@ describe('update history', () => {
     expect(Object.keys(readHistory(path))).toEqual(['o/r@x']);
   });
 
-  it('asks GitHub for the last commit touching the folder before the install date', async () => {
+  it('keeps the last commit touching the folder before the install date only when its folder hash matches the lock', async () => {
     const urls: string[] = [];
-    vi.stubGlobal('fetch', async (url: string) => { urls.push(url); return Response.json([{ sha: sha(4) }]); });
-    expect(await installedRevision({ name: 'x', source: 'o/r', dir: 'skills/x', hash: 'h', date: '2026-10-01T00:00:00Z' }, '')).toBe(sha(4));
-    expect(urls[0]).toBe('https://api.github.com/repos/o/r/commits?until=2026-10-01T00%3A00%3A00Z&per_page=1&path=skills%2Fx');
-    expect(await installedRevision({ name: 'x', source: 'o/r', dir: 'x', hash: 'h' })).toBeUndefined();
+    const known = join(tmp(), 'revisions.json');
+    const tree = (folder: string, truncated = false) => ({ sha: 'root', truncated, tree: [{ path: 'skills/x', type: 'tree', sha: folder }] });
+    let answer = tree('h');
+    vi.stubGlobal('fetch', async (url: string) => { urls.push(url); return Response.json(url.includes('/commits?') ? [{ sha: sha(4) }] : answer); });
+    const x = { name: 'x', source: 'o/r', dir: 'skills/x', hash: 'h', date: '2026-10-01T00:00:00Z' };
+    expect(await installedRevision(x, '', known)).toBe(sha(4));
+    expect(urls).toEqual([
+      'https://api.github.com/repos/o/r/commits?until=2026-10-01T00%3A00%3A00Z&per_page=1&path=skills%2Fx',
+      `https://api.github.com/repos/o/r/git/trees/${sha(4)}?recursive=1`,
+    ]);
+    answer = tree('other');
+    expect(await installedRevision(x, '', known)).toBeUndefined();
+    answer = { sha: 'root', truncated: true, tree: [] };
+    expect(await installedRevision(x, '', known)).toBeUndefined();
+    // A skill at the repository root: its folder hash is the commit's root tree.
+    answer = tree('h');
+    expect(await installedRevision({ ...x, dir: '', hash: 'root' }, '', known)).toBe(sha(4));
+    expect(urls.at(-1)).toBe(`https://api.github.com/repos/o/r/git/trees/${sha(4)}`);
+    expect(await installedRevision({ ...x, date: undefined }, '', known)).toBeUndefined();
+    expect(await installedRevision({ ...x, date: undefined, ref: sha(7) }, '', known)).toBe(sha(7));
+    vi.stubGlobal('fetch', async () => { throw new TypeError('fetch failed'); });
+    await expect(installedRevision(x, '', known)).rejects.toThrow();
   });
 });
