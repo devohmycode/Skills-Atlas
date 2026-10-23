@@ -27,7 +27,18 @@ export function parseSkillId(id: string): { source: string; name: string } {
   if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]+$/.test(source) || source.split('/').some(p => p === '.' || p === '..')) {
     throw new Error(`invalid source "${source}" in "${id}" — expected owner/repo`);
   }
-  return { source, name: id.slice(at + 1) };
+  const name = id.slice(at + 1);
+  checkSkillName(name, id);
+  return { source, name };
+}
+
+/**
+ * Throws on a skill name that is not safe to pass to `npx skills`, whoever wrote it (a file, a model):
+ * a leading dash would reach it as a flag, and a quote or control character could break the quoting
+ * of Windows's fallback shell. Real names have neither.
+ */
+export function checkSkillName(name: string, context = name): void {
+  if (!name || name.startsWith('-') || /["\u0000-\u001f\u007f]/.test(name) || name.length > 200) throw new Error(`invalid skill name in "${context}"`);
 }
 
 export function checkRevision(value: unknown): string {
@@ -87,6 +98,7 @@ export function planUpdates(updates: Update[], opts: InstallOptions): InstallCom
  * unticking an installed skill means.
  */
 export function planRemove(names: string[], opts: { scope: Scope; skillsVersion: string }): InstallCommand[] {
+  for (const name of names) checkSkillName(name);
   const skills = [...new Set(names)];
   if (skills.length === 0) return [];
   const args = ['-y', `skills@${opts.skillsVersion}`, 'remove', '-s', ...skills, '-y'];

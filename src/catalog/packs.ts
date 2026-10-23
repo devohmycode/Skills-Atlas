@@ -5,7 +5,6 @@ import { z } from 'zod';
 import bundled from '../../data/packs.json' with { type: 'json' };
 import { configPath } from '../config.js';
 import { parseSkillId } from '../install/plan.js';
-import { checkSkillName } from '../selection.js';
 import type { Catalog, Skill } from '../types.js';
 
 /** A curated set of skills for one kind of work, installed as a block. */
@@ -39,7 +38,7 @@ function parsePacks(raw: unknown): Pack[] {
   const result = Packs.safeParse(raw);
   if (!result.success) throw new Error(`Invalid packs: ${result.error.message}`);
   // A personal file is input to `npx skills add`: its ids are checked like a selection file's.
-  for (const p of result.data) for (const id of p.skills) checkSkillName(parseSkillId(id).name, id);
+  for (const p of result.data) for (const id of p.skills) parseSkillId(id);
   return result.data;
 }
 
