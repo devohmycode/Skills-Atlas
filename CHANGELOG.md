@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Update checks say when they are incomplete.** A repository GitHub does not answer for (HTTP 403 rate limit, timeout, invalid answer), a truncated tree or a skill folder it no longer has is reported instead of read as up to date: the tree shows a warning, `outdated` and `update` name each on stderr and exit with 1, and `update` still runs the updates it confirmed. `outdated --json` keeps its array on stdout. A skill installed at the repository root is now checked too.
+- **MCP `outdated_skills` returns `{ skills, unchecked }`** instead of an array: the skills as before, with their diff, and the repositories that could not be checked. Agents reading the old array must read `skills`.
+- **Rollback records only a proven version.** The commit kept before an update must have the lock's folder hash: a commit found by date alone is checked against GitHub, and after `rollback` the exact commit is remembered (`revisions.json`, next to `history.json`) while the lock keeps that hash. A rollback to an old commit followed by an update now goes back to that commit, not to the latest one on the branch. When no version can be proven, `update` says the skill has no way back.
+- **Skill names are checked wherever an id is read.** `install o/r@--global` and every other entry point (selection files, packs, MCP, the web page, removals) refuse a name that is empty, starts with `-`, holds a quote or a control character, or is longer than 200 characters, before any command is built.
+- **MCP installs and removals run one at a time**, each re-checking what is installed, so two calls cannot write the lock together or miss each other's name collisions. Reads and dry runs do not wait.
+- **Catalogs are checked when they load.** A snapshot with missing or mistyped fields is rejected with the field's path; a bad download never replaces a valid cache. Entries `install` would refuse (59 in the current snapshot, such as names starting with `-`) are left out. Older snapshots and unknown fields still load.
+- **An empty crawl fails** instead of replacing the snapshot with zero skills.
+- **Web page:** a failed "Show more" keeps the rows already loaded and shows the error under them; the next try loads from the same place. After a change in the side panel, the focus stays on the same agent, scope or method control (or the panel's first control when it went away).
+- **CI:** types, tests and build run on every pull request.
+
 ## 0.20.0 — 2026-10-21
 
 - **The audit reads the whole skill folder.** Besides the `SKILL.md`, the skill's other text files (scripts, references, configs) are checked: a clean `SKILL.md` that runs a `curl | sh` script now fails. Findings name their file (`scripts/setup.sh:12`) on the review screen, with `install -y`, `show`, the web page and MCP. Binaries, large files and unreadable ones are reported as not audited.
