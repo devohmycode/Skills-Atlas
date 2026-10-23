@@ -602,7 +602,7 @@ describe('installed skills in the wizard', () => {
 
   it('flags an outdated skill, marks it with u and reinstalls it for its agents', async () => {
     let result: WizardResult | null = null;
-    const findUpdates = vi.fn(async () => new Set(['c/d@pentest']));
+    const findUpdates = vi.fn(async () => ({ outdated: new Set(['c/d@pentest']), unchecked: [{ source: 'x/y', reason: 'HTTP 403' }] }));
     const { lastFrame, stdin } = render(
       <App themes={themes} skills={skills} preset={{}} defaults={defaults} skillsVersion="1.7.0" readSkill={cleanSkill}
         loadInstalled={loadInstalled} findUpdates={findUpdates} onDone={(r) => (result = r)} />,
@@ -610,6 +610,7 @@ describe('installed skills in the wizard', () => {
     await tick();
     await tick();
     expect(lastFrame()).toContain('↑ 1 update (u)');
+    expect(lastFrame()).toContain('Update check incomplete: 1 repository check(s) failed');
     await press(stdin, KEY.right, KEY.down);
     expect(lastFrame()).toContain('↑ update available');
     await press(stdin, 'u');

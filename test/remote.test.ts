@@ -100,7 +100,7 @@ describe('latest catalog', () => {
     const cached = readFileSync(join(dir, 'cache', 'catalog.json.gz'));
     const bad = { ...catalog('2026-10-01T00:00:00Z'), skills: [{}] };
     const failed: string[] = [];
-    const got = await loadLatestCatalog({ ...opts, refresh: true, onError: (e: Error) => failed.push(e.message), fetch: async () => new Response(gzipSync(JSON.stringify(bad)), { status: 200 }) });
+    const got = await loadLatestCatalog({ ...opts, refresh: true, onError: (e: unknown) => void failed.push((e as Error).message), fetch: async () => new Response(gzipSync(JSON.stringify(bad)), { status: 200 }) });
     expect(got.generatedAt).toBe('2026-09-27T00:00:00Z');
     expect(failed[0]).toMatch(/invalid catalog: skills\.0\.id/);
     expect(readFileSync(join(dir, 'cache', 'catalog.json.gz'))).toEqual(cached);

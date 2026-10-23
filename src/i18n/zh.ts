@@ -284,6 +284,7 @@ export const zh: Messages = {
     outdatedCmd: "列出 GitHub 上有新版本的全局技能",
     showFailed: (id, msg) => `无法读取 ${id} 的 SKILL.md：${msg}`,
     upToDate: "所有全局技能均为最新。",
+    updatesUnchecked: (n) => `更新检查不完整：${n} 个仓库无法检查，这些 skill 可能已过时。`,
     outdatedHint: "更新方法是重新安装：skills-atlas install <id> -g -a <agents> -y（或在树中按 u）",
     updateCmd: "更新过时的全局技能：全部，或指定的技能",
     updateAllHint: "全部更新：skills-atlas update",

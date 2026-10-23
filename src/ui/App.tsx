@@ -15,6 +15,7 @@ import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
 import { scopesLabel, TreeSelect, type TreeMemory } from './TreeSelect.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
+import type { UpdateCheck } from '../install/updates.js';
 
 export interface WizardResult {
   /** Skills to install (`owner/repo@name`). */
@@ -49,7 +50,7 @@ export interface AppProps {
   /** Shared by the successive trees of one session: open groups and focused row. */
   treeMemory?: TreeMemory;
   /** `owner/repo@name` (lower case) of the installed skills with a newer version; checked in the background. */
-  findUpdates?: () => Promise<Set<string>>;
+  findUpdates?: () => Promise<UpdateCheck>;
   /** Run the security audit on the review screen (on unless turned off). */
   audit?: boolean;
   /** Reads a skill's SKILL.md for the audit; replaced in tests. */
@@ -104,6 +105,7 @@ export function App(props: AppProps) {
   const [removals, setRemovals] = useState<Removal[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [outdated, setOutdated] = useState<Set<string>>(new Set());
+  const [unchecked, setUnchecked] = useState(0);
   const [agents, setAgents] = useState<string[] | undefined>(preset.agents);
   const [scope, setScope] = useState<Scope | undefined>(preset.scope);
   const [method, setMethod] = useState<InstallMethod | undefined>(preset.method);
@@ -163,7 +165,8 @@ export function App(props: AppProps) {
       .then((found) => {
         if (!live) return;
         const global = [...tree.installed].filter(([, e]) => e.scopes.includes('global'));
-        setOutdated(new Set(global.map(([id]) => id).filter((id) => found.has(id.toLowerCase()))));
+        setOutdated(new Set(global.map(([id]) => id).filter((id) => found.outdated.has(id.toLowerCase()))));
+        setUnchecked(found.unchecked.length);
       })
       .catch(() => {});
     return () => {
@@ -191,6 +194,7 @@ export function App(props: AppProps) {
       <Box flexDirection="column">
         {error && <Text color={PALETTE.danger}>{error}</Text>}
         {notice && <Text>{notice}</Text>}
+        {unchecked > 0 && <Text color={PALETTE.gold}>{t().cli.updatesUnchecked(unchecked)}</Text>}
         <TreeSelect
           themes={tree.installed.size ? [INSTALLED_THEME, ...themes] : themes}
           skills={tree.skills}

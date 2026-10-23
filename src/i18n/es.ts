@@ -286,6 +286,7 @@ export const es: Messages = {
     outdatedCmd: "lista las skills globales con una versión más reciente en GitHub",
     showFailed: (id, msg) => `No se puede leer el SKILL.md de ${id}: ${msg}`,
     upToDate: "Todas las skills globales están al día.",
+    updatesUnchecked: (n) => `Comprobación de actualizaciones incompleta: ${n} comprobación(es) de repositorio fallaron, esas skills pueden estar desactualizadas.`,
     outdatedHint: "Para actualizar una, reinstálala: skills-atlas install <id> -g -a <agents> -y (o pulsa u en el árbol).",
     updateCmd: "actualiza las skills globales obsoletas: todas, o las indicadas",
     updateAllHint: "Actualizar todas: skills-atlas update",

@@ -4,7 +4,7 @@ import { auditSkills } from './audit.js';
 import { fetchSkillFiles, fetchSkillMarkdown, githubUrl } from './github.js';
 import { parseSkillId } from './install/plan.js';
 import { listInstalled } from './install/run.js';
-import { findUpdates } from './install/updates.js';
+import { findUpdates, type UpdateCheck } from './install/updates.js';
 import type { Risk } from './risks.js';
 import type { Catalog, Scope, Skill } from './types.js';
 
@@ -97,9 +97,10 @@ export function skillsByAgent(installed: InstalledSummary[]): { agent: string; n
 
 /**
  * Global skills with a newer version on GitHub. Updating one is installing it
- * again: `skills-atlas install <id> -g -a <its agents> -y`.
+ * again: `skills-atlas install <id> -g -a <its agents> -y`. `unchecked` lists what
+ * could not be checked: the check is complete only when it is empty.
  */
-export async function outdatedSkills(): Promise<InstalledSummary[]> {
+export async function outdatedSkills(): Promise<{ skills: InstalledSummary[]; unchecked: UpdateCheck['unchecked'] }> {
   const [found, installed] = await Promise.all([findUpdates(), installedSkills(['global'])]);
-  return installed.filter((s) => s.source && found.has(`${s.source}@${s.name}`.toLowerCase()));
+  return { skills: installed.filter((s) => s.source && found.outdated.has(`${s.source}@${s.name}`.toLowerCase())), unchecked: found.unchecked };
 }

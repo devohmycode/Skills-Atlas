@@ -284,6 +284,7 @@ export const ja: Messages = {
     outdatedCmd: "GitHub に新しいバージョンがあるグローバルスキルを一覧表示",
     showFailed: (id, msg) => `${id} の SKILL.md を読めません: ${msg}`,
     upToDate: "すべてのグローバルスキルは最新です。",
+    updatesUnchecked: (n) => `更新の確認が不完全です: ${n} 件のリポジトリを確認できなかったため、その skill は古い可能性があります。`,
     outdatedHint: "更新するには再インストール: skills-atlas install <id> -g -a <agents> -y（ツリーでは u キー）",
     updateCmd: "古いグローバルスキルを更新（すべて、または指定したもの）",
     updateAllHint: "すべて更新: skills-atlas update",

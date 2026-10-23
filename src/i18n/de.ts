@@ -286,6 +286,7 @@ export const de: Messages = {
     outdatedCmd: "listet globale Skills mit neuerer Version auf GitHub",
     showFailed: (id, msg) => `SKILL.md von ${id} nicht lesbar: ${msg}`,
     upToDate: "Alle globalen Skills sind aktuell.",
+    updatesUnchecked: (n) => `Update-Prüfung unvollständig: ${n} Repository-Prüfung(en) fehlgeschlagen, diese Skills sind womöglich veraltet.`,
     outdatedHint: "Zum Aktualisieren neu installieren: skills-atlas install <id> -g -a <agents> -y (oder u im Baum).",
     updateCmd: "aktualisiert veraltete globale Skills: alle oder die genannten",
     updateAllHint: "Alle aktualisieren: skills-atlas update",

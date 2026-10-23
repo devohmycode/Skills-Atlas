@@ -77,7 +77,7 @@ const TOOLS = {
     annotations: { readOnlyHint: true },
   },
   outdated_skills: {
-    description: 'List global skills with a newer version on GitHub, with the lines the update changes in SKILL.md and the warning signs it adds (new_risks). Tell the user about new_risks before updating. Update one with install_skills, scope global, with its own agents.',
+    description: 'List global skills with a newer version on GitHub, as { skills, unchecked }: each skill with the lines the update changes in SKILL.md and the warning signs it adds (new_risks); unchecked lists the repositories that could not be checked (source, reason), so the check is complete only when it is empty. Tell the user about new_risks and unchecked before updating. Update one with install_skills, scope global, with its own agents.',
     schema: z.object({}),
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -134,14 +134,14 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       return json(await (opts.installed ?? installedSkills)(input.scope ? [input.scope as Scope] : SCOPES));
     case 'outdated_skills': {
       // Each update with what it changes: line counts and the warning signs the new version adds.
-      const outdated = await outdatedSkills();
-      const local = await listInstalled('global');
+      const { skills: outdated, unchecked } = await outdatedSkills();
+      const local = outdated.length ? await listInstalled('global') : [];
       const c = await catalog();
       const known = new Map(c.skills.map((s) => [s.id.toLowerCase(), s]));
-      return json(await Promise.all(outdated.map(async (s) => {
+      return json({ unchecked, skills: await Promise.all(outdated.map(async (s) => {
         const diff = await updateDiff(auditTarget(s.id, known), local).catch(() => undefined);
         return diff ? { ...s, lines_added: diff.added, lines_removed: diff.removed, new_risks: diff.risks.map(({ rule, level, label, line, excerpt }) => ({ rule, level, label, line, excerpt })) } : s;
-      })));
+      })) });
     }
     case 'install_skills': {
       for (const id of input.ids as string[]) parseSkillId(id);

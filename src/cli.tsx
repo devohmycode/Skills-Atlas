@@ -754,15 +754,24 @@ program
     }
   });
 
+/** Names, on stderr, what an update check could not check, and sets exit code 1. */
+function reportUnchecked(unchecked: { source: string; reason: string }[]): void {
+  if (!unchecked.length) return;
+  process.exitCode = 1;
+  console.error(paint('yellow', c.updatesUnchecked(unchecked.length)));
+  for (const u of unchecked) console.error(paint('dim', `  ? ${u.source}: ${u.reason}`));
+}
+
 installOptions(program.command('update'))
   .argument('[ids...]', c.ids)
   .description(c.updateCmd)
   .action(async (ids: string[], opts: InstallFlags) => {
-    const outdated = await outdatedSkills();
+    const { skills: outdated, unchecked } = await outdatedSkills();
+    reportUnchecked(unchecked);
     const wanted = ids.map((id) => id.toLowerCase());
     // Named skills are updated only if they are outdated: a reinstall of an up-to-date one would change nothing.
     const chosen = ids.length ? outdated.filter((s) => wanted.includes(s.id.toLowerCase())) : outdated;
-    if (!chosen.length) return console.log(paint('dim', c.upToDate));
+    if (!chosen.length) return unchecked.length ? undefined : console.log(paint('dim', c.upToDate));
     // What each update changes, and the warning signs it brings, before anything runs.
     const local = await listInstalled('global');
     const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
@@ -782,6 +791,8 @@ installOptions(program.command('update'))
     // Each skill keeps its own agents; these options only fill in what a skill's scan did not name.
     const options: InstallOptions = { agents: defaults.agents, scope: 'global', method: opts.copy ? 'copy' : opts.symlink ? 'symlink' : defaults.method, skillsVersion: opts.skillsVersion };
     await apply([], [], options, opts, chosen.map((s) => ({ id: s.id, agents: s.agents })));
+    // The confirmed updates ran; the rest could not be checked, so this is not a full success.
+    if (unchecked.length) console.error(paint('yellow', c.updatesUnchecked(unchecked.length)));
   });
 
 installOptions(program.command('rollback'))
@@ -821,9 +832,11 @@ program
   .description(c.outdatedCmd)
   .option('--json', c.json)
   .action(async (opts: { json?: boolean }) => {
-    const outdated = await outdatedSkills();
+    const { skills: outdated, unchecked } = await outdatedSkills();
+    // stdout keeps the array scripts read; what could not be checked goes to stderr, with exit code 1.
+    reportUnchecked(unchecked);
     if (opts.json) return void process.stdout.write(`${JSON.stringify(outdated, null, 2)}\n`);
-    if (!outdated.length) return console.log(paint('dim', c.upToDate));
+    if (!outdated.length) return unchecked.length ? undefined : console.log(paint('dim', c.upToDate));
     for (const s of outdated) console.log(`  ${padEnd(s.id, 60)} ${paint('dim', s.agents.join(', '))}`);
     console.log(paint('dim', `\n${c.outdatedHint}`));
     console.log(paint('dim', c.updateAllHint));
