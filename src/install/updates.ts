@@ -15,6 +15,8 @@ export interface LockedSkill {
   hash: string;
   /** When it was last installed or updated, per the lock. */
   date?: string;
+  /** The exact commit, when the installer recorded one. */
+  ref?: string;
 }
 
 const Lock = z.object({
@@ -23,6 +25,7 @@ const Lock = z.object({
     sourceType: z.string().optional(),
     skillPath: z.string().optional(),
     skillFolderHash: z.string().optional(),
+    ref: z.string().optional(),
     installedAt: z.string().optional(),
     updatedAt: z.string().optional(),
   })),
@@ -45,7 +48,7 @@ export function readLockedSkills(path: string): LockedSkill[] {
   return Object.entries(lock.data.skills).flatMap(([name, e]) => {
     if (e.sourceType !== 'github' || !e.source || !/^[\w.-]+\/[\w.-]+$/.test(e.source)) return [];
     if (!e.skillPath || !e.skillFolderHash) return [];
-    return [{ name, source: e.source, dir: e.skillPath.replace(/\/?SKILL\.md$/i, ''), hash: e.skillFolderHash, date: e.updatedAt ?? e.installedAt }];
+    return [{ name, source: e.source, dir: e.skillPath.replace(/\/?SKILL\.md$/i, ''), hash: e.skillFolderHash, date: e.updatedAt ?? e.installedAt, ...(e.ref && /^[a-f0-9]{40}$/i.test(e.ref) ? { ref: e.ref.toLowerCase() } : {}) }];
   });
 }
 

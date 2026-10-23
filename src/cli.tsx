@@ -14,7 +14,7 @@ import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, sys
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
 import { nameCollisions } from './install/collisions.js';
 import { findUpdates } from './install/updates.js';
-import { dropRevision, readHistory, recordBeforeUpdate } from './install/history.js';
+import { dropRevision, readHistory, recordBeforeUpdate, rememberRevision } from './install/history.js';
 import { onPath } from './prereqs.js';
 import { diagnoseInstalled } from './install/doctor.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
@@ -810,7 +810,10 @@ installOptions(program.command('rollback'))
     const remembered = readConfig();
     await apply([skill!.id], [], options, opts, [], revisions);
     if (!opts.dryRun) writeConfig(remembered);
-    if (!opts.dryRun && !process.exitCode) dropRevision(skill!.id, target!.revision);
+    if (!opts.dryRun && !process.exitCode) {
+      dropRevision(skill!.id, target!.revision);
+      rememberRevision(skill!.id, target!.revision);
+    }
   });
 
 program
