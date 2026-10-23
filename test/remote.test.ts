@@ -93,4 +93,16 @@ describe('latest catalog', () => {
     const got = await loadLatestCatalog({ dir: join(dir, 'cache'), bundledPath, fetch, now: 0 });
     expect(got.generatedAt).toBe('2026-09-01T00:00:00Z');
   });
+
+  it('rejects a download with the wrong shape before caching it, and keeps a valid cache', async () => {
+    const opts = { dir: join(dir, 'cache'), bundledPath, now: 0 };
+    await loadLatestCatalog({ ...opts, fetch: async () => ok(catalog('2026-09-27T00:00:00Z')) });
+    const cached = readFileSync(join(dir, 'cache', 'catalog.json.gz'));
+    const bad = { ...catalog('2026-10-01T00:00:00Z'), skills: [{}] };
+    const failed: string[] = [];
+    const got = await loadLatestCatalog({ ...opts, refresh: true, onError: (e: Error) => failed.push(e.message), fetch: async () => new Response(gzipSync(JSON.stringify(bad)), { status: 200 }) });
+    expect(got.generatedAt).toBe('2026-09-27T00:00:00Z');
+    expect(failed[0]).toMatch(/invalid catalog: skills\.0\.id/);
+    expect(readFileSync(join(dir, 'cache', 'catalog.json.gz'))).toEqual(cached);
+  });
 });
