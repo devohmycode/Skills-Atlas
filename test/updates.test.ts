@@ -40,21 +40,44 @@ describe('skill updates', () => {
     expect([...outdated(skills, trees)]).toEqual(['dietrichgebert/ponytail@ponytail']);
   });
 
-  it('asks GitHub once per repository and survives one that fails', async () => {
+  const check = async (answer: (url: string) => Response | Promise<Response>, skills: object = lock.skills) => {
     const dir = mkdtempSync(join(tmpdir(), 'atlas-lock-'));
     const calls: string[] = [];
-    vi.stubGlobal('fetch', async (url: string) => {
-      calls.push(url);
-      if (url.includes('anthropics')) return new Response('', { status: 404 });
-      return new Response(JSON.stringify({ tree: [{ path: 'skills/ponytail', type: 'tree', sha: 'new' }] }));
-    });
+    vi.stubGlobal('fetch', async (url: string) => { calls.push(url); return answer(url); });
     try {
-      writeFileSync(join(dir, 'lock.json'), JSON.stringify(lock));
-      expect([...(await findUpdates(join(dir, 'lock.json'), 'token'))]).toEqual(['dietrichgebert/ponytail@ponytail']);
-      expect(calls).toHaveLength(2);
+      writeFileSync(join(dir, 'lock.json'), JSON.stringify({ ...lock, skills }));
+      const found = await findUpdates(join(dir, 'lock.json'), 'secret-token');
+      return { outdated: [...found.outdated], unchecked: found.unchecked, calls };
     } finally {
       vi.unstubAllGlobals();
       rmSync(dir, { recursive: true, force: true });
     }
+  };
+  const tree = (...entries: [string, string][]) => Response.json({ sha: 'root', tree: entries.map(([path, sha]) => ({ path, type: 'tree', sha })) });
+
+  it('asks GitHub once per repository, keeps the confirmed updates, and reports one it could not read', async () => {
+    const got = await check((url) => (url.includes('anthropics') ? new Response('', { status: 403 }) : tree(['skills/ponytail', 'new'])));
+    expect(got.outdated).toEqual(['dietrichgebert/ponytail@ponytail']);
+    expect(got.unchecked).toEqual([{ source: 'anthropics/skills', reason: 'HTTP 403' }]);
+    expect(got.calls).toHaveLength(2);
+    expect(JSON.stringify(got.unchecked)).not.toContain('secret-token');
+  });
+
+  it('never reads a failed, invalid, truncated or incomplete answer as up to date', async () => {
+    const timeout = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    expect((await check(() => { throw timeout; })).unchecked.map((u) => u.reason)).toEqual(['timed out', 'timed out']);
+    expect((await check(() => new Response('<html>'))).unchecked.map((u) => u.reason)).toEqual(['invalid response', 'invalid response']);
+    expect((await check(() => Response.json({ tree: [] }))).unchecked.map((u) => u.reason)).toEqual(['invalid response', 'invalid response']);
+    const truncated = await check(() => Response.json({ sha: 'root', truncated: true, tree: [] }));
+    expect(truncated.outdated).toEqual([]);
+    expect(truncated.unchecked.map((u) => u.reason)).toEqual(['ponytail: tree truncated', 'pdf: tree truncated']);
+    const moved = await check(() => tree(['skills/pdf', 'same']));
+    expect(moved.unchecked).toEqual([{ source: 'DietrichGebert/ponytail', reason: 'ponytail: skills/ponytail not found' }]);
+  });
+
+  it('checks a skill at the repository root against the root tree', async () => {
+    const root = { r: { source: 'o/r', sourceType: 'github', skillPath: 'SKILL.md', skillFolderHash: 'old' } };
+    expect(await check(() => tree(), root)).toMatchObject({ outdated: ['o/r@r'], unchecked: [] });
+    expect((await check(() => Response.json({ sha: 'old', tree: [] }), root)).outdated).toEqual([]);
   });
 });

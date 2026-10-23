@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import pLimit from 'p-limit';
 import { z } from 'zod';
-import { fetchJson } from '../catalog/http.js';
+import { fetchJson, HttpError } from '../catalog/http.js';
 import { lockPath } from './scan.js';
 
 /** A skill of the global lock file, with the git tree SHA of its folder when it was installed. */
@@ -30,7 +30,13 @@ const Lock = z.object({
     updatedAt: z.string().optional(),
   })),
 });
-const Tree = z.object({ tree: z.array(z.object({ path: z.string(), type: z.string(), sha: z.string() })) });
+const Tree = z.object({ sha: z.string(), truncated: z.boolean().optional(), tree: z.array(z.object({ path: z.string(), type: z.string(), sha: z.string() })) });
+
+/** What an update check found: confirmed updates, and the repositories (or skills) it could not check. */
+export interface UpdateCheck {
+  outdated: Set<string>;
+  unchecked: { source: string; reason: string }[];
+}
 
 /**
  * GitHub skills of a lock file that recorded their folder hash. Only the global
@@ -57,7 +63,7 @@ export function outdated(skills: LockedSkill[], trees: Map<string, Map<string, s
   const out = new Set<string>();
   for (const s of skills) {
     const sha = trees.get(s.source)?.get(s.dir);
-    // No SHA: repository unreachable, skill moved, or a skill at the repository root.
+    // No SHA: repository unreachable or skill moved, reported by findUpdates as unchecked.
     if (sha && sha !== s.hash) out.add(`${s.source}@${s.name}`.toLowerCase());
   }
   return out;
@@ -74,15 +80,26 @@ export function githubToken(): string | undefined {
   }
 }
 
+/** Why a repository could not be checked, without the URL or any header. */
+function reason(err: unknown): string {
+  if (err instanceof HttpError) return `HTTP ${err.status}`;
+  if (err instanceof z.ZodError || err instanceof SyntaxError) return 'invalid response';
+  if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) return 'timed out';
+  return 'unreachable';
+}
+
 /**
  * Globally installed skills with a newer version on GitHub: one Trees API call
- * per repository. A repository that cannot be read reports nothing.
+ * per repository. A repository that cannot be read, a truncated tree or a skill
+ * folder GitHub no longer has is reported as unchecked, never as up to date.
  * shortcut: without a token GitHub allows 60 calls an hour, so many repositories
- * checked twice in an hour go silent; cache the trees if that gets in the way.
+ * checked twice in an hour fail with HTTP 403; cache the trees if that gets in the way.
  */
-export async function findUpdates(path = lockPath('global', process.cwd()), token = githubToken()): Promise<Set<string>> {
+export async function findUpdates(path = lockPath('global', process.cwd()), token = githubToken()): Promise<UpdateCheck> {
   const skills = readLockedSkills(path);
   const trees = new Map<string, Map<string, string>>();
+  const truncated = new Set<string>();
+  const unchecked: UpdateCheck['unchecked'] = [];
   const limit = pLimit(8);
   await Promise.all(
     [...new Set(skills.map((s) => s.source))].map((source) =>
@@ -95,12 +112,18 @@ export async function findUpdates(path = lockPath('global', process.cwd()), toke
               headers: { accept: 'application/vnd.github+json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
             }),
           );
-          trees.set(source, new Map(tree.tree.filter((e) => e.type === 'tree').map((e) => [e.path, e.sha])));
-        } catch {
-          // Unreachable, private or rate limited: no news for this repository.
+          // '' is the repository root, for a skill whose SKILL.md sits there.
+          trees.set(source, new Map([['', tree.sha], ...tree.tree.filter((e) => e.type === 'tree').map((e) => [e.path, e.sha] as [string, string])]));
+          if (tree.truncated) truncated.add(source);
+        } catch (err) {
+          unchecked.push({ source, reason: reason(err) });
         }
       }),
     ),
   );
-  return outdated(skills, trees);
+  for (const s of skills) {
+    const tree = trees.get(s.source);
+    if (tree && !tree.has(s.dir)) unchecked.push({ source: s.source, reason: `${s.name}: ${truncated.has(s.source) ? 'tree truncated' : `${s.dir} not found`}` });
+  }
+  return { outdated: outdated(skills, trees), unchecked };
 }

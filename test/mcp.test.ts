@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandOutcome } from '../src/install/run.js';
 import { createHandler } from '../src/mcp.js';
+
+// outdated_skills reads the real global lock and GitHub: answer for them.
+vi.mock('../src/agent-api.js', async (original) => ({
+  ...(await original<typeof import('../src/agent-api.js')>()),
+  outdatedSkills: vi.fn(async () => ({ skills: [], unchecked: [{ source: 'o/r', reason: 'HTTP 403' }] })),
+}));
 import type { Catalog } from '../src/types.js';
 
 const skill = (id: string, installs: number, themes = ['documents']) => {
@@ -124,5 +130,10 @@ describe('MCP server', () => {
     expect((await after).isError).toBeUndefined();
     expect(peak).toBe(1);
     expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns outdated skills with what could not be checked', async () => {
+    const { call } = server();
+    expect(JSON.parse((await call('outdated_skills', {})).text)).toEqual({ unchecked: [{ source: 'o/r', reason: 'HTTP 403' }], skills: [] });
   });
 });
