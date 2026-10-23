@@ -745,9 +745,30 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   // ---- changes panel ---------------------------------------------------------------------
   function selectedAgents() { return S.agents.filter(function (a) { return opts.agents.has(a.id); }).map(function (a) { return a.id; }); }
 
+  /** A selector that finds the same control once the panel is rebuilt: an id, its data attribute, or a radio's name and value. */
+  function focusKey(el) {
+    if (el.id) return '#' + CSS.escape(el.id);
+    var attr = ['data-agent', 'data-add', 'data-rm', 'data-act'].filter(function (a) { return el.hasAttribute(a); })[0];
+    if (attr) return '[' + attr + '="' + CSS.escape(el.getAttribute(attr)) + '"]';
+    if (el.type === 'radio') return 'input[name="' + CSS.escape(el.name) + '"][value="' + CSS.escape(el.value) + '"]';
+    return null;
+  }
+  /** Back on the control that had the focus, or on the panel's first control when it went away (a removed chip). */
+  function restoreFocus(key) {
+    if (!key) return;
+    var body = $('panel-body');
+    var el = body.querySelector(key) || body.querySelector('button, input');
+    if (!el) return;
+    el.focus();
+    if (el.id === 'agent-filter') el.setSelectionRange(el.value.length, el.value.length);
+  }
+
   function renderPanel() {
     var nAdd = adds.size, nRm = removes.size;
     var h = '';
+    // Only a focus inside the panel is moved back: typing elsewhere is left alone.
+    var active = document.activeElement;
+    var focusAt = active && $('panel-body').contains(active) ? focusKey(active) : null;
     if (!nAdd && !nRm) {
       h = '<p class="lede">' + esc(M.tagline) + '</p><p class="intro">' + esc(M.selectionEmpty) + '</p>' +
         '<svg class="intro-art" width="220" height="90" viewBox="0 0 220 90" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">' +
@@ -755,6 +776,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
         '<path d="M20 56c24-20 44 4 70-12s40-30 66-18" opacity=".35"/><circle cx="156" cy="34" r="4" fill="currentColor"/></svg>';
       $('panel-body').innerHTML = h + packButton();
       $('panel-foot').hidden = true;
+      restoreFocus(focusAt);
       return;
     }
     h += '<div class="head-row"><h2>' + esc(M.selection) + '</h2><button class="link" data-act="clear">' + esc(M.clear) + '</button></div>' +
@@ -790,11 +812,10 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
         choice('method', 'symlink', M.symlink, M.symlinkHint) + choice('method', 'copy', M.copy, M.copyHint);
     }
     h += '<div id="audit"></div><h2>' + esc(M.commands) + '</h2><pre id="plan">…</pre>';
-    var focusFilter = document.activeElement && document.activeElement.id === 'agent-filter';
     var scroll = $('panel-body').scrollTop;
     $('panel-body').innerHTML = h;
     $('panel-body').scrollTop = scroll;
-    if (focusFilter) { var f = $('agent-filter'); f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+    restoreFocus(focusAt);
     var blocked = nAdd && !opts.agents.size;
     $('panel-foot').hidden = false;
     $('panel-foot').innerHTML = (blocked ? '<p class="warn">' + esc(M.needAgent) + '</p>' : '') +
