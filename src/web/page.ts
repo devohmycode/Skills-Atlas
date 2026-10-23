@@ -188,6 +188,7 @@ a.source:hover { color: var(--accent); text-decoration: underline; }
   border: 1px solid var(--rule-2); background: var(--sheet); color: var(--ink);
 }
 .more:hover { border-color: var(--accent); color: var(--accent); }
+.more-error { margin: 10px 0 0; text-align: center; color: var(--remove); }
 .empty { padding: 56px 24px; text-align: center; color: var(--ink-2); }
 .repo { border-top: 1px solid var(--rule); }
 .repo:first-child { border-top: 0; }
@@ -355,6 +356,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     <p id="pack-health" class="warn" role="status" hidden></p>
     <div class="rows" id="rows" role="list"></div>
     <button class="more" id="more" hidden></button>
+    <p class="more-error" id="more-error" role="alert" hidden></p>
   </section>
   <aside id="panel"><div class="panel-body" id="panel-body"></div><div class="panel-foot" id="panel-foot" hidden></div></aside>
 </main>
@@ -644,6 +646,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       offset: String(append ? view.items.length : 0), limit: String(local ? 1 : grouped() ? 500 : PAGE) });
     return apiJson('/api/skills?' + p).then(function (r) {
       if (seq !== querySeq) return;
+      $('more-error').hidden = true;
       view.counts = r.counts; view.all = r.all;
       if (local) {
         var list = installedMatches();
@@ -654,7 +657,15 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       }
       renderRows(append && !local, r.items); renderThemes();
       if (!append) document.querySelector('.list').scrollTop = 0;
-    }).catch(function (err) { if (seq === querySeq) { $('more').disabled = false; fail(err); } });
+    }).catch(function (err) {
+      if (seq !== querySeq) return;
+      $('more').disabled = false;
+      // A failed next page keeps the rows already shown: the error goes under them, and Show more retries from the same offset.
+      if (!append) return fail(err);
+      var note = $('more-error');
+      note.textContent = tr('error', { msg: err.message || String(err) });
+      note.hidden = false;
+    });
   }
   $('more').addEventListener('click', function () { load(true); });
 
