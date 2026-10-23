@@ -91,4 +91,38 @@ describe('MCP server', () => {
     await call('install_skills', { ...args, replace: true });
     expect(run).toHaveBeenCalledOnce();
   });
+
+  it('runs one install or removal at a time, each re-reading what is installed', async () => {
+    const have: string[] = [];
+    let active = 0, peak = 0, release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const run = vi.fn(async (cmds: { kind: string; skills: string[] }[]): Promise<CommandOutcome[]> => {
+      peak = Math.max(peak, ++active);
+      await gate;
+      active--;
+      for (const c of cmds) if (c.kind === 'add') have.push(...c.skills); else if (c.skills.includes('boom')) throw new Error('boom');
+      return [];
+    });
+    const installed = vi.fn(async () => have.map((name) => ({ id: `anthropics/skills@${name}`, name, source: 'anthropics/skills', scope: 'global' as const, agents: ['claude-code'] })));
+    const handle = createHandler({ version: '9.9.9', skillsVersion: '1.7.0', loadCatalog: async () => catalog, run: run as never, installed, readSkill: async () => '# Clean' });
+    let id = 0;
+    const call = async (name: string, args: object) => ((await handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } })) as any).result;
+    const first = call('install_skills', { ids: ['anthropics/skills@pdf'], agents: ['claude-code'], scope: 'global' });
+    // Same name from another source: only a check made after the first install sees the collision.
+    const second = call('install_skills', { ids: ['a/b@pdf'], agents: ['claude-code'], scope: 'global' });
+    const removal = call('remove_skills', { names: ['boom'], scope: 'global' });
+    const after = call('remove_skills', { names: ['pdf'], scope: 'global' });
+    await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+    // Reads and dry runs answer while the install is blocked.
+    expect((await call('search_skills', { query: 'pdf' })).isError).toBeUndefined();
+    expect((await call('install_skills', { ids: ['c/d@deploy'], agents: ['claude-code'], scope: 'global', dry_run: true })).isError).toBeUndefined();
+    expect(run).toHaveBeenCalledOnce();
+    release();
+    await first;
+    expect((await second).content[0].text).toMatch(/would replace anthropics\/skills@pdf \(installed\)/);
+    expect((await removal).isError).toBe(true);
+    expect((await after).isError).toBeUndefined();
+    expect(peak).toBe(1);
+    expect(run).toHaveBeenCalledTimes(3);
+  });
 });

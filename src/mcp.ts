@@ -186,6 +186,7 @@ interface Request {
 export function createHandler(opts: McpOptions) {
   let cached: Promise<Catalog> | undefined;
   const catalog = () => (cached ??= opts.loadCatalog());
+  let mutations: Promise<unknown> = Promise.resolve();
   return async (msg: Request): Promise<object | undefined> => {
     if (msg.id === undefined || msg.id === null) return undefined;
     const reply = (result: object) => ({ jsonrpc: '2.0', id: msg.id, result });
@@ -205,8 +206,13 @@ export function createHandler(opts: McpOptions) {
       case 'tools/call': {
         const name = msg.params?.name as string;
         if (!(name in TOOLS)) return error(-32602, `unknown tool: ${name}`);
+        const call = () => callTool(name as ToolName, msg.params?.arguments, opts, catalog);
+        // One install or removal at a time: the next re-reads what the previous changed. Reads and dry runs do not wait.
+        const mutates = name === 'remove_skills' || (name === 'install_skills' && !msg.params?.arguments?.dry_run);
+        const result = mutates ? mutations.then(call) : call();
+        if (mutates) mutations = result.catch(() => undefined);
         try {
-          return reply({ content: [{ type: 'text', text: await callTool(name as ToolName, msg.params?.arguments, opts, catalog) }] });
+          return reply({ content: [{ type: 'text', text: await result }] });
         } catch (err) {
           // A tool failure is a result the model can read and act on, not a protocol error.
           const text = err instanceof z.ZodError ? `invalid arguments: ${err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}` : err instanceof Error ? err.message : String(err);
@@ -233,7 +239,7 @@ export async function serveMcp(opts: McpOptions): Promise<void> {
       process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } })}\n`);
       continue;
     }
-    // Calls run concurrently; each answer goes out whole, on its own line.
+    // Calls run concurrently (the handler queues installs and removals); each answer goes out whole, on its own line.
     const done = handle(msg).then((res) => res && process.stdout.write(`${JSON.stringify(res)}\n`));
     pending.add(done);
     void done.finally(() => pending.delete(done));
