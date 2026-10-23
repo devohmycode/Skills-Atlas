@@ -52,7 +52,7 @@ export function assemble(
 
 /**
  * Crawls every source. A failing source is logged and skipped so that one
- * registry being down does not block the snapshot; all of them failing does.
+ * registry being down does not block the snapshot; all of them failing, or no skill at all, does.
  */
 export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
   const log = opts.log ?? (() => {});
@@ -90,5 +90,8 @@ export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
     merged = merged.filter((s) => !missing.has(s));
     log(`enrich: ${filled} descriptions filled, ${missing.size} skills gone from their repository dropped`);
   }
-  return assemble(raw, merged, await officialOwners, sources);
+  const catalog = assemble(raw, merged, await officialOwners, sources);
+  // Sources that answer nothing (or skills all dropped) must not replace the previous snapshot with an empty one.
+  if (!catalog.skills.length) throw new Error('the crawl found no skill');
+  return catalog;
 }
