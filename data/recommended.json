@@ -14,5 +14,9 @@
   {
     "repository": "https://github.com/addyosmani/agent-skills",
     "reason": "Covers the whole lifecycle: specs, quality, security, performance and launch."
+  },
+  {
+    "repository": "https://github.com/ibelick/ui-skills",
+    "reason": "Practical checks for interface work: accessibility, motion performance, metadata and design polish."
   }
 ]
