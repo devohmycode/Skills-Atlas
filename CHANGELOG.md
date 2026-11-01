@@ -6,6 +6,8 @@
 - **`skills-atlas suggest`** finds what a project is built with (manifests, workspaces and telltale files, about 45 technologies) and suggests catalog skills for each, publisher's own first, without what is installed; `--json` and `-n` available.
 - **💡 For this project** opens the tree and the web page when the current directory uses known technologies: the suggested skills, in rank order, each tagged with its technology.
 - **MCP:** new `suggest_skills`, `update_skills`, `rollback_skill`, `doctor` and `sync_project` tools, audited like installs; `install_skills` takes `packs`; `outdated_skills` covers both scopes and returns `modified`.
+- **Context cost.** The preview, the web page's Details, `show` and MCP `show_skill` estimate what a skill costs in context: its description at every session start, its `SKILL.md` when used. `installed --size` adds each skill's tokens and size on disk and each agent's startup load; an agent loading more than 5,000 tokens of descriptions is flagged there and above the tree.
+- **Profiles.** `skills-atlas profile use <pack>` (and **Use this pack as a profile…** on the web page) keeps only a pack's skills in a scope: the others, home-made ones included, are removed after the whole scope is saved byte for byte. `profile restore` (and **Backups** on the web page) puts a scope back exactly, offline, saving the current state first; `--initial` returns to the configuration before any profile. `profile create`, `list` and `backups` manage the rest.
 
 ## 0.30.0 — 2026-10-23
 
