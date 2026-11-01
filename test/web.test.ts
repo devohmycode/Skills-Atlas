@@ -389,7 +389,8 @@ it('edits and deletes a personal pack, refreshing its theme, and refuses a shipp
   const state = async () => (await fetch(`http://127.0.0.1:${local.port}/api/state`, { headers })).json();
   const inTheme = async (theme: string) => (await (await fetch(`http://127.0.0.1:${local.port}/api/skills?theme=${encodeURIComponent(theme)}`, { headers })).json()).items.map((s: Skill) => s.id);
   try {
-    expect((await state()).packs.map((p: { id: string; personal: boolean }) => [p.id, p.personal])).toEqual([['mine', true], ['frontend', false]]);
+    // The shipped packs always show, read-only; the file's copy of `frontend` is ignored.
+    expect((await state()).packs.map((p: { id: string; personal: boolean }) => [p.id, p.personal])).toEqual([['frontend', false], ['security', false], ['quality', false], ['writing', false], ['mine', true]]);
     const res = await post('/api/packs/update', { id: 'mine', name: 'Design', description: 'UI', skills: ['a/b@tailwind', 'c/d@pentest'] });
     expect((await res.json()).pack).toEqual({ id: 'mine', name: 'Design', description: 'UI', skills: ['a/b@tailwind', 'c/d@pentest'] });
     expect((await state()).themes.find((th: Theme) => th.id === 'pack:mine').label).toBe('📦 Design');

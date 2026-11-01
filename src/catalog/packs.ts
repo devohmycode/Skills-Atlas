@@ -23,6 +23,8 @@ const PackInput = z.object({
 });
 const Packs = z.array(PackInput);
 
+const bundledIds = new Set((bundled as { id: string }[]).map((p) => p.id));
+
 /** Theme id of a pack in the tree and on the web page. */
 export const packTheme = (id: string) => `pack:${id}`;
 
@@ -42,14 +44,28 @@ function parsePacks(raw: unknown): Pack[] {
   return result.data;
 }
 
-/** A personal list replaces the shipped packs; [] hides them. */
-export function readPacks(path = join(dirname(configPath()), 'packs.json')): Pack[] {
+/**
+ * The personal packs of `packs.json`. Entries under a shipped pack's id (copies an older
+ * version wrote) are left out: the shipped pack is always the one shown.
+ */
+export function readPersonalPacks(path = join(dirname(configPath()), 'packs.json')): Pack[] {
+  let raw: unknown;
   try {
-    return parsePacks(JSON.parse(readFileSync(path, 'utf8')));
+    raw = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return parsePacks(bundled);
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
     throw new Error(`Could not read packs from ${path}`, { cause: error });
   }
+  try {
+    return parsePacks(raw).filter((p) => !isBundledPack(p.id));
+  } catch (error) {
+    throw new Error(`Could not read packs from ${path}`, { cause: error });
+  }
+}
+
+/** Every pack: the shipped ones, always, then the personal ones. */
+export function readPacks(path = join(dirname(configPath()), 'packs.json')): Pack[] {
+  return [...parsePacks(bundled), ...readPersonalPacks(path)];
 }
 
 /** Invalid requests and duplicate ids are distinct from filesystem/configuration failures. */
@@ -67,9 +83,9 @@ export function savePack(raw: unknown, catalogSkills: Skill[], path = join(dirna
   const known = new Set(catalogSkills.map((s) => s.id));
   if (pack.skills.some((id) => !known.has(id))) throw new PackSaveError(400, 'unknown pack skills');
   if (new Set(pack.skills.map((id) => id.toLowerCase())).size !== pack.skills.length) throw new PackSaveError(400, 'duplicate pack skills');
-  const existing = readPacks(path);
-  if (existing.some((p) => p.id === pack.id)) throw new PackSaveError(409, 'pack id already exists');
-  writePacks([...existing, pack], path);
+  const personal = readPersonalPacks(path);
+  if (isBundledPack(pack.id) || personal.some((p) => p.id === pack.id)) throw new PackSaveError(409, 'pack id already exists');
+  writePacks([...personal, pack], path);
   return pack;
 }
 
@@ -94,7 +110,6 @@ export function withPacks(catalog: Catalog, packs: Pack[] = readPacks()): Catalo
   return { ...catalog, skills, themes: [...others.slice(0, after), ...packThemes, ...others.slice(after)], stats: { ...catalog.stats, byTheme } };
 }
 
-const bundledIds = new Set((bundled as { id: string }[]).map((p) => p.id));
 
 /** A pack shipped with skills-atlas: shown and usable, but not edited or deleted (a personal pack can copy it). */
 export const isBundledPack = (id: string): boolean => bundledIds.has(id);
@@ -115,7 +130,7 @@ function writePacks(packs: Pack[], path: string): void {
  */
 export function updatePack(id: string, patch: { name?: string; description?: string; skills?: string[] }, catalogSkills: Skill[], path = join(dirname(configPath()), 'packs.json')): Pack {
   if (isBundledPack(id)) throw new PackSaveError(400, 'a shipped pack cannot be changed: save a copy under another id');
-  const packs = readPacks(path);
+  const packs = readPersonalPacks(path);
   const current = packs.find((p) => p.id === id);
   if (!current) throw new PackSaveError(404, 'unknown pack');
   const skills = patch.skills ? [...new Map(patch.skills.map((s) => [s.toLowerCase(), s])).values()] : current.skills;
@@ -133,7 +148,7 @@ export function updatePack(id: string, patch: { name?: string; description?: str
 /** Deletes a personal pack. Backups are not touched: a scope saved under it stays restorable. */
 export function deletePack(id: string, path = join(dirname(configPath()), 'packs.json')): void {
   if (isBundledPack(id)) throw new PackSaveError(400, 'a shipped pack cannot be deleted');
-  const packs = readPacks(path);
+  const packs = readPersonalPacks(path);
   if (!packs.some((p) => p.id === id)) throw new PackSaveError(404, 'unknown pack');
   writePacks(packs.filter((p) => p.id !== id), path);
 }

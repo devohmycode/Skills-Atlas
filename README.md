@@ -119,7 +119,7 @@ A pack is a set of skills meant to be installed together: **📦 Frontend dev**,
 
 In the web interface, **Save as pack** saves the checked catalog skills, including installed ones that remain checked, as a personal pack. Enter a unique lowercase id (letters, digits and hyphens), a name and description; a pack contains 1–100 skills. Saving adds to your personal file, preserves bundled packs on the first save, and opens the new pack immediately without restarting. Duplicate ids and invalid existing files are rejected without overwriting them. The offline demo explicitly disables saving.
 
-The packs ship in [`data/packs.json`](data/packs.json). As for Recommended, a personal `~/.config/skills-atlas/packs.json` replaces them, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; `[]` hides them.
+The packs ship in [`data/packs.json`](data/packs.json). They always show. Personal packs are added to them from `~/.config/skills-atlas/packs.json`, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; an entry under a shipped pack's id is ignored.
 
 ### Profiles
 

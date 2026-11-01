@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { curated } from '../src/catalog/curated.js';
-import { deletePack, isBundledPack, packStatus, readPacks, refreshPacks, savePack, updatePack, withPacks } from '../src/catalog/packs.js';
+import { deletePack, isBundledPack, packStatus, readPacks, readPersonalPacks, refreshPacks, savePack, updatePack, withPacks } from '../src/catalog/packs.js';
 import type { Catalog, Skill } from '../src/types.js';
 
 const skill = (id: string): Skill => {
@@ -48,8 +48,14 @@ describe('packs', () => {
     try {
       writeFileSync(join(dir, 'packs.json'), JSON.stringify([{ id: 'x', name: 'X', description: 'x', skills: ['a/b@--global'] }]));
       expect(() => readPacks(join(dir, 'packs.json'))).toThrow(/packs/);
+      // The shipped packs always show, whatever the personal file holds; a copy under a shipped id is ignored.
+      const shipped = readPacks(join(dir, 'missing.json'));
+      expect(shipped.map((p) => p.id)).toEqual(['frontend', 'security', 'quality', 'writing']);
       writeFileSync(join(dir, 'packs.json'), '[]');
-      expect(readPacks(join(dir, 'packs.json'))).toEqual([]);
+      expect(readPacks(join(dir, 'packs.json'))).toEqual(shipped);
+      writeFileSync(join(dir, 'packs.json'), JSON.stringify([{ id: 'frontend', name: 'Old copy', description: 'x', skills: ['a/b@one'] }, { id: 'mine', name: 'Mine', description: 'x', skills: ['a/b@one'] }]));
+      expect(readPacks(join(dir, 'packs.json')).map((p) => p.name)).toEqual([...shipped.map((p) => p.name), 'Mine']);
+      expect(readPersonalPacks(join(dir, 'packs.json')).map((p) => p.id)).toEqual(['mine']);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -70,6 +76,9 @@ describe('saving a personal pack', () => {
       const before = readFileSync(path, 'utf8');
       expect(() => savePack(pack, catalog.skills, path)).toThrow(/already exists/);
       expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(() => savePack({ ...pack, id: 'frontend' }, catalog.skills, path)).toThrow(/already exists/);
+      // Only personal packs are written: the shipped ones come from the package.
+      expect(JSON.parse(readFileSync(path, 'utf8')).map((p: { id: string }) => p.id)).toEqual(['mine', 'second']);
       expect(readdirSync(join(dir, 'nested'))).toEqual(['packs.json']);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
@@ -106,7 +115,7 @@ describe('editing personal packs', () => {
       writeFileSync(path, JSON.stringify([{ id: 'mine', name: 'Mine', description: 'd', skills: ['a/b@one', 'gone/repo@old'] }]));
       const saved = updatePack('mine', { name: 'Design', skills: ['a/b@one', 'gone/repo@old', 'c/d@three'] }, catalogSkills, path);
       expect(saved).toEqual({ id: 'mine', name: 'Design', description: 'd', skills: ['a/b@one', 'gone/repo@old', 'c/d@three'] });
-      expect(readPacks(path)).toEqual([saved]);
+      expect(readPersonalPacks(path)).toEqual([saved]);
       expect(() => updatePack('mine', { skills: ['x/y@unknown'] }, catalogSkills, path)).toThrow('unknown pack skills');
       expect(() => updatePack('mine', { name: '' }, catalogSkills, path)).toThrow('invalid pack');
       expect(() => updatePack('nope', {}, catalogSkills, path)).toThrow('unknown pack');
@@ -114,7 +123,8 @@ describe('editing personal packs', () => {
       expect(() => updatePack('frontend', { name: 'x' }, catalogSkills, path)).toThrow('shipped pack');
       expect(() => deletePack('frontend', path)).toThrow('shipped pack');
       deletePack('mine', path);
-      expect(readPacks(path)).toEqual([]);
+      expect(readPersonalPacks(path)).toEqual([]);
+      expect(readPacks(path).map((p) => p.id)).toEqual(['frontend', 'security', 'quality', 'writing']);
       expect(() => deletePack('mine', path)).toThrow('unknown pack');
     } finally {
       rmSync(dir, { recursive: true, force: true });
