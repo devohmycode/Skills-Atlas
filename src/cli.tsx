@@ -6,7 +6,7 @@ import { mergeInstalled } from './catalog/installed.js';
 import { loadCatalog } from './catalog/load.js';
 import { loadLatestCatalog } from './catalog/remote.js';
 import { curated } from './catalog/curated.js';
-import { packStatus, readPacks } from './catalog/packs.js';
+import { packStatus, readPacks, savePack } from './catalog/packs.js';
 import pkg from '../package.json' with { type: 'json' };
 import { groupByTheme, popularityLabel, querySkills, resolveTheme, sortSkills, SORT_ORDERS, type QueryOptions, type SortOrder } from './catalog/query.js';
 import { readConfig, writeConfig } from './config.js';
@@ -33,6 +33,8 @@ import { browseLoop } from './browse.js';
 import { agentLoads, formatBytes, heavyLoads, STARTUP_BUDGET } from './context.js';
 import { scanInstalled } from './install/scan.js';
 import { withSuggestions } from './suggest.js';
+import { backupScope, listBackups, profilePlan, restoreBackup } from './profiles.js';
+import { createInterface } from 'node:readline/promises';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
 /** The skills a project expects, at its root, versioned with its code. */
@@ -635,6 +637,142 @@ installOptions(program.command('sync'))
         if (absent.length || (await projectRevisionDrift(file.ids, file.revisions, installed)).length) fail('pinned sync verification failed');
       } catch (err) { fail((err as Error).message); }
     }
+  });
+
+/** Asks a yes/no question on the terminal; no is the default. */
+async function ask(question: string): Promise<boolean> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return /^(y|yes|o|oui|j|ja|s|si|sí|sim)$/i.test((await rl.question(`${question} [y/N] `)).trim());
+  } finally {
+    rl.close();
+  }
+}
+
+/** The key a profile is remembered under: `global`, or the project's path. */
+const profileKey = (scope: Scope) => (scope === 'global' ? 'global' : resolvePath(process.cwd()));
+
+const profile = program.command('profile').description(c.profileCmd);
+
+profile
+  .command('list')
+  .description(c.profileListCmd)
+  .option('--json', c.json)
+  .action((opts: { json?: boolean }) => {
+    const packs = readPacks();
+    const active = readConfig().profiles ?? {};
+    const rows = packs.map((p) => ({ id: p.id, name: p.name, skills: p.skills.length, active: SCOPES.filter((sc) => active[profileKey(sc)] === p.id) }));
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+    for (const r of rows) console.log(`  ${padEnd(r.id, 24)} ${padEnd(r.name, 30)} ${paint('dim', `${r.skills}`)}${r.active.length ? paint('pink', `  ● ${r.active.map((sc) => t().tree.where[sc]).join(' + ')}`) : ''}`);
+    console.log(paint('dim', `\n${c.profileHint}`));
+  });
+
+profile
+  .command('create')
+  .argument('<name>', c.profileName)
+  .argument('[ids...]', c.ids)
+  .option('--from-installed', c.profileFromInstalled)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('-d, --description <text>', c.profileDescription)
+  .addOption(catalogOption())
+  .addOption(offlineOption())
+  .description(c.profileCreateCmd)
+  .action(async (name: string, ids: string[], opts: CommonOptions & { fromInstalled?: boolean; global?: boolean; project?: boolean; description?: string }) => {
+    const catalog = await openCatalog({ ...opts, quiet: true });
+    const byId = new Map(catalog.skills.map((s) => [s.id.toLowerCase(), s.id]));
+    const wanted = [...ids];
+    if (opts.fromInstalled) wanted.push(...(await installedSkills(flagScopes(opts))).filter((s) => s.source).map((s) => s.id));
+    const unknown = wanted.filter((id) => !byId.has(id.toLowerCase()));
+    if (unknown.length) console.error(paint('yellow', c.profileUnknown(unknown.join(', '))));
+    const skills = [...new Set(wanted.map((id) => byId.get(id.toLowerCase())).filter((id): id is string => !!id))];
+    if (!skills.length) fail(c.nothingToInstall);
+    const id = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'profile';
+    try {
+      const pack = savePack({ id, name, description: opts.description ?? c.profileDefaultDescription(String(skills.length)), skills }, catalog.skills);
+      console.log(paint('pink', `✓ ${c.profileCreated(pack.id, String(pack.skills.length))}`));
+    } catch (err) {
+      fail((err as Error).message);
+    }
+  });
+
+installOptions(profile.command('use'))
+  .argument('<pack>', c.profilePack)
+  .description(c.profileUseCmd)
+  .action(async (id: string, opts: InstallFlags) => {
+    const pack = readPacks().find((p) => p.id === id) ?? fail(c.unknownPacks(id));
+    const preset = presetFromFlags(opts);
+    // A profile changes one scope: the global one unless -p says the project.
+    const scope: Scope = preset.scope ?? 'global';
+    const installed = await listInstalled(scope);
+    const plan = profilePlan(pack, installed);
+    console.log(paint('bold', c.profileTitle(pack.name, t().tree.where[scope])));
+    console.log(paint('dim', `  ${c.profileKeep(String(plan.keep.length))}`));
+    for (const r of plan.remove) console.log(`  ${paint('red', '−')} ${r.id}`);
+    for (const i of plan.install) console.log(`  ${paint('pink', '+')} ${i}`);
+    if (!plan.remove.length && !plan.install.length) return console.log(paint('dim', m.run.noChange));
+    if (plan.remove.length) console.error(paint('yellow', `⚠ ${c.profileWarning(String(plan.remove.length))}`));
+    const { defaults } = resolveDefaults();
+    const agents = preset.agents ?? defaults.agents;
+    if (plan.install.length && !agents.length) fail(m.errors.agentRequired);
+    const options: InstallOptions = { agents, scope, method: preset.method ?? defaults.method, skillsVersion: opts.skillsVersion };
+    const removals = plan.remove.map((r) => ({ name: r.name, scopes: [scope] }));
+    if (opts.dryRun) return void (await apply(plan.install, removals, options, opts));
+    if (!opts.yes) {
+      if (!process.stdin.isTTY) fail(c.profileNeedsYes);
+      if (!(await ask(c.profileConfirm))) return console.log(paint('dim', m.run.noChange));
+    }
+    const install = await auditGate(plan.install, opts);
+    const backup = backupScope(scope, `profile:${pack.id}`, installed);
+    console.log(paint('dim', c.profileBackedUp(backup.id)));
+    await apply(install, removals, options, opts);
+    writeConfig({ ...readConfig(), profiles: { ...(readConfig().profiles ?? {}), [profileKey(scope)]: pack.id } });
+    console.log(paint('dim', c.profileUndo(backup.id)));
+  });
+
+profile
+  .command('backups')
+  .description(c.profileBackupsCmd)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('--json', c.json)
+  .action((opts: { global?: boolean; project?: boolean; json?: boolean }) => {
+    const scopes = flagScopes(opts);
+    const backups = listBackups().filter((b) => scopes.includes(b.scope));
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(backups.map(({ dirs, ...b }) => b), null, 2)}\n`);
+    if (!backups.length) return console.log(paint('dim', c.profileNoBackup));
+    for (const b of backups) {
+      const tag = b.initial ? paint('pink', ` ${c.profileInitial}`) : '';
+      console.log(`  ${padEnd(b.id, 40)} ${padEnd(t().tree.where[b.scope], 8)} ${padEnd(String(b.skills.length), 4)} ${paint('dim', b.reason)}${tag}`);
+    }
+    console.log(paint('dim', `\n${c.profileRestoreHint}`));
+  });
+
+profile
+  .command('restore')
+  .argument('[backup]', c.profileBackupArg)
+  .option('--initial', c.profileInitialOption)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('-y, --yes', c.yes)
+  .description(c.profileRestoreCmd)
+  .action(async (id: string | undefined, opts: { initial?: boolean; global?: boolean; project?: boolean; yes?: boolean }) => {
+    const backups = listBackups().filter((b) => flagScopes(opts).includes(b.scope));
+    const backup = id ? backups.find((b) => b.id === id) : opts.initial ? backups.find((b) => b.initial) : backups[0];
+    if (!backup) fail(id ? c.profileUnknownBackup(id) : c.profileNoBackup);
+    console.log(paint('bold', c.profileRestoreTitle(backup!.id, t().tree.where[backup!.scope], String(backup!.skills.length))));
+    for (const s of backup!.skills) console.log(`  ${s.source ?? 'local'}@${s.name}`);
+    if (!opts.yes) {
+      if (!process.stdin.isTTY) fail(c.profileNeedsYes);
+      if (!(await ask(c.profileRestoreConfirm))) return console.log(paint('dim', m.run.noChange));
+    }
+    const undo = restoreBackup(backup!.id, await listInstalled(backup!.scope));
+    const config = readConfig();
+    const profiles = { ...(config.profiles ?? {}) };
+    delete profiles[backup!.scope === 'global' ? 'global' : backup!.cwd!];
+    writeConfig({ ...config, profiles });
+    console.log(paint('pink', `✓ ${c.profileRestored(backup!.id)}`));
+    console.log(paint('dim', c.profileUndo(undo.id)));
   });
 
 program

@@ -70,6 +70,9 @@ skills-atlas installed --size                 # the same, with what each skill c
 skills-atlas packs                            # curated packs: frontend, security, quality, writing
 skills-atlas install --pack security -a claude-code -g   # install a whole pack
 skills-atlas sync                             # install what this project's skills-atlas.json lists and is missing
+skills-atlas profile create Design <ids...>   # a personal pack to use as a profile (--from-installed available)
+skills-atlas profile use design               # keep only that pack's skills in the global scope (-p: this project), after a backup
+skills-atlas profile restore                  # put the scope back exactly as before (--initial: before any profile)
 skills-atlas completion bash                  # shell completion script (bash, zsh, fish, powershell)
 ```
 
@@ -117,6 +120,14 @@ A pack is a set of skills meant to be installed together: **📦 Frontend dev**,
 In the web interface, **Save as pack** saves the checked catalog skills, including installed ones that remain checked, as a personal pack. Enter a unique lowercase id (letters, digits and hyphens), a name and description; a pack contains 1–100 skills. Saving adds to your personal file, preserves bundled packs on the first save, and opens the new pack immediately without restarting. Duplicate ids and invalid existing files are rejected without overwriting them. The offline demo explicitly disables saving.
 
 The packs ship in [`data/packs.json`](data/packs.json). As for Recommended, a personal `~/.config/skills-atlas/packs.json` replaces them, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; `[]` hides them.
+
+### Profiles
+
+A profile is a pack activated on its own, to switch between configurations such as *Design* or *Backend*. `skills-atlas profile use <pack>` (or, on the web page, a pack's **Use this pack as a profile…**) shows what stays, what goes and what comes, then, once confirmed: saves the scope, removes every skill of the scope that is not in the pack (home-made ones included), and installs the pack's missing skills, audited like any install. A profile changes one scope: the global one, or the project with `-p`.
+
+**Nothing is lost.** Before each profile change, the whole scope is saved in `~/.local/state/skills-atlas/backups/` (or `$XDG_STATE_HOME`): every skills directory as it is on disk (folders copied, links kept as links) and the lock file, byte for byte. Home-made and edited skills are thus moved to the backup, not deleted. `skills-atlas profile restore [id]` (or **Backups** on the web page) puts the scope back exactly as it was, offline, and saves the current state first, so a restore can be undone too. The first backup of a scope is its initial configuration, kept for good: `profile restore --initial` returns to it. The ten latest others are kept.
+
+Create profiles with `skills-atlas profile create <name> <ids...>` (or `--from-installed`, which takes the installed skills that have a GitHub source), or on the web page with **Save as pack**; `profile list` shows them and the active one, `profile backups` the backups.
 
 ### A project's skills: skills-atlas.json
 

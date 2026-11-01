@@ -131,6 +131,12 @@ nav button.recommended::before { content: '★'; background: none; color: var(--
 nav button[data-theme="trending"]::before { content: '🔥'; background: none; line-height: 12px; font-size: 13px; }
 nav button[data-theme="suggested"]::before { content: '💡'; background: none; line-height: 12px; font-size: 13px; }
 .tag.suggested { color: var(--accent, inherit); }
+.profile-list { list-style: none; padding: 0; margin: 4px 0 10px; max-height: 220px; overflow: auto; font-family: var(--mono, monospace); font-size: 12px; }
+.profile-list .minus { color: var(--danger, #b3261e); } .profile-list .plus { color: var(--success, #2e7d32); }
+.backups { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
+.backups li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.ok-msg { color: var(--success, #2e7d32); }
+.profile-agents { display: flex; flex-wrap: wrap; gap: 4px 14px; max-height: 160px; overflow: auto; }
 nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 
 /* ---- skill list -------------------------------------------------------------------------- */
@@ -363,6 +369,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
   <aside id="panel"><div class="panel-body" id="panel-body"></div><div class="panel-foot" id="panel-foot" hidden></div></aside>
 </main>
 <dialog id="pack-dialog" aria-labelledby="pack-title"><form class="dlg" id="pack-form"></form></dialog>
+<dialog id="profile-dialog" aria-labelledby="profile-title"><div class="dlg" id="profile-body"></div></dialog>
+<dialog id="backups-dialog" aria-labelledby="backups-title"><div class="dlg" id="backups-body"></div></dialog>
 <dialog id="progress" aria-live="polite"><div class="dlg" id="progress-body"></div></dialog>
 <dialog id="details" aria-labelledby="details-title"><div class="dlg"><h3 id="details-title"></h3><div id="details-body" aria-live="polite"></div><footer><button class="primary" id="details-close"></button></footer></div></dialog>
 <script>
@@ -703,6 +711,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var b = e.target.closest('button');
     if (!b) return;
     view.theme = b.dataset.theme;
+    renderPanel();
     load(false);
   });
 
@@ -711,9 +720,84 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     return S.installed.filter(function (s) { return s.catalog && !removes.has(s.id); }).map(function (s) { return s.id; }).concat(Array.from(adds.keys()));
   }
   function packButton() {
+    var pack = view.theme && view.theme.indexOf('pack:') === 0 ? view.theme.slice(5) : '';
     return '<button class="link" data-act="save-pack"' + (!S.canSavePacks || !packSelection().length ? ' disabled' : '') + '>' + esc(M.savePack) + '</button>' +
+      (S.canSavePacks && pack ? '<br><button class="link" data-act="use-profile" data-pack="' + esc(pack) + '">' + esc(M.profileUse) + '</button>' : '') +
+      (S.canSavePacks && (S.backups || []).length ? '<br><button class="link" data-act="backups">' + esc(tr('backupsOpen', { n: S.backups.length })) + '</button>' : '') +
       (!S.canSavePacks ? '<p class="intro">' + esc(M.packDemo) + '</p>' : '');
   }
+
+  // ---- profiles and backups --------------------------------------------------------------
+  var profile = { pack: '', scope: 'global', plan: null };
+  function openProfile(pack) {
+    profile = { pack: pack, scope: 'global', plan: null };
+    $('profile-dialog').showModal();
+    return renderProfile();
+  }
+  function renderProfile() {
+    var b = $('profile-body'), theme = (S.themes || []).filter(function (th) { return th.id === 'pack:' + profile.pack; })[0];
+    b.innerHTML = '<h3 id="profile-title">' + esc(tr('profileTitle', { name: theme ? themeName(theme.id) : profile.pack })) + '</h3><p class="sub">' + esc(M.previewLoading) + '</p>';
+    return apiJson('/api/profile/plan', { pack: profile.pack, scope: profile.scope }).then(function (pl) {
+      profile.plan = pl;
+      var agents = selectedAgents();
+      var h = '<h3 id="profile-title">' + esc(tr('profileTitle', { name: theme ? themeName(theme.id) : profile.pack })) + '</h3>' +
+        '<fieldset class="radios"><legend>' + esc(M.scopeTitle) + '</legend>' + ['global', 'project'].map(function (sc) {
+          return '<label><input type="radio" name="profile-scope" value="' + sc + '"' + (profile.scope === sc ? ' checked' : '') + '> ' + esc(M[sc]) + '</label>';
+        }).join('') + '</fieldset>' +
+        '<p>' + esc(tr('profileKeep', { n: pl.keep.length })) + '</p>';
+      if (pl.remove.length) h += '<p class="warn">' + esc(tr('profileWarning', { n: pl.remove.length })) + '</p><ul class="profile-list">' +
+        pl.remove.map(function (r) { return '<li class="minus">− ' + esc(r.id) + '</li>'; }).join('') + '</ul>';
+      if (pl.install.length) {
+        // The pack's missing skills go to these agents: the detected and chosen ones, or every agent when none is.
+        var shown = S.agents.filter(function (a) { return a.detected || opts.agents.has(a.id); });
+        if (!shown.length) shown = S.agents;
+        h += '<ul class="profile-list">' + pl.install.map(function (id) { return '<li class="plus">+ ' + esc(id) + '</li>'; }).join('') + '</ul>' +
+          '<fieldset class="profile-agents"><legend>' + esc(M.agentsTitle) + '</legend>' + shown.map(function (a) {
+            return '<label><input type="checkbox" data-profile-agent="' + esc(a.id) + '"' + (opts.agents.has(a.id) ? ' checked' : '') + '> ' + esc(a.name) + '</label>';
+          }).join('') + '</fieldset>';
+      }
+      if (pl.unknown && pl.unknown.length) h += '<p class="warn">' + esc(pl.unknown.join(', ')) + '</p>';
+      var nothing = !pl.remove.length && !pl.install.length;
+      var noAgent = pl.install.length && !agents.length;
+      if (noAgent) h += '<p class="warn">' + esc(M.needAgent) + '</p>';
+      h += '<footer><button type="button" class="link" id="profile-cancel">' + esc(M.close) + '</button>' +
+        '<button type="button" class="primary" id="profile-go"' + (nothing || noAgent ? ' disabled' : '') + '>' + esc(nothing ? M.profileNothing : M.profileActivate) + '</button></footer>';
+      b.innerHTML = h;
+      $('profile-cancel').onclick = function () { $('profile-dialog').close(); };
+      $('profile-go').onclick = function () {
+        $('profile-dialog').close();
+        run(false, { install: [], remove: [], auditOverrides: [], options: { agents: agents, scope: profile.scope, method: opts.method }, profile: { pack: profile.pack } });
+      };
+      Array.prototype.forEach.call(b.querySelectorAll('input[name="profile-scope"]'), function (r) {
+        r.onchange = function () { profile.scope = r.value; renderProfile(); };
+      });
+      Array.prototype.forEach.call(b.querySelectorAll('input[data-profile-agent]'), function (c) {
+        c.onchange = function () { if (c.checked) opts.agents.add(c.dataset.profileAgent); else opts.agents.delete(c.dataset.profileAgent); renderPanel(); renderProfile(); };
+      });
+    }).catch(function (err) { b.innerHTML = '<p class="warn">' + esc(err.message) + '</p><footer><button class="primary" id="profile-cancel">' + esc(M.close) + '</button></footer>'; $('profile-cancel').onclick = function () { $('profile-dialog').close(); }; });
+  }
+  function openBackups(message) {
+    var b = $('backups-body');
+    var h = '<h3 id="backups-title">' + esc(M.backupsTitle) + '</h3><p class="sub">' + esc(M.backupsHint) + '</p>';
+    if (message) h += '<p class="ok-msg" role="status">' + esc(message) + '</p>';
+    h += '<ul class="backups">' + (S.backups || []).map(function (bk) {
+      return '<li><div><strong>' + esc(new Date(bk.createdAt).toLocaleString(S.locale)) + '</strong> · ' + esc(M[bk.scope]) + ' · ' +
+        esc(tr('backupSkills', { n: bk.skills.length })) + (bk.initial ? ' · <b>' + esc(M.backupInitial) + '</b>' : '') +
+        '<br><span class="sub">' + esc(bk.reason) + ' — ' + esc(bk.skills.map(function (x) { return x.name; }).join(', ')) + '</span></div>' +
+        '<button class="link" data-restore="' + esc(bk.id) + '">' + esc(M.backupRestore) + '</button></li>';
+    }).join('') + '</ul><footer><button class="primary" id="backups-close">' + esc(M.close) + '</button></footer>';
+    b.innerHTML = h;
+    $('backups-close').onclick = function () { $('backups-dialog').close(); };
+    if (!$('backups-dialog').open) $('backups-dialog').showModal();
+  }
+  $('backups-body').addEventListener('click', function (e) {
+    var t = e.target.closest('[data-restore]');
+    if (!t || !window.confirm(M.backupRestoreConfirm)) return;
+    t.disabled = true;
+    apiJson('/api/backups/restore', { id: t.dataset.restore }).then(function (r) {
+      return refresh().then(function () { openBackups(tr('backupRestored', { id: r.restored, undo: r.undo })); });
+    }).catch(function (err) { t.disabled = false; window.alert(err.message); });
+  });
   var packIds = [], savingPack = false;
   function openPack() {
     if (!S.canSavePacks || savingPack) return;
@@ -871,6 +955,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     else if (t.dataset.act === 'clear') { changed = Array.from(adds.keys()).concat(Array.from(removes)); adds.clear(); removes.clear(); auditOverrides.clear(); }
     else if (t.dataset.act === 'all-agents') showAllAgents = !showAllAgents;
     else if (t.dataset.act === 'save-pack') return openPack();
+    else if (t.dataset.act === 'use-profile') return openProfile(t.dataset.pack);
+    else if (t.dataset.act === 'backups') return openBackups();
     else if (t.dataset.act === 'apply') return apply();
     changed.forEach(updateRow); renderPanel();
   });
@@ -895,7 +981,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       if (adds.size || removes.size) return run(true);
     }).catch(fail);
   }
-  function run(retry) {
+  function run(retry, custom) {
     var dlg = $('progress'), tasks = [], review = null, end;
     var out = $('progress-body');
     function render(end) {
@@ -919,6 +1005,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
           (t.error ? '<pre class="err">' + esc(t.error) + '</pre>' : '') + '</div>';
       });
       if (end && end.error) h += '<p class="warn">' + esc(end.error) + '</p>';
+      if (end && end.backup) h += '<p class="sub">' + esc(tr('profileUndo', { id: end.backup })) + '</p>';
       if (end) h += '<footer><button class="primary" id="close">' + esc(M.close) + '</button></footer>';
       out.innerHTML = h;
       var c = $('close');
@@ -927,7 +1014,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     render(null);
     dlg.showModal();
     dlg.oncancel = function (e) { if (!$('close')) e.preventDefault(); };
-    return api('/api/apply', body(retry)).then(function (res) {
+    return api('/api/apply', custom || body(retry)).then(function (res) {
       var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
       function pump() {
         return reader.read().then(function (chunk) {

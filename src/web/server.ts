@@ -1,4 +1,3 @@
-import { markdownCost } from '../context.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -6,7 +5,10 @@ import { gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { AGENTS, detectAgents, unknownAgents } from '../agents.js';
 import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog/installed.js';
-import { PackSaveError, packTheme, savePack } from '../catalog/packs.js';
+import { PackSaveError, packTheme, readPacks, savePack } from '../catalog/packs.js';
+import { markdownCost } from '../context.js';
+import { backupScope, listBackups, profilePlan, restoreBackup, type Backup } from '../profiles.js';
+import { resolve } from 'node:path';
 import { byGrowth } from '../catalog/trending.js';
 import { createSearchIndex, SORT_ORDERS } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
@@ -39,6 +41,8 @@ export interface ServerOptions {
   readSkill?: typeof fetchSkillMarkdown;
   /** Personal pack destination; injected tests never touch the user profile. */
   packsPath?: string;
+  /** Where profile backups are kept; injected in tests. */
+  backupsRoot?: string;
 }
 
 export interface AtlasServer {
@@ -66,6 +70,8 @@ const Body = z.object({
   }),
   /** Install only the requested agents that do not have the skill yet in the scope. */
   retry: z.boolean().optional(),
+  /** Activate a pack as a profile: the server plans it (install and remove are ignored) and backs the scope up first. */
+  profile: z.object({ pack: z.string() }).optional(),
 });
 
 /** Agent ids from the display names the installed-skill scan reports. */
@@ -155,6 +161,8 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       cwd,
       skillsVersion: opts.skillsVersion,
       canSavePacks: true,
+      backups: listBackups(undefined, cwd, opts.backupsRoot).map(({ dirs: _dirs, ...b }) => b),
+      profiles: readConfig().profiles ?? {},
       themes: [INSTALLED_THEME, ...themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
       agents: AGENTS.map((a) => ({ id: a.id, name: a.displayName, detected: detected.has(a.id) })),
       defaults: {
@@ -193,7 +201,19 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
   async function plan(raw: unknown) {
     const parsed = Body.safeParse(raw);
     if (!parsed.success) throw new HttpError(400, 'invalid request');
-    const { install: requested, remove, options, auditOverrides, retry } = parsed.data;
+    const { options, auditOverrides, retry, profile } = parsed.data;
+    let { install: requested, remove } = parsed.data;
+    // A profile: the pack's missing skills come in, every other skill of the scope goes (to the backup).
+    let profileRun: { pack: string; installed: InstalledSkill[]; removals: Removal[] } | undefined;
+    if (profile) {
+      const pack = readPacks(opts.packsPath).find((p) => p.id === profile.pack);
+      if (!pack) throw new HttpError(404, 'unknown pack');
+      const inScope = await list(options.scope, cwd);
+      const pp = profilePlan(pack, inScope);
+      requested = pp.install.filter((id) => catalogIds.has(id));
+      remove = [];
+      profileRun = { pack: pack.id, installed: inScope, removals: pp.remove.map((r) => ({ name: r.name, scopes: [options.scope] })) };
+    }
     const install = [...new Set(requested)];
     if (auditOverrides.some((id) => !install.includes(id))) throw new HttpError(400, 'invalid audit overrides');
     const inst = await installed();
@@ -213,7 +233,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     const allowed = install.filter((id) => !blocked.includes(id));
     const collisions = replacements(install, inst.installed, options.scope);
     const full: InstallOptions = { ...options, skillsVersion: opts.skillsVersion };
-    const removals: Removal[] = remove.map((id) => {
+    const removals: Removal[] = profileRun?.removals ?? remove.map((id) => {
       const e = inst.installed.get(id) as InstalledEntry;
       return { name: e.name, scopes: [...e.scopes] };
     });
@@ -233,21 +253,30 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       installs = [...byAgents.values()].flatMap((g) => planInstall(g.ids, { ...full, agents: g.agents }));
     } else if (allowed.length) installs = planInstall(allowed, full);
     const commands = [...planRemovals(removals, opts.skillsVersion), ...installs];
-    return { commands, options: full, installs: installs.length, blocked, audit: { enabled, results }, collisions };
+    return { commands, options: full, installs: installs.length, blocked, audit: { enabled, results }, collisions, profileRun };
   }
 
   /** Runs the plan, streaming one JSON line per event: start, phase, done, then end. */
   async function apply(raw: unknown, res: ServerResponse) {
-    const { commands, options, installs, blocked, audit, collisions } = await plan(raw);
+    const { commands, options, installs, blocked, audit, collisions, profileRun } = await plan(raw);
     if (blocked.length) throw new HttpError(409, `${t().web.auditBlocked}: ${blocked.join(', ')}`);
     if (!commands.length) throw new HttpError(400, 'nothing to do');
     if (running) throw new HttpError(409, t().web.busy);
     running = true;
+    // Nothing of the scope is removed before it is saved, home-made and edited skills included.
+    let backup: Backup | undefined;
+    try {
+      if (profileRun) backup = backupScope(options.scope, `profile:${profileRun.pack}`, profileRun.installed, cwd, opts.backupsRoot);
+    } catch (err) {
+      running = false;
+      throw err;
+    }
     // Same memory as the terminal: the next run starts from these choices.
     if (installs) writeConfig({ ...readConfig(), agents: options.agents, scope: options.scope, method: options.method });
     res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
     const send = (event: object) => res.write(`${JSON.stringify(event)}\n`);
     send({ type: 'audit', audit, collisions });
+    if (backup) send({ type: 'backup', id: backup.id });
     const phases = commands.map((): Phase => 'queued');
     const stderr = commands.map(() => '');
     try {
@@ -262,7 +291,11 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
         onDone: (o, i) =>
           send({ type: 'done', i, ok: isSuccess(o), results: o.results, error: isSuccess(o) ? undefined : o.stderr.slice(-800) }),
       });
-      send({ type: 'end', ok: outcomes.every(isSuccess) });
+      if (profileRun) {
+        const config = readConfig();
+        writeConfig({ ...config, profiles: { ...(config.profiles ?? {}), [options.scope === 'global' ? 'global' : resolve(cwd)]: profileRun.pack } });
+      }
+      send({ type: 'end', ok: outcomes.every(isSuccess), backup: backup?.id });
     } catch (err) {
       send({ type: 'end', ok: false, error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -332,6 +365,32 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       return json(req, res, { commands: commands.map(formatCommand), audit, blocked, collisions });
     }
     if (req.method === 'POST' && url.pathname === '/api/apply') return apply(await readJson(req), res);
+    if (req.method === 'POST' && url.pathname === '/api/profile/plan') {
+      const body = z.object({ pack: z.string(), scope: z.enum(['project', 'global']) }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      const pack = readPacks(opts.packsPath).find((p) => p.id === body.data.pack);
+      if (!pack) throw new HttpError(404, 'unknown pack');
+      const pp = profilePlan(pack, await list(body.data.scope, cwd));
+      return json(req, res, { ...pp, unknown: pp.install.filter((id) => !catalogIds.has(id)), install: pp.install.filter((id) => catalogIds.has(id)) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/backups/restore') {
+      const body = z.object({ id: z.string() }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      if (running) throw new HttpError(409, t().web.busy);
+      const backup = listBackups(undefined, cwd, opts.backupsRoot).find((b) => b.id === body.data.id);
+      if (!backup) throw new HttpError(404, 'unknown backup');
+      running = true;
+      try {
+        const undo = restoreBackup(backup.id, await list(backup.scope, cwd), cwd, opts.backupsRoot);
+        const config = readConfig();
+        const profiles = { ...(config.profiles ?? {}) };
+        delete profiles[backup.scope === 'global' ? 'global' : resolve(cwd)];
+        writeConfig({ ...config, profiles });
+        return json(req, res, { restored: backup.id, undo: undo.id });
+      } finally {
+        running = false;
+      }
+    }
     throw new HttpError(404, 'not found');
   }
 
