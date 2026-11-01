@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { InstallCommand } from '../src/install/plan.js';
 import type { CommandOutcome, InstalledSkill } from '../src/install/run.js';
-import type { Skill } from '../src/types.js';
+import type { Skill, Theme } from '../src/types.js';
 import { startServer, type AtlasServer } from '../src/web/server.js';
 import { withRecommendations } from '../src/catalog/recommended.js';
 import { querySkills } from '../src/catalog/query.js';
@@ -373,6 +373,32 @@ it('activates a pack as a profile in one scope, after a backup, and restores tha
     expect(restored.restored).toBe(backup);
     expect(readFileSync(join(cwd, '.claude', 'skills', 'mine', 'SKILL.md'), 'utf8')).toBe('my own');
     expect((await post('/api/backups/restore', { id: 'nope' })).status).toBe(404);
+  } finally {
+    await local.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it('edits and deletes a personal pack, refreshing its theme, and refuses a shipped one', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-web-packs-'));
+  const packsPath = join(dir, 'packs.json');
+  writeFileSync(packsPath, JSON.stringify([{ id: 'mine', name: 'Mine', description: 'd', skills: ['a/b@tailwind'] }, { id: 'frontend', name: 'Frontend dev', description: 'shipped', skills: ['a/b@react-hooks'] }]));
+  const local = await startServer({ skills, catalogSkills: skills, themes: [], skillsVersion: '1.7.0', port: 0, packsPath, listInstalled: async () => [] });
+  const headers = { 'x-atlas-token': local.token, 'content-type': 'application/json' };
+  const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${local.port}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+  const state = async () => (await fetch(`http://127.0.0.1:${local.port}/api/state`, { headers })).json();
+  const inTheme = async (theme: string) => (await (await fetch(`http://127.0.0.1:${local.port}/api/skills?theme=${encodeURIComponent(theme)}`, { headers })).json()).items.map((s: Skill) => s.id);
+  try {
+    expect((await state()).packs.map((p: { id: string; personal: boolean }) => [p.id, p.personal])).toEqual([['mine', true], ['frontend', false]]);
+    const res = await post('/api/packs/update', { id: 'mine', name: 'Design', description: 'UI', skills: ['a/b@tailwind', 'c/d@pentest'] });
+    expect((await res.json()).pack).toEqual({ id: 'mine', name: 'Design', description: 'UI', skills: ['a/b@tailwind', 'c/d@pentest'] });
+    expect((await state()).themes.find((th: Theme) => th.id === 'pack:mine').label).toBe('📦 Design');
+    expect((await inTheme('pack:mine')).sort()).toEqual(['a/b@tailwind', 'c/d@pentest']);
+    expect((await post('/api/packs/update', { id: 'frontend', name: 'x' })).status).toBe(400);
+    expect((await post('/api/packs/delete', { id: 'nope' })).status).toBe(404);
+    expect((await post('/api/packs/delete', { id: 'mine' })).status).toBe(200);
+    expect((await state()).themes.some((th: Theme) => th.id === 'pack:mine')).toBe(false);
+    expect(await inTheme('pack:mine')).toEqual([]);
   } finally {
     await local.close();
     rmSync(dir, { recursive: true, force: true });

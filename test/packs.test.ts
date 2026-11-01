@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { curated } from '../src/catalog/curated.js';
-import { packStatus, readPacks, savePack, withPacks } from '../src/catalog/packs.js';
+import { deletePack, isBundledPack, packStatus, readPacks, refreshPacks, savePack, updatePack, withPacks } from '../src/catalog/packs.js';
 import type { Catalog, Skill } from '../src/types.js';
 
 const skill = (id: string): Skill => {
@@ -90,5 +90,47 @@ describe('saving a personal pack', () => {
         expect(readFileSync(path, 'utf8')).toBe(content);
       }
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('editing personal packs', () => {
+  const catalogSkills = ['a/b@one', 'a/b@two', 'c/d@three'].map((id) => {
+    const [source, name] = id.split('@') as [string, string];
+    return { id, name, source, labels: [], origins: ['skills.sh' as const], themes: [] };
+  });
+
+  it('changes a personal pack, keeps members gone from the catalog, and never touches a shipped one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atlas-pack-edit-'));
+    const path = join(dir, 'packs.json');
+    try {
+      writeFileSync(path, JSON.stringify([{ id: 'mine', name: 'Mine', description: 'd', skills: ['a/b@one', 'gone/repo@old'] }]));
+      const saved = updatePack('mine', { name: 'Design', skills: ['a/b@one', 'gone/repo@old', 'c/d@three'] }, catalogSkills, path);
+      expect(saved).toEqual({ id: 'mine', name: 'Design', description: 'd', skills: ['a/b@one', 'gone/repo@old', 'c/d@three'] });
+      expect(readPacks(path)).toEqual([saved]);
+      expect(() => updatePack('mine', { skills: ['x/y@unknown'] }, catalogSkills, path)).toThrow('unknown pack skills');
+      expect(() => updatePack('mine', { name: '' }, catalogSkills, path)).toThrow('invalid pack');
+      expect(() => updatePack('nope', {}, catalogSkills, path)).toThrow('unknown pack');
+      expect(isBundledPack('frontend')).toBe(true);
+      expect(() => updatePack('frontend', { name: 'x' }, catalogSkills, path)).toThrow('shipped pack');
+      expect(() => deletePack('frontend', path)).toThrow('shipped pack');
+      deletePack('mine', path);
+      expect(readPacks(path)).toEqual([]);
+      expect(() => deletePack('mine', path)).toThrow('unknown pack');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rebuilds the pack themes after a change', () => {
+    const catalog = {
+      version: 1 as const, generatedAt: '2026-11-01', themes: [{ id: 'recommended', label: 'Recommended' }, { id: 'pack:old', label: '📦 Old' }, { id: 'code', label: 'Code' }],
+      skills: catalogSkills.map((s) => (s.id === 'a/b@one' ? { ...s, themes: ['code', 'pack:old'] } : s)),
+      stats: { raw: { 'skills.sh': 0, smithery: 0, 'claude-plugins.dev': 0 }, merged: 3, byTheme: { 'pack:old': 1 } },
+    };
+    const out = refreshPacks(catalog, [{ id: 'new', name: 'New', description: 'd', skills: ['a/b@two'] }]);
+    expect(out.themes.map((th) => th.id)).toEqual(['recommended', 'pack:new', 'code']);
+    expect(out.skills.find((s) => s.id === 'a/b@one')!.themes).toEqual(['code']);
+    expect(out.skills.find((s) => s.id === 'a/b@two')!.themes).toEqual(['pack:new']);
+    expect(out.stats.byTheme).toEqual({ 'pack:new': 1 });
   });
 });

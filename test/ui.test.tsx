@@ -698,3 +698,57 @@ describe('French interface', () => {
     }
   });
 });
+
+describe('pack keys in the tree', () => {
+  const packThemes: Theme[] = [{ id: 'pack:mine', label: '📦 Mine' }, { id: 'pack:frontend', label: '📦 Frontend dev' }, ...themes];
+  const packSkills = [
+    { ...skill('a/b@react-hooks', ['frontend', 'pack:mine']) },
+    skill('a/b@tailwind', ['frontend']),
+    { ...skill('c/d@pentest', ['security', 'pack:frontend']) },
+  ];
+  const tree = (onAction: (a: unknown) => void, onSubmit = vi.fn()) =>
+    render(<TreeSelect themes={packThemes} skills={packSkills} personalPacks={new Set(['mine'])} onAction={onAction as never} onSubmit={onSubmit} onCancel={() => {}} />);
+
+  it('creates a pack from the ticked skills, and edits a personal pack by ticking its skills', async () => {
+    const onAction = vi.fn();
+    const onSubmit = vi.fn();
+    const { lastFrame, stdin } = tree(onAction, onSubmit);
+    await tick();
+    // N: nothing ticked, no pack.
+    await press(stdin, 'N');
+    expect(onAction).not.toHaveBeenCalled();
+    // On 📦 Mine: open it, tick tailwind elsewhere, then N saves the ticked skills as a new pack.
+    await press(stdin, KEY.right, KEY.down, ' ', 'N');
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'createPack', ids: ['a/b@react-hooks'] });
+    // E on the personal pack: ticks become membership, and the status line says so.
+    await press(stdin, KEY.up, 'E');
+    expect(lastFrame()).toContain('✎ Editing 📦 Mine: tick its skills (1)');
+    expect(lastFrame()).not.toContain('will be uninstalled');
+    // Esc gives the selection back as it was.
+    await press(stdin, KEY.escape);
+    expect(lastFrame()).not.toContain('Editing');
+    await press(stdin, 'E', KEY.down, ' ', KEY.enter);
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'editPack', pack: 'mine', skills: [] });
+    // Enter in edit mode never installs.
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('offers profile and backups for any pack, edit and delete only for personal ones', async () => {
+    const onAction = vi.fn();
+    const { lastFrame, stdin } = tree(onAction);
+    await tick();
+    expect(lastFrame()).toContain('E edit pack');
+    await press(stdin, 'D');
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'deletePack', pack: 'mine' });
+    await press(stdin, 'P');
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'profile', pack: 'mine' });
+    // The shipped Frontend pack: P works, E and D do nothing.
+    await press(stdin, KEY.down);
+    expect(lastFrame()).not.toContain('E edit pack');
+    onAction.mockClear();
+    await press(stdin, 'E', 'D');
+    expect(onAction).not.toHaveBeenCalled();
+    await press(stdin, 'P', 'B');
+    expect(onAction.mock.calls).toEqual([[{ kind: 'profile', pack: 'frontend' }], [{ kind: 'backups' }]]);
+  });
+});

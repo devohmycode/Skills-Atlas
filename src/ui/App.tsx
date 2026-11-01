@@ -13,7 +13,7 @@ import { ACCENT, Banner, Header, Hints, Panel, useTerminalSize, type Hint, type 
 import { ListSelect } from './ListSelect.js';
 import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
-import { scopesLabel, TreeSelect, type TreeMemory } from './TreeSelect.js';
+import { scopesLabel, TreeSelect, type TreeAction, type TreeMemory } from './TreeSelect.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 import type { ScopedUpdateCheck } from '../install/updates.js';
 
@@ -25,6 +25,8 @@ export interface WizardResult {
   /** Installed skills to reinstall at their latest version. */
   update: Update[];
   options: InstallOptions;
+  /** A pack, profile or backup key pressed in the tree: the caller does it, then shows the tree again. */
+  action?: TreeAction;
 }
 
 export interface AppProps {
@@ -56,6 +58,9 @@ export interface AppProps {
   /** Reads a skill's SKILL.md for the audit; replaced in tests. */
   readSkill?: (s: Pick<Skill, 'id' | 'source' | 'name' | 'path'>) => Promise<string>;
   onDone: (result: WizardResult | null) => void;
+  /** Turns on the tree's pack, profile and backup keys; the ids of the packs that can be edited. */
+  personalPacks?: Set<string>;
+  packActions?: boolean;
 }
 
 type Step = 'loading' | 'tree' | 'scope' | 'agents' | 'method' | 'confirm';
@@ -96,7 +101,7 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone, personalPacks, packActions } = props;
   const m = t();
   const { exit } = useApp();
   const { rows } = useTerminalSize();
@@ -230,6 +235,8 @@ export function App(props: AppProps) {
             next('tree', { installs: toInstall.length });
           }}
           onCancel={() => finish(null)}
+          personalPacks={personalPacks}
+          onAction={packActions ? (action) => finish({ ids: [], remove: [], update: [], options: { ...defaults, skillsVersion }, action }) : undefined}
         />
       </Box>,
     );

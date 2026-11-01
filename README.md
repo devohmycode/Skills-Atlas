@@ -127,7 +127,17 @@ A profile is a pack activated on its own, to switch between configurations such 
 
 **Nothing is lost.** Before each profile change, the whole scope is saved in `~/.local/state/skills-atlas/backups/` (or `$XDG_STATE_HOME`): every skills directory as it is on disk (folders copied, links kept as links) and the lock file, byte for byte. Home-made and edited skills are thus moved to the backup, not deleted. `skills-atlas profile restore [id]` (or **Backups** on the web page) puts the scope back exactly as it was, offline, and saves the current state first, so a restore can be undone too. The first backup of a scope is its initial configuration, kept for good: `profile restore --initial` returns to it. The ten latest others are kept.
 
-Create profiles with `skills-atlas profile create <name> <ids...>` (or `--from-installed`, which takes the installed skills that have a GitHub source), or on the web page with **Save as pack**; `profile list` shows them and the active one, `profile backups` the backups.
+**Personal packs** are kept in `~/.config/skills-atlas/packs.json` (or `$XDG_CONFIG_HOME`), as many as you like, next to the shipped ones (which can be used but not changed). Changing or deleting a pack never touches the backups: the initial configuration stays restorable.
+
+| | Terminal (tree) | Command line | Web page |
+|---|---|---|---|
+| Create | `N`: the ticked skills, then a name and a description | `profile create <name> <ids...>` (`-d`, `--from-installed`) | **Save as pack** (name, description) |
+| Change | `E` on a personal pack: tick its skills, Enter, then name and description | `profile edit <id>` (asks), or `--name`, `-d`, `--add`, `--remove` | **Edit this pack…** (name, description, skills) |
+| Delete | `D` on a personal pack | `profile delete <id>` | **Delete this pack** |
+| Activate as profile | `P` on any pack (scope asked) | `profile use <id>` (`-p`) | **Use this pack as a profile…** |
+| Restore a backup | `B`: numbered list | `profile backups`, `profile restore [id]` (`--initial`) | **Backups** |
+
+`profile list` shows every pack (✎ marks the personal ones) and the active profile.
 
 ### A project's skills: skills-atlas.json
 
@@ -310,6 +320,10 @@ Agents load the name and description of every installed skill at each session st
 | `p` | preview the focused skill's `SKILL.md` before installing it, with its warning signs (↑↓ scroll, esc back) |
 | `u` | mark the focused outdated skill, or the outdated skills of a group, for update |
 | `U` | mark every outdated skill for update |
+| `N` | new pack from the ticked skills (name and description asked) |
+| `E` / `D` | edit / delete the focused personal pack (in edit mode, ticks are its skills: Enter saves, Esc cancels) |
+| `P` | use the focused pack as a profile |
+| `B` | backups: restore one |
 | enter | continue |
 | `q` | quit |
 

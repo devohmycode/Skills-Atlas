@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { AGENTS, detectAgents, unknownAgents } from '../agents.js';
 import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog/installed.js';
-import { PackSaveError, packTheme, readPacks, savePack } from '../catalog/packs.js';
+import { deletePack, isBundledPack, PackSaveError, packStatus, packTheme, readPacks, savePack, updatePack } from '../catalog/packs.js';
 import { markdownCost } from '../context.js';
 import { backupScope, listBackups, profilePlan, restoreBackup, type Backup } from '../profiles.js';
 import { resolve } from 'node:path';
@@ -162,6 +162,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       skillsVersion: opts.skillsVersion,
       canSavePacks: true,
       backups: listBackups(undefined, cwd, opts.backupsRoot).map(({ dirs: _dirs, ...b }) => b),
+      packs: readPacks(opts.packsPath).map((p) => ({ ...p, personal: !isBundledPack(p.id) })),
       profiles: readConfig().profiles ?? {},
       themes: [INSTALLED_THEME, ...themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
       agents: AGENTS.map((a) => ({ id: a.id, name: a.displayName, detected: detected.has(a.id) })),
@@ -195,6 +196,25 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       : theme === 'suggested' && !query.trim() ? matching.filter((s) => s.suggestion).sort((a, b) => a.suggestion!.order - b.suggestion!.order)
       : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
     return { total: inTheme.length, all: matching.length, counts, items: inTheme.slice(offset, offset + limit).map(slim) };
+  }
+
+  /** Pack themes and memberships rebuilt from the packs file, after a pack is saved, changed or deleted. */
+  function applyPacks() {
+    const packs = readPacks(opts.packsPath);
+    const members = new Map<string, string[]>();
+    for (const p of packs) for (const id of p.skills) members.set(id.toLowerCase(), [...(members.get(id.toLowerCase()) ?? []), packTheme(p.id)]);
+    const decorate = (s: Skill) => {
+      const own = s.themes.filter((th) => !th.startsWith('pack:'));
+      const extra = members.get(s.id.toLowerCase()) ?? [];
+      return own.length === s.themes.length && !extra.length ? s : { ...s, themes: [...new Set([...own, ...extra])] };
+    };
+    skills = skills.map(decorate);
+    catalogSkills = catalogSkills.map(decorate);
+    const others = themes.filter((th) => !th.id.startsWith('pack:'));
+    const after = Math.max(...others.map((th, i) => (['suggested', 'recommended', 'trending'].includes(th.id) ? i : -1))) + 1;
+    themes = [...others.slice(0, after), ...packs.map((p) => ({ id: packTheme(p.id), label: `📦 ${p.name}`, description: p.description, pack: packStatus(p, catalogSkills) })), ...others.slice(after)];
+    search = createSearchIndex(skills);
+    queryCache = undefined;
   }
 
   /** Checks a request body against the catalog and what is installed, then plans the commands. */
@@ -349,16 +369,23 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     }
     if (req.method === 'POST' && url.pathname === '/api/packs') {
       const pack = savePack(await readJson(req), catalogSkills, opts.packsPath);
-      const theme = packTheme(pack.id);
-      const ids = new Set(pack.skills);
-      const decorate = (s: Skill) => ids.has(s.id) ? { ...s, themes: [...new Set([...s.themes, theme])] } : s;
-      skills = skills.map(decorate);
-      catalogSkills = catalogSkills.map(decorate);
-      const after = Math.max(...themes.map((th, i) => th.id.startsWith('pack:') || th.id === 'recommended' || th.id === 'trending' ? i : -1)) + 1;
-      themes = [...themes.slice(0, after), { id: theme, label: `📦 ${pack.name}`, description: pack.description }, ...themes.slice(after)];
-      search = createSearchIndex(skills);
-      queryCache = undefined;
+      applyPacks();
       return json(req, res, { pack }, 201);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/packs/update') {
+      const body = z.object({ id: z.string(), name: z.string().optional(), description: z.string().optional(), skills: z.array(z.string()).max(100).optional() }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      const { id, ...patch } = body.data;
+      const pack = updatePack(id, patch, catalogSkills, opts.packsPath);
+      applyPacks();
+      return json(req, res, { pack });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/packs/delete') {
+      const body = z.object({ id: z.string() }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      deletePack(body.data.id, opts.packsPath);
+      applyPacks();
+      return json(req, res, { deleted: body.data.id });
     }
     if (req.method === 'POST' && url.pathname === '/api/plan') {
       const { commands, audit, blocked, collisions } = await plan(await readJson(req));

@@ -723,6 +723,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var pack = view.theme && view.theme.indexOf('pack:') === 0 ? view.theme.slice(5) : '';
     return '<button class="link" data-act="save-pack"' + (!S.canSavePacks || !packSelection().length ? ' disabled' : '') + '>' + esc(M.savePack) + '</button>' +
       (S.canSavePacks && pack ? '<br><button class="link" data-act="use-profile" data-pack="' + esc(pack) + '">' + esc(M.profileUse) + '</button>' : '') +
+      (S.canSavePacks && personalPack(pack) ? '<br><button class="link" data-act="edit-pack" data-pack="' + esc(pack) + '">' + esc(M.packEdit) + '</button>' +
+        '<br><button class="link" data-act="delete-pack" data-pack="' + esc(pack) + '">' + esc(M.packDelete) + '</button>' : '') +
       (S.canSavePacks && (S.backups || []).length ? '<br><button class="link" data-act="backups">' + esc(tr('backupsOpen', { n: S.backups.length })) + '</button>' : '') +
       (!S.canSavePacks ? '<p class="intro">' + esc(M.packDemo) + '</p>' : '');
   }
@@ -798,20 +800,60 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       return refresh().then(function () { openBackups(tr('backupRestored', { id: r.restored, undo: r.undo })); });
     }).catch(function (err) { t.disabled = false; window.alert(err.message); });
   });
-  var packIds = [], savingPack = false;
+  var packIds = [], savingPack = false, packMode = 'create', editing = null;
+  function personalPack(id) { return !!id && (S.packs || []).some(function (p) { return p.id === id && p.personal; }); }
+  function slug(name) { return name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+  function openPackEdit(id) {
+    var pack = (S.packs || []).filter(function (p) { return p.id === id; })[0];
+    if (!pack || savingPack) return;
+    packMode = 'edit'; editing = pack;
+    var extra = packSelection().filter(function (x) { return pack.skills.indexOf(x) < 0; });
+    $('pack-form').innerHTML = '<h3 id="pack-title">' + esc(tr('packEditTitle', { id: pack.id })) + '</h3>' +
+      '<label for="pack-name">' + esc(M.packName) + '</label><input class="agents-search" id="pack-name" required maxlength="60" value="' + esc(pack.name) + '">' +
+      '<label for="pack-description">' + esc(M.packDescription) + '</label><input class="agents-search" id="pack-description" required value="' + esc(pack.description) + '">' +
+      '<fieldset class="profile-agents pack-members"><legend>' + esc(tr('packMembers', { n: pack.skills.length })) + '</legend>' + pack.skills.map(function (x) {
+        return '<label><input type="checkbox" data-member="' + esc(x) + '" checked> ' + esc(x) + '</label>';
+      }).join('') + '</fieldset>' +
+      (extra.length ? '<label><input type="checkbox" id="pack-add-selection"> ' + esc(tr('packAddSelection', { n: extra.length })) + '</label>' : '') +
+      '<p class="warn" id="pack-error" role="alert"></p><footer><button type="button" class="link" id="pack-cancel">' + esc(M.close) +
+      '</button><button type="submit" class="primary" id="pack-save">' + esc(M.packSaveChanges) + '</button></footer>';
+    $('pack-cancel').onclick = function () { $('pack-dialog').close(); };
+    $('pack-dialog').showModal();
+    $('pack-name').focus();
+  }
+  function savePackEdit() {
+    if (!editing || savingPack) return;
+    var members = Array.prototype.filter.call($('pack-form').querySelectorAll('input[data-member]'), function (c) { return c.checked; }).map(function (c) { return c.dataset.member; });
+    var add = $('pack-add-selection') && $('pack-add-selection').checked ? packSelection().filter(function (x) { return members.indexOf(x) < 0; }) : [];
+    savingPack = true; $('pack-save').disabled = true; $('pack-error').textContent = '';
+    return apiJson('/api/packs/update', { id: editing.id, name: $('pack-name').value, description: $('pack-description').value, skills: members.concat(add) }).then(function (r) {
+      return apiJson('/api/state').then(function (st) { setState(st); view.theme = 'pack:' + r.pack.id; $('pack-dialog').close(); renderPanel(); return load(false); });
+    }).catch(function (err) { $('pack-error').textContent = err.message; }).finally(function () { savingPack = false; $('pack-save').disabled = false; });
+  }
+  function deletePackNow(id) {
+    if (!window.confirm(tr('packDeleteConfirm', { id: id }))) return;
+    return apiJson('/api/packs/delete', { id: id }).then(function () {
+      return apiJson('/api/state').then(function (st) { setState(st); view.theme = ''; renderPanel(); return load(false); });
+    }).catch(function (err) { window.alert(err.message); });
+  }
   function openPack() {
     if (!S.canSavePacks || savingPack) return;
     packIds = packSelection();
     if (!packIds.length) return;
     $('pack-form').innerHTML = '<h3 id="pack-title">' + esc(M.savePack) + '</h3><p class="sub">' + esc(tr('packHint', { n: packIds.length })) + '</p>' +
-      '<label for="pack-id">' + esc(M.packId) + '</label><input class="agents-search" id="pack-id" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off">' +
       '<label for="pack-name">' + esc(M.packName) + '</label><input class="agents-search" id="pack-name" required maxlength="60">' +
+      '<label for="pack-id">' + esc(M.packId) + '</label><input class="agents-search" id="pack-id" required pattern="[a-z0-9][a-z0-9-]*" autocomplete="off">' +
       '<label for="pack-description">' + esc(M.packDescription) + '</label><input class="agents-search" id="pack-description" required>' +
       '<p class="warn" id="pack-error" role="alert"></p><footer><button type="button" class="link" id="pack-cancel">' + esc(M.close) +
       '</button><button type="submit" class="primary" id="pack-save">' + esc(M.savePack) + '</button></footer>';
     $('pack-cancel').onclick = function () { $('pack-dialog').close(); };
+    packMode = 'create';
+    // The id follows the name until it is typed by hand.
+    var idTyped = false;
+    $('pack-id').oninput = function () { idTyped = true; };
+    $('pack-name').oninput = function () { if (!idTyped) $('pack-id').value = slug($('pack-name').value); };
     $('pack-dialog').showModal();
-    $('pack-id').focus();
+    $('pack-name').focus();
   }
   function savePackSelection() {
     if (!S.canSavePacks || savingPack) return;
@@ -828,7 +870,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
       savingPack = false; $('pack-save').disabled = false;
     });
   }
-  $('pack-form').addEventListener('submit', function (e) { e.preventDefault(); savePackSelection(); });
+  $('pack-form').addEventListener('submit', function (e) { e.preventDefault(); if (packMode === 'edit') savePackEdit(); else savePackSelection(); });
 
   // ---- changes panel ---------------------------------------------------------------------
   function selectedAgents() { return S.agents.filter(function (a) { return opts.agents.has(a.id); }).map(function (a) { return a.id; }); }
@@ -956,6 +998,8 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     else if (t.dataset.act === 'all-agents') showAllAgents = !showAllAgents;
     else if (t.dataset.act === 'save-pack') return openPack();
     else if (t.dataset.act === 'use-profile') return openProfile(t.dataset.pack);
+    else if (t.dataset.act === 'edit-pack') return openPackEdit(t.dataset.pack);
+    else if (t.dataset.act === 'delete-pack') return deletePackNow(t.dataset.pack);
     else if (t.dataset.act === 'backups') return openBackups();
     else if (t.dataset.act === 'apply') return apply();
     changed.forEach(updateRow); renderPanel();
