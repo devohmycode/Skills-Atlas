@@ -15,7 +15,7 @@ import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
 import { scopesLabel, TreeSelect, type TreeMemory } from './TreeSelect.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
-import type { UpdateCheck } from '../install/updates.js';
+import type { ScopedUpdateCheck } from '../install/updates.js';
 
 export interface WizardResult {
   /** Skills to install (`owner/repo@name`). */
@@ -49,8 +49,8 @@ export interface AppProps {
   notice?: string;
   /** Shared by the successive trees of one session: open groups and focused row. */
   treeMemory?: TreeMemory;
-  /** `owner/repo@name` (lower case) of the installed skills with a newer version; checked in the background. */
-  findUpdates?: () => Promise<UpdateCheck>;
+  /** `owner/repo@name` (lower case) of the installed skills with a newer version, per scope; checked in the background. */
+  findUpdates?: (scopes: Scope[]) => Promise<ScopedUpdateCheck>;
   /** Run the security audit on the review screen (on unless turned off). */
   audit?: boolean;
   /** Reads a skill's SKILL.md for the audit; replaced in tests. */
@@ -105,6 +105,8 @@ export function App(props: AppProps) {
   const [removals, setRemovals] = useState<Removal[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
   const [outdated, setOutdated] = useState<Set<string>>(new Set());
+  // The scopes in which each outdated skill has a newer version.
+  const [outdatedScopes, setOutdatedScopes] = useState<Map<string, Scope[]>>(new Map());
   const [unchecked, setUnchecked] = useState(0);
   const [agents, setAgents] = useState<string[] | undefined>(preset.agents);
   const [scope, setScope] = useState<Scope | undefined>(preset.scope);
@@ -161,11 +163,17 @@ export function App(props: AppProps) {
   useEffect(() => {
     if (step !== 'tree' || !findUpdates || !tree.installed.size) return;
     let live = true;
-    findUpdates()
+    const scopes = [...new Set([...tree.installed.values()].flatMap((e) => e.scopes))];
+    findUpdates(scopes)
       .then((found) => {
         if (!live) return;
-        const global = [...tree.installed].filter(([, e]) => e.scopes.includes('global'));
-        setOutdated(new Set(global.map(([id]) => id).filter((id) => found.outdated.has(id.toLowerCase()))));
+        const byId = new Map<string, Scope[]>();
+        for (const [id, e] of tree.installed) {
+          const inScopes = e.scopes.filter((sc) => found.outdated[sc].has(id.toLowerCase()));
+          if (inScopes.length) byId.set(id, inScopes);
+        }
+        setOutdatedScopes(byId);
+        setOutdated(new Set(byId.keys()));
         setUnchecked(found.unchecked.length);
       })
       .catch(() => {});
@@ -212,7 +220,11 @@ export function App(props: AppProps) {
             const toRemove = installedIds.filter((id) => !chosen.has(id)).map((id) => tree.installed.get(id)!);
             if (!toInstall.length && !toRemove.length && !update.length) return finish(null);
             setIds(toInstall);
-            setUpdates(update.map((id) => ({ id, agents: tree.installed.get(id)?.agents ?? [] })));
+            setUpdates(update.flatMap((id) => {
+              const e = tree.installed.get(id);
+              // One reinstall per scope where it is outdated, for the agents of that scope.
+              return (outdatedScopes.get(id) ?? ['global' as Scope]).map((scope) => ({ id, scope, agents: e?.agentsByScope?.[scope] ?? e?.agents ?? [] }));
+            }));
             // An unticked skill is uninstalled from every scope it was found in.
             setRemovals(toRemove.map((e) => ({ name: e.name, scopes: [...e.scopes] })));
             next('tree', { installs: toInstall.length });
@@ -338,7 +350,7 @@ interface ConfirmProps {
 
 function Confirm({ ids, remove, update, collisions, options, audit, targets, readSkill, onConfirm, onBack }: ConfirmProps) {
   const m = t();
-  const audited = [...ids, ...update.map((u) => u.id)];
+  const audited = [...new Set([...ids, ...update.map((u) => u.id)])];
   const [results, setResults] = useState<AuditResult[] | undefined>(audit && audited.length ? undefined : []);
   // Skills that fail the audit are left out, unless the user ticks them here.
   const [keep, setKeep] = useState<Set<string>>(new Set());
@@ -448,7 +460,7 @@ function Confirm({ ids, remove, update, collisions, options, audit, targets, rea
       )}
       {keptUpdates.length > 0 && (
         <Panel color={PALETTE.gold} title={`↑ ${m.confirm.update(keptUpdates.length)}`}>
-          <Text wrap="wrap">{keptUpdates.map((u) => u.id).join('  ·  ')}</Text>
+          <Text wrap="wrap">{keptUpdates.map((u) => `${u.id} (${u.scope === 'project' ? m.scope.project : m.scope.global})`).join('  ·  ')}</Text>
         </Panel>
       )}
       <Box flexDirection="column">

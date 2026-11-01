@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Project skills get updates too.** `outdated`, `update` and `u` in the tree check the project's skills as well as global ones: the installed files are compared blob by blob with the repository's HEAD. A copy edited by hand (its files no longer match the lock's `computedHash`) is reported as modified and never overwritten; a pinned one is left to `lock`. `-p`/`-g` limit either command to one scope; `outdated --json` entries carry their `scope`.
+- **`skills-atlas suggest`** finds what a project is built with (manifests, workspaces and telltale files, about 45 technologies) and suggests catalog skills for each, publisher's own first, without what is installed; `--json` and `-n` available.
+- **MCP:** new `suggest_skills`, `update_skills`, `rollback_skill`, `doctor` and `sync_project` tools, audited like installs; `install_skills` takes `packs`; `outdated_skills` covers both scopes and returns `modified`.
+
 ## 0.30.0 — 2026-10-23
 
 - **Update checks say when they are incomplete.** A repository GitHub does not answer for (HTTP 403 rate limit, timeout, invalid answer), a truncated tree or a skill folder it no longer has is reported instead of read as up to date: the tree shows a warning, `outdated` and `update` name each on stderr and exit with 1, and `update` still runs the updates it confirmed. `outdated --json` keeps its array on stdout. A skill installed at the repository root is now checked too.

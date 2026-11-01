@@ -13,14 +13,15 @@ import { readConfig, writeConfig } from './config.js';
 import { formatNumber, getLang, langFlag, LANGUAGES, normalizeLang, setLang, systemLang, t, themeLabel, type Lang } from './i18n/index.js';
 import { formatCommand, parseSkillId, planInstall, planRemovals, planUpdates, type InstallCommand, type Update } from './install/plan.js';
 import { nameCollisions } from './install/collisions.js';
-import { findUpdates } from './install/updates.js';
+import { checkUpdates } from './install/updates.js';
 import { dropRevision, readHistory, recordBeforeUpdate, rememberRevision } from './install/history.js';
 import { onPath } from './prereqs.js';
 import { diagnoseInstalled } from './install/doctor.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
 import { readFileSync } from 'node:fs';
-import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './agent-api.js';
+import { resolve as resolvePath } from 'node:path';
+import { installedSkills, outdatedSkills, projectSyncPlan, showSkill, skillsByAgent, suggestForProject, type SyncPlan } from './agent-api.js';
 import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
 import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
@@ -184,9 +185,10 @@ async function apply(ids: string[], remove: Removal[], options: InstallOptions, 
     for (const c of commands) console.log(formatCommand(c));
     return '';
   }
-  // The way back: the version each updated skill has now, for `rollback`.
-  if (update.length) {
-    const missed = await recordBeforeUpdate(update.map((u) => u.id));
+  // The way back: the version each updated global skill has now, for `rollback`.
+  const globalUpdates = update.filter((u) => (u.scope ?? 'global') === 'global');
+  if (globalUpdates.length) {
+    const missed = await recordBeforeUpdate(globalUpdates.map((u) => u.id));
     if (missed.length) console.error(paint('dim', t().cli.rollbackMissed(missed.join(', '))));
   }
   const config = readConfig();
@@ -352,7 +354,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           official={opts.official}
           notice={notice || versionNotice}
           treeMemory={treeMemory}
-          findUpdates={opts.offline ? undefined : () => findUpdates()}
+          findUpdates={opts.offline ? undefined : (scopes) => checkUpdates(scopes)}
           audit={auditEnabled(readConfig(), opts.audit)}
           onDone={(r) => (result = r)}
         />,
@@ -584,15 +586,11 @@ installOptions(program.command('sync'))
     }
     const targets = presetFromFlags({ ...opts, agent: opts.agent ?? file.agents }).agents;
     if (targets && !targets.length) fail(m.errors.agentRequired);
-    // Check the requested destinations, even if another agent already has the skill.
-    const installed = await listInstalled('project');
-    const groups: { agents: string[] | undefined; ids: string[] }[] = targets
-      ? missingSkillsByAgent(file.ids, installed, targets)
-      : [{ agents: undefined, ids: missingSkills(file.ids, installed.map((s) => `${s.source ?? 'local'}@${s.name}`)) }];
-    // Pinned skills whose installed files drifted from their revision: reinstalled for every target.
+    // Check the requested destinations, even if another agent already has the skill;
+    // pinned skills whose installed files drifted from their revision are reinstalled for every target.
+    let groups: SyncPlan['groups'] = [];
     try {
-      const drift = (await projectRevisionDrift(file.ids, file.revisions ?? {}, installed)).filter((id) => !groups.some((g) => g.ids.includes(id)));
-      if (drift.length) groups.push({ agents: targets, ids: drift });
+      groups = (await projectSyncPlan(file, targets)).groups;
     } catch (err) { fail((err as Error).message); }
     const missing = new Set(groups.flatMap((g) => g.ids));
     if (!missing.size) return console.log(paint('dim', c.syncUpToDate(file.ids.length)));
@@ -612,6 +610,34 @@ installOptions(program.command('sync'))
         if (absent.length || (await projectRevisionDrift(file.ids, file.revisions, installed)).length) fail('pinned sync verification failed');
       } catch (err) { fail((err as Error).message); }
     }
+  });
+
+program
+  .command('suggest')
+  .argument('[dir]', c.suggestDir, '.')
+  .description(c.suggestCmd)
+  .option('-n, --limit <n>', c.suggestLimit, (v) => Math.max(1, Math.min(10, Number.parseInt(v, 10) || 3)), 3)
+  .addOption(catalogOption())
+  .addOption(offlineOption())
+  .option('--json', c.json)
+  .action(async (dir: string, opts: CommonOptions & { json?: boolean; limit: number }) => {
+    const catalog = await openCatalog({ ...opts, quiet: true });
+    const found = await suggestForProject(catalog, resolvePath(dir), { perStack: opts.limit });
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(found, null, 2)}\n`);
+    if (!found.stack.length) return console.log(paint('dim', c.suggestNothing));
+    const ids: string[] = [];
+    for (const s of found.stack) {
+      console.log(`\n${paint('bold', s.label)} ${paint('dim', `· ${s.evidence.join(', ')}`)}`);
+      if (!s.skills.length) console.log(paint('dim', `  ${c.suggestNone}`));
+      for (const k of s.skills) {
+        ids.push(k.id);
+        const tag = k.official ? paint('pink', ' ◆') : '';
+        console.log(`  ${padEnd(k.id, 58)}${tag} ${paint('dim', k.installs ? formatNumber(k.installs) : '')}`);
+        if (k.description) console.log(paint('dim', `    ${k.description.length > 100 ? `${k.description.slice(0, 99)}…` : k.description}`));
+      }
+    }
+    if (found.packs.length) console.log(`\n${paint('dim', c.suggestPacks(found.packs.join(', ')))}`);
+    if (ids.length) console.log(paint('dim', `\n${c.suggestHint}\n  skills-atlas install ${ids.join(' ')} -p`));
   });
 
 program
@@ -754,43 +780,50 @@ program
     }
   });
 
-/** Names, on stderr, what an update check could not check, and sets exit code 1. */
-function reportUnchecked(unchecked: { source: string; reason: string }[]): void {
+/** Names, on stderr, what an update check could not check (exit code 1), and the project skills edited by hand. */
+function reportUnchecked(unchecked: { source: string; reason: string }[], modified: string[] = []): void {
+  if (modified.length) console.error(paint('dim', c.updatesModified(modified.join(', '))));
   if (!unchecked.length) return;
   process.exitCode = 1;
   console.error(paint('yellow', c.updatesUnchecked(unchecked.length)));
   for (const u of unchecked) console.error(paint('dim', `  ? ${u.source}: ${u.reason}`));
 }
 
+/** `-g` or `-p` alone limits a command to that scope; neither, or both, means both. */
+function flagScopes(opts: { global?: boolean; project?: boolean }): Scope[] {
+  return opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
+}
+
 installOptions(program.command('update'))
   .argument('[ids...]', c.ids)
   .description(c.updateCmd)
   .action(async (ids: string[], opts: InstallFlags) => {
-    const { skills: outdated, unchecked } = await outdatedSkills();
-    reportUnchecked(unchecked);
+    const { skills: outdated, unchecked, modified } = await outdatedSkills(flagScopes(opts));
+    reportUnchecked(unchecked, modified);
     const wanted = ids.map((id) => id.toLowerCase());
     // Named skills are updated only if they are outdated: a reinstall of an up-to-date one would change nothing.
     const chosen = ids.length ? outdated.filter((s) => wanted.includes(s.id.toLowerCase())) : outdated;
     if (!chosen.length) return unchecked.length ? undefined : console.log(paint('dim', c.upToDate));
     // What each update changes, and the warning signs it brings, before anything runs.
-    const local = await listInstalled('global');
+    const local = (await Promise.all([...new Set(chosen.map((s) => s.scope))].map((sc) => listInstalled(sc)))).flat();
     const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
     const known = new Map(catalog?.skills.map((s) => [s.id.toLowerCase(), s]));
     for (const s of chosen) {
-      const diff = await updateDiff(auditTarget(s.id, known), local).catch(() => undefined);
-      console.log(`  ${paint('pink', '↑')} ${s.id}${diff ? paint('dim', `  +${diff.added} −${diff.removed}`) : ''}`);
+      const diff = await updateDiff(auditTarget(s.id, known), local.filter((l) => l.scope === s.scope)).catch(() => undefined);
+      const where = s.scope === 'project' ? paint('dim', ` (${m.scope.project})`) : '';
+      console.log(`  ${paint('pink', '↑')} ${s.id}${where}${diff ? paint('dim', `  +${diff.added} −${diff.removed}`) : ''}`);
       for (const x of diff?.risks.filter((x) => x.level !== 'info') ?? []) {
         console.log(paint(x.level === 'high' ? 'red' : 'yellow', `      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  SKILL.md:${x.line}  ${x.excerpt}`));
       }
     }
     // A new version is new content: it is audited like an install.
-    const passed = new Set(await auditGate(chosen.map((s) => s.id), opts));
+    const passed = new Set(await auditGate([...new Set(chosen.map((s) => s.id))], opts));
     chosen.splice(0, chosen.length, ...chosen.filter((s) => passed.has(s.id)));
     if (!chosen.length) return console.log(paint('dim', m.run.noChange));
     const { defaults } = resolveDefaults();
     // Each skill keeps its own agents; these options only fill in what a skill's scan did not name.
     const options: InstallOptions = { agents: defaults.agents, scope: 'global', method: opts.copy ? 'copy' : opts.symlink ? 'symlink' : defaults.method, skillsVersion: opts.skillsVersion };
-    await apply([], [], options, opts, chosen.map((s) => ({ id: s.id, agents: s.agents })));
+    await apply([], [], options, opts, chosen.map((s) => ({ id: s.id, agents: s.agents, scope: s.scope })));
     // The confirmed updates ran; the rest could not be checked, so this is not a full success.
     if (unchecked.length) console.error(paint('yellow', c.updatesUnchecked(unchecked.length)));
   });
@@ -830,14 +863,16 @@ installOptions(program.command('rollback'))
 program
   .command('outdated')
   .description(c.outdatedCmd)
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
   .option('--json', c.json)
-  .action(async (opts: { json?: boolean }) => {
-    const { skills: outdated, unchecked } = await outdatedSkills();
+  .action(async (opts: { json?: boolean; global?: boolean; project?: boolean }) => {
+    const { skills: outdated, unchecked, modified } = await outdatedSkills(flagScopes(opts));
     // stdout keeps the array scripts read; what could not be checked goes to stderr, with exit code 1.
-    reportUnchecked(unchecked);
+    reportUnchecked(unchecked, modified);
     if (opts.json) return void process.stdout.write(`${JSON.stringify(outdated, null, 2)}\n`);
     if (!outdated.length) return unchecked.length ? undefined : console.log(paint('dim', c.upToDate));
-    for (const s of outdated) console.log(`  ${padEnd(s.id, 60)} ${paint('dim', s.agents.join(', '))}`);
+    for (const s of outdated) console.log(`  ${padEnd(s.id, 60)} ${padEnd(s.scope === 'project' ? m.scope.project : m.scope.global, 8)} ${paint('dim', s.agents.join(', '))}`);
     console.log(paint('dim', `\n${c.outdatedHint}`));
     console.log(paint('dim', c.updateAllHint));
   });

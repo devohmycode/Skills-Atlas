@@ -4,9 +4,12 @@ import { auditSkills } from './audit.js';
 import { fetchSkillFiles, fetchSkillMarkdown, githubUrl } from './github.js';
 import { parseSkillId } from './install/plan.js';
 import { listInstalled } from './install/run.js';
-import { findUpdates, type UpdateCheck } from './install/updates.js';
+import { checkUpdates, type UpdateCheck } from './install/updates.js';
+import { projectRevisionDrift } from './revisions.js';
 import type { Risk } from './risks.js';
-import type { Catalog, Scope, Skill } from './types.js';
+import { missingSkills, missingSkillsByAgent } from './selection.js';
+import { detectStack, suggestSkills } from './suggest.js';
+import { SCOPES, type Catalog, type Scope, type Skill } from './types.js';
 
 /**
  * What an agent (the CLI's non-interactive commands, the MCP server) can ask
@@ -96,11 +99,59 @@ export function skillsByAgent(installed: InstalledSummary[]): { agent: string; n
 }
 
 /**
- * Global skills with a newer version on GitHub. Updating one is installing it
- * again: `skills-atlas install <id> -g -a <its agents> -y`. `unchecked` lists what
- * could not be checked: the check is complete only when it is empty.
+ * Installed skills with a newer version on GitHub, in the project and global
+ * scopes (or the ones asked). Updating one is installing it again in its scope:
+ * `skills-atlas install <id> -g|-p -a <its agents> -y`. `unchecked` lists what
+ * could not be checked: the check is complete only when it is empty. `modified`
+ * names the project skills edited by hand, which are left out of the updates.
  */
-export async function outdatedSkills(): Promise<{ skills: InstalledSummary[]; unchecked: UpdateCheck['unchecked'] }> {
-  const [found, installed] = await Promise.all([findUpdates(), installedSkills(['global'])]);
-  return { skills: installed.filter((s) => s.source && found.outdated.has(`${s.source}@${s.name}`.toLowerCase())), unchecked: found.unchecked };
+export async function outdatedSkills(scopes: Scope[] = ['project', 'global']): Promise<{ skills: InstalledSummary[]; unchecked: UpdateCheck['unchecked']; modified: string[] }> {
+  const [found, installed] = await Promise.all([checkUpdates(scopes), installedSkills(scopes)]);
+  return {
+    skills: installed.filter((s) => s.source && found.outdated[s.scope].has(`${s.source}@${s.name}`.toLowerCase())),
+    unchecked: found.unchecked,
+    modified: found.modified,
+  };
+}
+
+/** A technology found in the project and the skills suggested for it, as an agent reads them. */
+export interface StackSummary {
+  id: string;
+  label: string;
+  evidence: string[];
+  skills: SkillSummary[];
+}
+
+/**
+ * Skills that fit the project in `dir`: what its manifests and files say it uses,
+ * then catalog skills for each of those, without the ones installed there or globally.
+ * Reads files only; nothing is installed or sent anywhere.
+ */
+export async function suggestForProject(catalog: Catalog, dir = process.cwd(), opts: { perStack?: number } = {}): Promise<{ stack: StackSummary[]; packs: string[] }> {
+  const installed = (await Promise.all(SCOPES.map((sc) => listInstalled(sc, dir)))).flat();
+  const found = suggestSkills(catalog, detectStack(dir), { installed: installed.map((s) => `${s.source ?? 'local'}@${s.name}`), perStack: opts.perStack });
+  return { stack: found.stack.map((s) => ({ id: s.id, label: s.label, evidence: s.evidence, skills: s.skills.map(summarize) })), packs: found.packs };
+}
+
+/** What `sync` would install: groups of ids, each for its agents (all of the file's agents, or project-wide presence). */
+export interface SyncPlan {
+  ids: string[];
+  agents?: string[];
+  revisions?: Record<string, string>;
+  groups: { agents: string[] | undefined; ids: string[] }[];
+}
+
+/**
+ * The skills of a project's `skills-atlas.json` that are missing in the project: per
+ * target agent when agents are given (or the file names some), else by presence. Pinned
+ * skills whose installed files drifted from their revision are reinstalled too.
+ */
+export async function projectSyncPlan(file: { ids: string[]; agents?: string[]; revisions?: Record<string, string> }, targets: string[] | undefined, cwd = process.cwd()): Promise<SyncPlan> {
+  const installed = await listInstalled('project', cwd);
+  const groups: SyncPlan['groups'] = targets
+    ? missingSkillsByAgent(file.ids, installed, targets)
+    : [{ agents: undefined, ids: missingSkills(file.ids, installed.map((s) => `${s.source ?? 'local'}@${s.name}`)) }];
+  const drift = (await projectRevisionDrift(file.ids, file.revisions ?? {}, installed, cwd)).filter((id) => !groups.some((g) => g.ids.includes(id)));
+  if (drift.length) groups.push({ agents: targets, ids: drift });
+  return { ids: file.ids, agents: targets, revisions: file.revisions, groups: groups.filter((g) => g.ids.length) };
 }

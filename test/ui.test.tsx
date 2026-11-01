@@ -602,7 +602,7 @@ describe('installed skills in the wizard', () => {
 
   it('flags an outdated skill, marks it with u and reinstalls it for its agents', async () => {
     let result: WizardResult | null = null;
-    const findUpdates = vi.fn(async () => ({ outdated: new Set(['c/d@pentest']), unchecked: [{ source: 'x/y', reason: 'HTTP 403' }] }));
+    const findUpdates = vi.fn(async () => ({ outdated: { global: new Set(['c/d@pentest']), project: new Set<string>() }, unchecked: [{ source: 'x/y', reason: 'HTTP 403' }], modified: [] }));
     const { lastFrame, stdin } = render(
       <App themes={themes} skills={skills} preset={{}} defaults={defaults} skillsVersion="1.7.0" readSkill={cleanSkill}
         loadInstalled={loadInstalled} findUpdates={findUpdates} onDone={(r) => (result = r)} />,
@@ -622,10 +622,11 @@ describe('installed skills in the wizard', () => {
     expect(lastFrame()).toContain('↑ will be updated');
     // An update alone asks nothing: straight to the review.
     await press(stdin, KEY.enter);
-    expect(lastFrame()).toContain('Update 1 skill to the latest version (global)');
+    expect(lastFrame()).toContain('Update 1 skill to the latest version');
+    expect(lastFrame()).toContain('c/d@pentest (Global)');
     expect(lastFrame()).toContain('npx -y skills@1.7.0 add c/d -s pentest -a claude-code -g -y --json');
     await press(stdin, KEY.enter);
-    expect(result).toMatchObject({ ids: [], remove: [], update: [{ id: 'c/d@pentest', agents: ['Claude Code'] }] });
+    expect(result).toMatchObject({ ids: [], remove: [], update: [{ id: 'c/d@pentest', scope: 'global', agents: ['Claude Code'] }] });
   });
 
   it('reads only the scope given as a flag', async () => {

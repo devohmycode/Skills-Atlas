@@ -58,7 +58,7 @@ export async function updateDiff(
 ): Promise<UpdateDiff> {
   const all = installed ?? (await listInstalled('global'));
   const local = all.find((s) => s.source?.toLowerCase() === skill.source.toLowerCase() && s.name.toLowerCase() === skill.name.toLowerCase() && s.path);
-  if (!local) throw new Error(`${skill.source}@${skill.name} is not installed globally`);
+  if (!local) throw new Error(`${skill.source}@${skill.name} is not installed${installed ? '' : ' globally'}`);
   const before = stripControls(readFileSync(join(local.path!, 'SKILL.md'), 'utf8'));
   const after = await read(skill);
   const lines = lineDiff(before, after);
