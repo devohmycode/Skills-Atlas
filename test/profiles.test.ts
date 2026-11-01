@@ -2,7 +2,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { backupScope, listBackups, profilePlan, restoreBackup } from '../src/profiles.js';
+import { backupScope, linkArgs, listBackups, profilePlan, restoreBackup } from '../src/profiles.js';
 
 let dirs: string[] = [];
 afterEach(() => {
@@ -132,5 +132,14 @@ describe('profile plan', () => {
       remove: [{ name: 'mine', id: 'local@mine' }, { name: 'lint', id: 'o/r@lint' }],
       install: ['figma/skills@figma'],
     });
+  });
+});
+
+describe('links on restore', () => {
+  it('keeps a link as it was, and makes a junction with an absolute target on Windows', () => {
+    expect(linkArgs('../../.agents/skills/pdf', '/p/.claude/skills/pdf', 'linux')).toEqual(['../../.agents/skills/pdf', '/p/.claude/skills/pdf', 'dir']);
+    const [target, , type] = linkArgs('../../.agents/skills/pdf', join('/p', '.claude', 'skills', 'pdf'), 'win32');
+    expect(type).toBe('junction');
+    expect(target).toBe(join('/p', '.agents', 'skills', 'pdf'));
   });
 });

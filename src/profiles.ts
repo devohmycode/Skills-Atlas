@@ -60,6 +60,9 @@ function readManifest(dir: string): Backup | undefined {
   }
 }
 
+/** Whether two paths name the same folder; Windows paths ignore case (`C:\\` and `c:\\`). */
+const samePath = (a: string, b: string) => (process.platform === 'win32' ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b));
+
 /** The backups of a scope (of this project, for the project scope), newest first. */
 export function listBackups(scope?: Scope, cwd = process.cwd(), root = backupsRoot()): Backup[] {
   let ids: string[];
@@ -70,7 +73,7 @@ export function listBackups(scope?: Scope, cwd = process.cwd(), root = backupsRo
   }
   return ids
     .map((id) => readManifest(join(root, id)))
-    .filter((b): b is Backup => !!b && (!scope || b.scope === scope) && (b.scope === 'global' || b.cwd === resolve(cwd)))
+    .filter((b): b is Backup => !!b && (!scope || b.scope === scope) && (b.scope === 'global' || samePath(b.cwd ?? '', cwd)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
 }
 
@@ -145,7 +148,7 @@ export function restoreBackup(id: string, installed: Pick<InstalledSkill, 'name'
     mkdirSync(d.path, { recursive: true });
     for (const e of d.entries) {
       const to = join(d.path, e.name);
-      if (e.kind === 'link') symlinkSync(e.target, to, 'dir');
+      if (e.kind === 'link') symlinkSync(...linkArgs(e.target, to));
       else cpSync(join(dir, 'dirs', String(i), e.name), to, { recursive: true, verbatimSymlinks: true });
     }
   }
@@ -155,6 +158,15 @@ export function restoreBackup(id: string, installed: Pick<InstalledSkill, 'name'
     cpSync(join(dir, 'lock'), lock);
   } else rmSync(lock, { force: true });
   return undo;
+}
+
+/**
+ * How to recreate a saved link. On Windows, as the skills CLI does, a junction: it needs
+ * no administrator rights, and its target must be absolute (a relative one is resolved
+ * from the link's folder, not the current directory).
+ */
+export function linkArgs(target: string, to: string, platform: NodeJS.Platform = process.platform): [string, string, 'junction' | 'dir'] {
+  return platform === 'win32' ? [resolve(dirname(to), target), to, 'junction'] : [target, to, 'dir'];
 }
 
 /** What activating a pack as a profile does in a scope: what stays, what goes, what comes. */
