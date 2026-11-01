@@ -4,6 +4,7 @@
 
 - **Project skills get updates too.** `outdated`, `update` and `u` in the tree check the project's skills as well as global ones: the installed files are compared blob by blob with the repository's HEAD. A copy edited by hand (its files no longer match the lock's `computedHash`) is reported as modified and never overwritten; a pinned one is left to `lock`. `-p`/`-g` limit either command to one scope; `outdated --json` entries carry their `scope`.
 - **`skills-atlas suggest`** finds what a project is built with (manifests, workspaces and telltale files, about 45 technologies) and suggests catalog skills for each, publisher's own first, without what is installed; `--json` and `-n` available.
+- **💡 For this project** opens the tree and the web page when the current directory uses known technologies: the suggested skills, in rank order, each tagged with its technology.
 - **MCP:** new `suggest_skills`, `update_skills`, `rollback_skill`, `doctor` and `sync_project` tools, audited like installs; `install_skills` takes `packs`; `outdated_skills` covers both scopes and returns `modified`.
 
 ## 0.30.0 — 2026-10-23

@@ -104,7 +104,12 @@ function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<st
     out.push({ kind: 'theme', theme: g.theme, skills: g.skills, expanded: isOpen });
     if (!isOpen) continue;
     if (g.theme.id !== RECOMMENDED) {
-      for (const skill of g.theme.id === TRENDING_THEME.id && !filter.trim() ? byGrowth(g.skills) : g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
+      const ordered = filter.trim() ? g.skills
+        : g.theme.id === TRENDING_THEME.id ? byGrowth(g.skills)
+        // Suggestions keep their rank: grouped by technology, the best fit first.
+        : g.theme.id === 'suggested' ? [...g.skills].sort((a, b) => (a.suggestion?.order ?? 0) - (b.suggestion?.order ?? 0))
+        : g.skills;
+      for (const skill of ordered) out.push({ kind: 'skill', skill, themeId: g.theme.id });
       continue;
     }
     for (const repo of byRepository(g.skills)) {
@@ -676,6 +681,7 @@ export function TreeSelect({
                 )}
               </Text>
               <Text>
+                {row.skill.suggestion ? <Text color={PALETTE.success}>{`💡 ${m.tree.suggestedFor(row.skill.suggestion.for)}   `}</Text> : null}
                 {row.skill.growth ? <Text color={row.skill.growthSuspect ? PALETTE.gold : PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}${row.skill.growthSuspect ? ` (${m.tree.growthSuspect(row.skill.growthSuspect)})` : ''}   `}</Text> : null}
                 {row.skill.updatedAt ? <Text dimColor>{`${m.tree.updated(row.skill.updatedAt)}  ·  `}</Text> : null}
                 {row.skill.repo?.license ? <Text dimColor>{`${row.skill.repo.license}  ·  `}</Text> : null}

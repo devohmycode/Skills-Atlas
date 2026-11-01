@@ -44,6 +44,8 @@ export interface Skill {
   /** Personal editorial selection, independent of popularity or official status. */
   /** `order` is the pick's position in the curated list, which orders its repository group. */
   recommendation?: { repository: string; reason: string; order: number };
+  /** Set for the current project (`withSuggestions`): the technology it fits and its rank among the suggestions. */
+  suggestion?: { for: string; order: number };
   labels: string[];
   origins: Origin[];
   /** Theme ids, 1 or 2, the first being the primary theme. */

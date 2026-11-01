@@ -129,6 +129,8 @@ nav button.all::before { background: conic-gradient(from 0deg, oklch(var(--regio
 nav button.mine::before { background: var(--accent); border-radius: 50%; }
 nav button.recommended::before { content: '★'; background: none; color: var(--gold); line-height: 12px; font-size: 17px; }
 nav button[data-theme="trending"]::before { content: '🔥'; background: none; line-height: 12px; font-size: 13px; }
+nav button[data-theme="suggested"]::before { content: '💡'; background: none; line-height: 12px; font-size: 13px; }
+.tag.suggested { color: var(--accent, inherit); }
 nav .sep { height: 1px; background: var(--rule); margin: 8px 10px; }
 
 /* ---- skill list -------------------------------------------------------------------------- */
@@ -466,6 +468,7 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     var tags = '';
     if (s.official) tags += '<span class="tag official">◆ ' + esc(M.official) + '</span>';
     if (s.recommendation) tags += '<span class="tag recommended" title="' + esc(themeName('recommended')) + '">★</span>';
+    if (s.suggestion) tags += '<span class="tag suggested" title="' + esc(themeName('suggested')) + '">💡 ' + esc(s.suggestion.for) + '</span>';
     if (inst) tags += on
       ? '<span class="tag installed">● ' + esc(tr('installedIn', { where: inst.scopes.map(function (x) { return M[x]; }).join(' + ') })) + '</span>'
       : '<span class="tag drop">' + esc(M.willRemove) + '</span>';

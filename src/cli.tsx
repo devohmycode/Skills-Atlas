@@ -30,6 +30,7 @@ import { fetchSkillFiles, fetchSkillMarkdown } from './github.js';
 import { riskWhere } from './risks.js';
 import { updateDiff } from './install/diff.js';
 import { browseLoop } from './browse.js';
+import { withSuggestions } from './suggest.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
 /** The skills a project expects, at its root, versioned with its code. */
@@ -122,6 +123,18 @@ function resolveLang(argv: string[]): Lang {
   return normalizeLang(process.env.SKILLS_ATLAS_LANG) ?? normalizeLang(readConfig().lang) ?? systemLang() ?? 'en';
 }
 
+
+/** The catalog of the interactive interfaces: first, the skills suggested for the current directory. */
+async function projectCatalog(opts: CommonOptions): Promise<Catalog> {
+  const catalog = await openCatalog(opts);
+  try {
+    const installed = (await Promise.all(SCOPES.map((sc) => listInstalled(sc)))).flat().map((s) => `${s.source ?? 'local'}@${s.name}`);
+    return withSuggestions(catalog, process.cwd(), installed);
+  } catch {
+    // Suggestions are a convenience: a project that cannot be read leaves the catalog as it is.
+    return catalog;
+  }
+}
 
 async function openCatalog(opts: CommonOptions): Promise<Catalog> {
   const checked = (catalog: Catalog) => {
@@ -325,7 +338,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
   .description(c.browse)
   .action(async (opts: FilterOptions & InstallFlags) => {
     if (!process.stdin.isTTY) fail(m.errors.needsTty);
-    const catalog = await openCatalog(opts);
+    const catalog = await projectCatalog(opts);
     const skills = querySkills(catalog, toQuery(catalog, opts));
     if (!skills.length) fail(m.errors.noMatch);
     const preset = presetFromFlags(opts);
@@ -402,7 +415,7 @@ program
   .addOption(offlineOption())
   .addOption(refreshOption())
   .action(async (opts: CommonOptions & { port?: number; open: boolean; skillsVersion: string }) => {
-    const catalog = await openCatalog(opts);
+    const catalog = await projectCatalog(opts);
     const server = await startServer({
       skills: querySkills(catalog, {}),
       catalogSkills: catalog.skills,

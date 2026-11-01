@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { isStale } from './catalog/query.js';
-import type { Catalog, Skill } from './types.js';
+import type { Catalog, Skill, Theme } from './types.js';
 
 /**
  * Skills for the project at hand: what its manifests and files say it uses
@@ -269,6 +269,28 @@ export function suggestSkills(catalog: Catalog, signals: StackSignal[], opts: Su
     stack.push({ ...signal, skills });
   }
   return { stack, packs: [...packs] };
+}
+
+export const SUGGESTED_THEME: Theme = { id: 'suggested', label: 'For this project' };
+
+/**
+ * The catalog with a first theme holding the skills suggested for the project in `dir`
+ * (the tree and the web page show it), each marked with the technology it fits.
+ * Unchanged when nothing is found or nothing new fits.
+ */
+export function withSuggestions(catalog: Catalog, dir: string, installed: Iterable<string> = []): Catalog {
+  const found = suggestSkills(catalog, detectStack(dir), { installed });
+  const picks = new Map<string, { for: string; order: number }>();
+  for (const st of found.stack) for (const s of st.skills) picks.set(s.id, { for: st.label, order: picks.size });
+  if (!picks.size) return catalog;
+  const skills = catalog.skills.map((s) => {
+    const pick = picks.get(s.id);
+    return pick ? { ...s, suggestion: pick, themes: [...s.themes, SUGGESTED_THEME.id] } : s;
+  });
+  const used = found.stack.filter((st) => st.skills.length);
+  const theme: Theme = { ...SUGGESTED_THEME, description: used.map((st) => `${st.label} (${st.evidence[0]})`).join(' · ') };
+  const themes = [theme, ...catalog.themes.filter((th) => th.id !== SUGGESTED_THEME.id)];
+  return { ...catalog, skills, themes, stats: { ...catalog.stats, byTheme: { ...catalog.stats.byTheme, [SUGGESTED_THEME.id]: picks.size } } };
 }
 
 /** The technologies a rule can detect, for help texts and tests. */

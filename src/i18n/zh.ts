@@ -84,6 +84,7 @@ export const zh: Messages = {
     noNewRisk: '相对你的版本没有新的警示信号',
     noRisk: "未发现警示信号（模式检查，并非保证）",
     growth: (n) => `自上次快照以来新增 ${n} 次安装`,
+    suggestedFor: (x) => `适用于此项目中的 ${x}`,
     needs: '需要',
     updated: (date) => `更新于 ${date}`,
     growthSuspect: (n) => `未计入热门：相同的 skill 在另外 ${n} 个仓库中同步增长`,
@@ -353,6 +354,7 @@ export const zh: Messages = {
   themes: {
     recommended: '推荐',
     trending: '趋势',
+    suggested: '适合此项目',
     installed: '已安装',
     frontend: '前端与 Web',
     backend: '后端与 API',

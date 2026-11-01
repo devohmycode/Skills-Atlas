@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { detectStack, suggestSkills } from '../src/suggest.js';
+import { detectStack, suggestSkills, withSuggestions } from '../src/suggest.js';
 import type { Catalog, Skill } from '../src/types.js';
 
 let root: string | undefined;
@@ -91,5 +91,23 @@ describe('suggestions', () => {
     ], { perStack: 5 });
     const all = found.stack.flatMap((s) => s.skills.map((k) => k.id));
     expect(new Set(all).size).toBe(all.length);
+  });
+});
+
+describe('the For this project theme', () => {
+  it('comes first, with the suggested skills in rank order and the technology each fits', () => {
+    const dir = project({ 'package.json': JSON.stringify({ dependencies: { react: '19', '@supabase/supabase-js': '2' } }) });
+    const base = catalog([skill('someone/kit@react-patterns', 9_000), skill('supabase/agent-skills@supabase', 300_000), skill('x/y@other', 1_000_000)]);
+    const out = withSuggestions({ ...base, themes: [{ id: 'recommended', label: 'Recommended' }] }, dir);
+    expect(out.themes.map((th) => th.id)).toEqual(['suggested', 'recommended']);
+    expect(out.themes[0]!.description).toBe('React (package.json: react) · Supabase (package.json: @supabase/supabase-js)');
+    const picked = out.skills.filter((s) => s.themes.includes('suggested'));
+    expect(picked.map((s) => [s.id, s.suggestion])).toEqual([
+      ['someone/kit@react-patterns', { for: 'React', order: 0 }],
+      ['supabase/agent-skills@supabase', { for: 'Supabase', order: 1 }],
+    ]);
+    expect(out.stats.byTheme.suggested).toBe(2);
+    // Nothing new to suggest: the catalog is left as it is.
+    expect(withSuggestions(base, dir, ['someone/kit@react-patterns', 'supabase/agent-skills@supabase'])).toBe(base);
   });
 });

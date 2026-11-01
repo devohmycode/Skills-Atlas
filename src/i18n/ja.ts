@@ -84,6 +84,7 @@ export const ja: Messages = {
     noNewRisk: 'お使いの版から新しい警告サインはありません',
     noRisk: "警告サインなし（パターン検査であり保証ではありません）",
     growth: (n) => `前回のスナップショットから +${n} インストール`,
+    suggestedFor: (x) => `このプロジェクトの ${x} 向け`,
     needs: '必要',
     updated: (date) => `${date} 更新`,
     growthSuspect: (n) => `トレンド対象外: 同じ skill がほかの ${n} 個のリポジトリで同時に増加`,
@@ -353,6 +354,7 @@ export const ja: Messages = {
   themes: {
     recommended: 'おすすめ',
     trending: 'トレンド',
+    suggested: 'このプロジェクト向け',
     installed: 'インストール済み',
     frontend: 'フロントエンド・Web',
     backend: 'バックエンド・API',

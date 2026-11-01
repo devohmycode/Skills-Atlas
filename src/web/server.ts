@@ -83,6 +83,7 @@ const slim = (s: Skill) => ({
   growth: s.growth,
   official: s.official,
   recommendation: s.recommendation,
+  suggestion: s.suggestion,
   themes: s.themes,
   requires: s.requires,
   updatedAt: s.updatedAt,
@@ -180,7 +181,10 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       queryCache = { key, matching, counts };
     }
     const { matching, counts } = queryCache;
-    const inTheme = theme === 'trending' && !query.trim() ? byGrowth(matching.filter((s) => s.themes.includes(theme))) : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
+    const inTheme = theme === 'trending' && !query.trim() ? byGrowth(matching.filter((s) => s.themes.includes(theme)))
+      // Suggestions keep their rank: grouped by technology, the best fit first.
+      : theme === 'suggested' && !query.trim() ? matching.filter((s) => s.suggestion).sort((a, b) => a.suggestion!.order - b.suggestion!.order)
+      : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
     return { total: inTheme.length, all: matching.length, counts, items: inTheme.slice(offset, offset + limit).map(slim) };
   }
 

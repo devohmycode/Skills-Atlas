@@ -86,6 +86,7 @@ export const de: Messages = {
     noNewRisk: 'Kein neues Warnsignal seit Ihrer Version',
     noRisk: "Kein Warnsignal gefunden (Musterprüfung, keine Garantie)",
     growth: (n) => `+${n} Installationen seit dem letzten Stand`,
+    suggestedFor: (x) => `für ${x} in diesem Projekt`,
     needs: 'braucht',
     updated: (date) => `geändert am ${date}`,
     growthSuspect: (n) => `nicht in Trends: dieselben Skills wachsen gleichzeitig in ${n} weiteren Repositories`,
@@ -355,6 +356,7 @@ export const de: Messages = {
   themes: {
     recommended: 'Empfohlen',
     trending: 'Im Trend',
+    suggested: 'Für dieses Projekt',
     installed: 'Bereits installiert',
     frontend: 'Frontend & Web',
     backend: 'Backend & APIs',

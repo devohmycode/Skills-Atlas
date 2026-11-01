@@ -86,6 +86,7 @@ export const it: Messages = {
     noNewRisk: 'Nessun nuovo segnale di allarme dalla tua versione',
     noRisk: "Nessun segnale di allarme (controllo per schemi, non una garanzia)",
     growth: (n) => `+${n} installazioni dall'ultima istantanea`,
+    suggestedFor: (x) => `per ${x} in questo progetto`,
     needs: 'richiede',
     updated: (date) => `aggiornato il ${date}`,
     growthSuspect: (n) => `fuori da Tendenze: gli stessi skill crescono insieme in altri ${n} repository`,
@@ -355,6 +356,7 @@ export const it: Messages = {
   themes: {
     recommended: 'Consigliate',
     trending: 'Di tendenza',
+    suggested: 'Per questo progetto',
     installed: 'Già installate',
     frontend: 'Frontend e web',
     backend: 'Backend e API',

@@ -83,6 +83,7 @@ export const en = {
     noNewRisk: 'No new warning sign since your version',
     noRisk: "No warning sign found (a pattern check, not a guarantee)",
     growth: (n: string) => `+${n} installs since the last snapshot`,
+    suggestedFor: (x: string) => `for ${x} in this project`,
     needs: 'needs',
     updated: (date: string) => `updated ${date}`,
     growthSuspect: (n: number) => `not in Trending: the same skills grow together in ${n} other repositories`,
@@ -353,6 +354,7 @@ export const en = {
   themes: {
     recommended: 'Recommended',
     trending: 'Trending',
+    suggested: 'For this project',
     installed: 'Already installed',
     frontend: 'Frontend & web',
     backend: 'Backend & APIs',

@@ -84,6 +84,7 @@ export const ko: Messages = {
     noNewRisk: '설치된 버전 이후 새 경고 신호 없음',
     noRisk: "경고 신호 없음 (패턴 검사이며 보장은 아님)",
     growth: (n) => `지난 스냅샷 이후 설치 +${n}`,
+    suggestedFor: (x) => `이 프로젝트의 ${x}용`,
     needs: '필요',
     updated: (date) => `${date} 업데이트`,
     growthSuspect: (n) => `트렌딩 제외: 같은 skill이 다른 저장소 ${n}곳에서 함께 증가`,
@@ -353,6 +354,7 @@ export const ko: Messages = {
   themes: {
     recommended: '추천',
     trending: '인기 급상승',
+    suggested: '이 프로젝트용',
     installed: '설치됨',
     frontend: '프론트엔드 & 웹',
     backend: '백엔드 & API',
