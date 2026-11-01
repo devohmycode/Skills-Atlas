@@ -1,3 +1,4 @@
+import { markdownCost } from '../context.js';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -149,7 +150,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       locale: locale(),
       sources: opts.sources,
       messages: { ...t().web, risks: t().tree.risks, riskLevels: t().tree.riskLevels, needs: t().tree.needs, updated: t().tree.updated('{date}'), archived: t().tree.archived, stale: t().tree.stale('{date}'),
-        noRisk: t().tree.noRisk, previewLoading: t().tree.previewLoading,
+        noRisk: t().tree.noRisk, previewLoading: t().tree.previewLoading, cost: t().tree.cost('{startup}', '{onUse}'),
         auditOff: t().confirm.auditOff, auditUnread: t().confirm.auditUnread, auditToggle: t().confirm.auditToggle },
       cwd,
       skillsVersion: opts.skillsVersion,
@@ -308,7 +309,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       const collisions = replacements([skill.id], inst.installed, scope);
       try {
         const markdown = await readSkill(skill);
-        return json(req, res, { id: skill.id, markdown, risks: scanRisks(markdown), collisions });
+        return json(req, res, { id: skill.id, markdown, risks: scanRisks(markdown), collisions, cost: markdownCost(markdown, skill.name) });
       } catch (err) {
         return json(req, res, { id: skill.id, risks: [], collisions, error: err instanceof Error ? err.message : String(err) });
       }

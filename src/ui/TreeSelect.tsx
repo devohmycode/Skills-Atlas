@@ -1,3 +1,4 @@
+import { markdownCost } from '../context.js';
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByRepository } from '../catalog/groups.js';
@@ -385,7 +386,9 @@ export function TreeSelect({
   // At most three warnings show above the text; the rest are in `skills-atlas show`.
   // An update shows what it changes, and only the warning signs it brings.
   const risks: Risk[] = useMemo(() => preview?.diff?.risks ?? (preview?.text !== undefined ? scanRisks(preview.text) : []), [preview?.text, preview?.diff]);
-  const riskTitle = preview?.diff ? 1 : 0;
+  // What the skill would cost in an agent's context: its description at every start, the SKILL.md when used.
+  const previewCost = useMemo(() => (preview?.text !== undefined && !preview.diff ? markdownCost(preview.text, preview.skill.name) : undefined), [preview?.text, preview?.diff]);
+  const riskTitle = preview?.diff ? 1 : previewCost ? 1 : 0;
   const riskLines = preview?.text === undefined ? 0 : 1 + riskTitle + Math.min(3, risks.length);
   const previewHeight = Math.max(5, termRows - 8 - riskLines);
   const previewLines = preview?.text !== undefined ? wrapLines(preview.text, Math.max(20, columns - 6)) : [];
@@ -501,6 +504,7 @@ export function TreeSelect({
         {preview.text !== undefined && (
           <Box flexDirection="column">
             {preview.diff && <Text bold>{m.tree.diffSummary(preview.diff.added, preview.diff.removed)}</Text>}
+            {!preview.diff && previewCost && <Text dimColor>{m.tree.cost(formatNumber(previewCost.startup), formatNumber(previewCost.onUse))}</Text>}
             {risks.length ? (
               <Text color={levelColor[risks[0]!.level]} bold>{`⚠ ${preview.diff ? m.tree.newRisksFound(risks.length) : m.tree.risksFound(risks.length)}`}</Text>
             ) : (

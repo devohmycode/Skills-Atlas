@@ -632,8 +632,9 @@ dialog::backdrop { background: color-mix(in oklab, var(--paper) 40%, rgba(5,12,2
     dlg.showModal();
     return apiJson('/api/preview?id=' + encodeURIComponent(skill.id) + '&scope=' + opts.scope).then(function (r) {
       if (seq !== previewSeq) return;
+      var cost = r.cost && M.cost ? '<p class="cost">' + esc(M.cost.replace('{startup}', fmt.format(r.cost.startup)).replace('{onUse}', fmt.format(r.cost.onUse))) + '</p>' : '';
       $('details-body').innerHTML = (r.collisions || []).map(function (c) { return '<p class="warn">' + esc(c.message) + '</p>'; }).join('') +
-        riskHtml(r) + (r.markdown == null ? '' : '<pre class="details-text">' + esc(r.markdown) + '</pre>');
+        cost + riskHtml(r) + (r.markdown == null ? '' : '<pre class="details-text">' + esc(r.markdown) + '</pre>');
     }).catch(function (err) {
       if (seq === previewSeq) $('details-body').textContent = M.previewUnavailable + ': ' + err.message;
     });

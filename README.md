@@ -66,6 +66,7 @@ skills-atlas suggest                          # skills for this project, from it
 skills-atlas rollback <id>                    # reinstall the version it had before its last update (--list, --to <sha>)
 skills-atlas mcp                              # MCP server on stdio, for Claude and other agents
 skills-atlas installed -a claude-code codex   # installed skills by agent: what each one sees (--json available)
+skills-atlas installed --size                 # the same, with what each skill costs in context (tokens) and on disk
 skills-atlas packs                            # curated packs: frontend, security, quality, writing
 skills-atlas install --pack security -a claude-code -g   # install a whole pack
 skills-atlas sync                             # install what this project's skills-atlas.json lists and is missing
@@ -270,6 +271,14 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 ### Suggestions for a project
 
 `skills-atlas suggest [dir]` reads the project's manifests and telltale files (`package.json` and its `apps/`, `packages/` workspaces, `pyproject.toml` and requirements files, `Cargo.toml`, `go.mod`, `Gemfile`, `composer.json`, `Dockerfile`, `.github/workflows`, `prisma/schema.prisma`, `wrangler.toml`…) to find what it is built with: about 45 technologies, from React and FastAPI to Supabase, Terraform and the Claude API. For each, it lists up to three catalog skills (`-n` to change it): the technology's own publisher first (`supabase/…`, `prisma/…`), then skills named after it, most installed first. Skills already installed, of archived or idle repositories, deprecated, installed fewer than 500 times, or copies of the same name are left out, and the packs that fit are named. It only reads files, runs nothing and sends nothing; the MCP server's `suggest_skills` gives agents the same answer. The tree and the web page show the same suggestions as their first theme, **💡 For this project**, each skill tagged with the technology it fits.
+
+### Context cost
+
+Agents load the name and description of every installed skill at each session start, so they know when to use one; the whole `SKILL.md` enters the context only when the skill is used. skills-atlas estimates both (about 4 characters per token, one per CJK character; an estimate, not a tokenizer count):
+
+- the `SKILL.md` preview (`p`), the web page's **Details**, `skills-atlas show` (on stderr, `cost` with `--json`) and the MCP server's `show_skill` give a skill's two costs before you install it;
+- `skills-atlas installed --size` lists, under each agent, every skill's startup and on-use tokens and its size on disk, with the agent's total startup load (`startup_tokens` and `cost` with `--json`);
+- when an agent loads more than 5,000 tokens of skill descriptions at each start, a warning names it above the tree and under `installed --size`: untick the skills you do not use.
 
 ### Installation diagnostics
 

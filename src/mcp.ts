@@ -191,8 +191,9 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       return json(c.themes.map((th) => ({ id: th.id, label: th.label, skills: c.stats.byTheme[th.id] ?? 0 })));
     }
     case 'show_skill': {
-      const { markdown, risks } = await showSkill(await catalog(), input.id);
-      return `${riskReport(risks)}\n\n---\n\n${markdown}`;
+      const { markdown, risks, cost } = await showSkill(await catalog(), input.id);
+      const load = `Context cost (estimated): about ${cost.startup} tokens at every session start (name and description), about ${cost.onUse} tokens when the skill is used (SKILL.md).`;
+      return `${riskReport(risks)}\n${load}\n\n---\n\n${markdown}`;
     }
     case 'list_packs':
       return json(readPacks());

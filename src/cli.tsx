@@ -30,6 +30,8 @@ import { fetchSkillFiles, fetchSkillMarkdown } from './github.js';
 import { riskWhere } from './risks.js';
 import { updateDiff } from './install/diff.js';
 import { browseLoop } from './browse.js';
+import { agentLoads, formatBytes, heavyLoads, STARTUP_BUDGET } from './context.js';
+import { scanInstalled } from './install/scan.js';
 import { withSuggestions } from './suggest.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
@@ -133,6 +135,16 @@ async function projectCatalog(opts: CommonOptions): Promise<Catalog> {
   } catch {
     // Suggestions are a convenience: a project that cannot be read leaves the catalog as it is.
     return catalog;
+  }
+}
+
+/** A warning, above the tree, for each agent whose skill descriptions weigh on every session start. */
+function contextNotice(): string {
+  try {
+    const heavy = heavyLoads(agentLoads(SCOPES.flatMap((sc) => scanInstalled(sc))));
+    return heavy.map((l) => paint('yellow', `⚠ ${c.heavyLoad(l.agent, formatNumber(l.startup), formatNumber(STARTUP_BUDGET))}`)).join('\n');
+  } catch {
+    return '';
   }
 }
 
@@ -365,7 +377,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           sort={opts.sort}
           search={opts.search}
           official={opts.official}
-          notice={notice || versionNotice}
+          notice={[notice || versionNotice, contextNotice()].filter(Boolean).join('\n')}
           treeMemory={treeMemory}
           findUpdates={opts.offline ? undefined : (scopes) => checkUpdates(scopes)}
           audit={auditEnabled(readConfig(), opts.audit)}
@@ -741,18 +753,29 @@ program
   .option('-g, --global', c.global)
   .option('-p, --project', c.project)
   .option('-a, --agent <ids...>', c.agent)
+  .option('--size', c.sizeOption)
   .option('--json', c.json)
-  .action(async (opts: { global?: boolean; project?: boolean; agent?: string[]; json?: boolean }) => {
+  .action(async (opts: { global?: boolean; project?: boolean; agent?: string[]; json?: boolean; size?: boolean }) => {
     const scopes: Scope[] = opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
     const only = opts.agent?.flatMap((a) => a.split(',')).map((a) => a.trim()).filter(Boolean);
     const unknown = only ? unknownAgents(only) : [];
     if (unknown.length) fail(m.errors.unknownAgents(unknown.join(', ')));
-    const groups = skillsByAgent(await installedSkills(scopes)).filter((g) => !only || only.includes(g.agent));
-    if (opts.json) return void process.stdout.write(`${JSON.stringify(groups, null, 2)}\n`);
+    const groups = skillsByAgent(await installedSkills(scopes, { cost: opts.size })).filter((g) => !only || only.includes(g.agent));
+    // Each agent's startup load: the descriptions of every skill it sees.
+    const sized = groups.map((g) => ({ ...g, ...(opts.size ? { startup_tokens: g.skills.reduce((n, s) => n + (s.cost?.startup ?? 0), 0) } : {}) }));
+    if (opts.json) return void process.stdout.write(`${JSON.stringify(sized, null, 2)}\n`);
     if (!groups.length) return console.log(paint('dim', c.noneInstalled));
-    for (const g of groups) {
-      console.log(`\n${paint('bold', g.name)} ${paint('dim', `${g.agent} · ${formatNumber(g.skills.length)}`)}`);
-      for (const s of g.skills) console.log(`  ${padEnd(s.name, 34)} ${paint('dim', `${padEnd(s.source ?? 'local', 36)} ${t().tree.where[s.scope]}`)}`);
+    for (const g of sized) {
+      const load = g.startup_tokens === undefined ? '' : ` · ${c.startupLoad(formatNumber(g.startup_tokens))}`;
+      console.log(`\n${paint('bold', g.name)} ${paint(g.startup_tokens !== undefined && g.startup_tokens > STARTUP_BUDGET ? 'yellow' : 'dim', `${g.agent} · ${formatNumber(g.skills.length)}${load}`)}`);
+      for (const s of g.skills) {
+        const size = s.cost ? `  ${padEnd(`≈${formatNumber(s.cost.startup)} / ${formatNumber(s.cost.onUse)} tok`, 22)} ${formatBytes(s.cost.bytes ?? 0)}` : '';
+        console.log(`  ${padEnd(s.name, 34)} ${paint('dim', `${padEnd(s.source ?? 'local', 36)} ${padEnd(t().tree.where[s.scope], 8)}${size}`)}`);
+      }
+    }
+    if (opts.size) {
+      console.log(paint('dim', `\n${c.sizeLegend}`));
+      for (const g of sized.filter((x) => (x.startup_tokens ?? 0) > STARTUP_BUDGET)) console.log(paint('yellow', `⚠ ${c.heavyLoad(g.name, formatNumber(g.startup_tokens!), formatNumber(STARTUP_BUDGET))}`));
     }
   });
 
@@ -781,8 +804,9 @@ program
   .action(async (id: string, opts: CommonOptions & { json?: boolean }) => {
     const catalog = await openCatalog({ ...opts, quiet: true });
     try {
-      const { skill, markdown, risks } = await showSkill(catalog, id);
-      if (opts.json) return void process.stdout.write(`${JSON.stringify({ skill, risks, markdown }, null, 2)}\n`);
+      const { skill, markdown, risks, cost } = await showSkill(catalog, id);
+      if (opts.json) return void process.stdout.write(`${JSON.stringify({ skill, risks, cost, markdown }, null, 2)}\n`);
+      console.error(paint('dim', m.tree.cost(formatNumber(cost.startup), formatNumber(cost.onUse))));
       // The warning signs go to stderr: stdout stays the SKILL.md alone, to pipe or save.
       const tree = m.tree;
       console.error(risks.length ? paint('yellow', `⚠ ${tree.risksFound(risks.length)}`) : paint('dim', `✓ ${tree.noRisk}`));

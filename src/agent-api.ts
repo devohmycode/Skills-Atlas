@@ -5,6 +5,7 @@ import { fetchSkillFiles, fetchSkillMarkdown, githubUrl } from './github.js';
 import { parseSkillId } from './install/plan.js';
 import { listInstalled } from './install/run.js';
 import { checkUpdates, type UpdateCheck } from './install/updates.js';
+import { folderCost, markdownCost, type SkillCost } from './context.js';
 import { projectRevisionDrift } from './revisions.js';
 import type { Risk } from './risks.js';
 import { missingSkills, missingSkillsByAgent } from './selection.js';
@@ -64,12 +65,12 @@ export function findSkill(catalog: Catalog, id: string): Skill {
 }
 
 /** A skill's SKILL.md, from its GitHub repository (escape sequences removed), and the warning signs of its folder. */
-export async function showSkill(catalog: Catalog, id: string): Promise<{ skill: SkillSummary; markdown: string; risks: Risk[] }> {
+export async function showSkill(catalog: Catalog, id: string): Promise<{ skill: SkillSummary; markdown: string; risks: Risk[]; cost: SkillCost }> {
   const skill = findSkill(catalog, id);
   const markdown = await fetchSkillMarkdown(skill);
   // The audit's view: the other files of the folder too, the SKILL.md read once.
   const [audit] = await auditSkills([skill], async () => markdown, fetchSkillFiles);
-  return { skill: summarize(skill), markdown, risks: audit!.risks };
+  return { skill: summarize(skill), markdown, risks: audit!.risks, cost: markdownCost(markdown, skill.name) };
 }
 
 /** An installed skill, with the agent ids an install command needs. */
@@ -79,11 +80,16 @@ export interface InstalledSummary {
   source?: string;
   scope: Scope;
   agents: string[];
+  /** Estimated context cost, when asked for: tokens at startup and when used, files and bytes on disk. */
+  cost?: SkillCost;
 }
 
-export async function installedSkills(scopes: Scope[]): Promise<InstalledSummary[]> {
+export async function installedSkills(scopes: Scope[], opts: { cost?: boolean } = {}): Promise<InstalledSummary[]> {
   const found = (await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat();
-  return found.map((s) => ({ id: `${s.source ?? 'local'}@${s.name}`, name: s.name, source: s.source, scope: s.scope, agents: agentIds(s.agents) }));
+  return found.map((s) => {
+    const cost = opts.cost && s.path ? folderCost(s.path, s.name) : undefined;
+    return { id: `${s.source ?? 'local'}@${s.name}`, name: s.name, source: s.source, scope: s.scope, agents: agentIds(s.agents), ...(cost ? { cost } : {}) };
+  });
 }
 
 /**
