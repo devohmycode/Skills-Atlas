@@ -15,6 +15,8 @@ import { ACCENT, BOX, Hints, Panel, useTerminalSize, type Hint } from './Layout.
 import { isMouseInput, useListMouse } from './mouse.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 import { fit, padStart, width, wrapLines } from './width.js';
+import { BackupsDialog, ConfirmDialog, FormDialog, ProfileDialog, type BackupSummary, type ProfilePreview } from './Dialogs.js';
+import type { Pack } from '../catalog/packs.js';
 
 type Row =
   | { kind: 'theme'; theme: Theme; skills: Skill[]; expanded: boolean }
@@ -48,13 +50,34 @@ function rowKey(r: Row): string {
   return `s:${r.themeId}:${r.skill.id}`;
 }
 
-/** What the tree asks the caller to do instead of installing: pack, profile and backup actions. */
+/**
+ * What the tree tells its caller after a pack, profile or backup key: a profile to install
+ * (it leaves the tree, like any install), packs changed (the themes to rebuild), or a
+ * backup restored (what is installed to read again).
+ */
 export type TreeAction =
-  | { kind: 'createPack'; ids: string[] }
-  | { kind: 'editPack'; pack: string; skills: string[] }
-  | { kind: 'deletePack'; pack: string }
-  | { kind: 'profile'; pack: string }
-  | { kind: 'backups' };
+  | { kind: 'profile'; pack: string; scope: Scope }
+  | { kind: 'packsChanged' }
+  | { kind: 'restored'; message: string };
+
+/** Pack and backup operations, done without leaving the tree. Errors are thrown with a message to show. */
+export interface PackOps {
+  list: () => Pack[];
+  create: (input: { name: string; description: string; skills: string[] }) => Pack;
+  update: (id: string, patch: { name?: string; description?: string; skills?: string[] }) => Pack;
+  remove: (id: string) => void;
+  backups: () => BackupSummary[];
+  /** Returns the id of the backup taken just before, to undo the restore. */
+  restore: (id: string) => Promise<string>;
+  plan: (pack: string, scope: Scope) => Promise<ProfilePreview>;
+}
+
+type Dialog =
+  | { kind: 'create'; ids: string[] }
+  | { kind: 'edit'; id: string; label: string; skills: string[] }
+  | { kind: 'delete'; id: string; label: string }
+  | { kind: 'backups' }
+  | { kind: 'profile'; id: string; label: string };
 
 export interface TreeSelectProps {
   themes: Theme[];
@@ -84,7 +107,8 @@ export interface TreeSelectProps {
   loadPreview?: (skill: Skill) => Promise<string>;
   /** Whether a program a skill needs is on this machine; the PATH by default. */
   hasBin?: (bin: string) => boolean;
-  /** Pack, profile and backup keys (N, E, D, P, B); without it they are not offered. */
+  /** Pack, profile and backup keys (N, E, D, P, B), done in the tree's own windows; without it they are not offered. */
+  packOps?: PackOps;
   onAction?: (action: TreeAction) => void;
   /** Ids of the packs that can be edited and deleted (the personal ones). */
   personalPacks?: Set<string>;
@@ -176,12 +200,16 @@ export function TreeSelect({
   loadDiff = (s) => updateDiff(s),
   hasBin = onPath,
   onAction,
+  packOps,
   personalPacks = NO_PACKS,
   warnings = NO_WARNINGS,
 }: TreeSelectProps) {
   const m = t();
   // Editing a pack's skills: ticks mean membership, not installs; the selection before it comes back on Esc.
   const [showWarnings, setShowWarnings] = useState(false);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  // What the last pack or backup action did, on the status line until the next key.
+  const [flash, setFlash] = useState<string>();
   const [packEdit, setPackEdit] = useState<{ id: string; label: string; saved: Set<string> } | null>(null);
   const installed = packEdit ? EMPTY_INSTALLED : installedProp;
   // Catalog skills (not home-made ones), the only ones a pack can hold.
@@ -447,6 +475,9 @@ export function TreeSelect({
 
   useInput((input, key) => {
     if (isMouseInput(input)) return;
+    // An open window takes the keys.
+    if (dialog) return;
+    if (flash) setFlash(undefined);
     if (showWarnings) {
       if (key.escape || key.return || input === '!' || input === 'q') setShowWarnings(false);
       return;
@@ -487,24 +518,19 @@ export function TreeSelect({
     } else if (input === ' ' && row) {
       toggle(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
     } else if (packEdit && key.return) {
-      onAction?.({ kind: 'editPack', pack: packEdit.id, skills: [...live.current.selected] });
+      openEditSave();
     } else if (packEdit && key.escape && !live.current.filter) {
-      setSelected(packEdit.saved);
-      setPackEdit(null);
-    } else if (!packEdit && onAction && input === 'N') {
-      const ids = [...live.current.selected].filter((id) => known.has(id));
-      if (ids.length) onAction({ kind: 'createPack', ids });
-    } else if (!packEdit && onAction && input === 'E' && focusedPack(row) && personalPacks.has(focusedPack(row)!)) {
-      const id = focusedPack(row)!;
-      const theme = themes.find((th) => th.id === `pack:${id}`);
-      setPackEdit({ id, label: theme ? themeLabel(theme) : id, saved: new Set(live.current.selected) });
-      setSelected(new Set(skills.filter((sk) => sk.themes.includes(`pack:${id}`)).map((sk) => sk.id)));
-    } else if (!packEdit && onAction && input === 'D' && focusedPack(row) && personalPacks.has(focusedPack(row)!)) {
-      onAction({ kind: 'deletePack', pack: focusedPack(row)! });
-    } else if (!packEdit && onAction && input === 'P' && focusedPack(row)) {
-      onAction({ kind: 'profile', pack: focusedPack(row)! });
-    } else if (!packEdit && onAction && input === 'B') {
-      onAction({ kind: 'backups' });
+      cancelPackEdit();
+    } else if (!packEdit && packOps && input === 'N') {
+      openCreate();
+    } else if (!packEdit && packOps && input === 'E' && focusedPack(row) && personalPacks.has(focusedPack(row)!)) {
+      startPackEdit(focusedPack(row)!);
+    } else if (!packEdit && packOps && input === 'D' && focusedPack(row) && personalPacks.has(focusedPack(row)!)) {
+      setDialog({ kind: 'delete', id: focusedPack(row)!, label: packLabel(focusedPack(row)!) });
+    } else if (!packEdit && packOps && input === 'P' && focusedPack(row)) {
+      setDialog({ kind: 'profile', id: focusedPack(row)!, label: packLabel(focusedPack(row)!) });
+    } else if (!packEdit && packOps && input === 'B') {
+      setDialog({ kind: 'backups' });
     } else if (input === '!' && warnings.length) setShowWarnings(true);
     else if (input === '/') startSearch();
     else if (input === 's') cycleSort();
@@ -522,14 +548,54 @@ export function TreeSelect({
     else if (input === 'q' || key.escape) onCancel();
   });
 
+  // Pack windows: name and describe, confirm, pick a backup, choose a profile's scope.
+  const packLabel = (id: string) => {
+    const theme = themes.find((th) => th.id === `pack:${id}`);
+    return theme ? themeLabel(theme) : id;
+  };
+  const tickedForPack = () => [...live.current.selected].filter((id) => known.has(id));
+  const openCreate = () => {
+    const ids = tickedForPack();
+    if (ids.length) setDialog({ kind: 'create', ids });
+  };
+  const startPackEdit = (id: string) => {
+    setPackEdit({ id, label: packLabel(id), saved: new Set(live.current.selected) });
+    setSelected(new Set(skills.filter((sk) => sk.themes.includes(`pack:${id}`)).map((sk) => sk.id)));
+  };
+  const cancelPackEdit = () => {
+    if (!packEdit) return;
+    setSelected(packEdit.saved);
+    setPackEdit(null);
+  };
+  const openEditSave = () => {
+    if (!packEdit) return;
+    // Members the tree does not show (filtered out, gone from the catalog) stay in the pack.
+    const shown = new Set(skills.map((sk) => sk.id));
+    const hidden = (packOps?.list().find((p) => p.id === packEdit.id)?.skills ?? []).filter((id) => !shown.has(id));
+    setDialog({ kind: 'edit', id: packEdit.id, label: packEdit.label, skills: [...[...live.current.selected].filter((id) => known.has(id)), ...hidden] });
+  };
+  const done = (message: string, change?: TreeAction) => {
+    setDialog(null);
+    setFlash(message);
+    if (change) onAction?.(change);
+  };
+  const attempt = (run: () => string): string | undefined => {
+    try {
+      done(run(), { kind: 'packsChanged' });
+      return undefined;
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  };
+
   // Buttons do what their key does; continue is only clickable once something changes.
   const pack = focusedPack(rows[current]);
-  const packHints: Hint[] = onAction
+  const packHints: Hint[] = packOps
     ? [
-        ...(known.size && [...selected].some((id) => known.has(id)) ? [['N', m.keys.newPack, () => onAction({ kind: 'createPack', ids: [...selected].filter((id) => known.has(id)) })] as Hint] : []),
-        ...(pack && personalPacks.has(pack) ? [['E', m.keys.editPack] as Hint, ['D', m.keys.deletePack, () => onAction({ kind: 'deletePack', pack })] as Hint] : []),
-        ...(pack ? [['P', m.keys.useProfile, () => onAction({ kind: 'profile', pack })] as Hint] : []),
-        ['B', m.keys.backups, () => onAction({ kind: 'backups' })] as Hint,
+        ...(known.size && [...selected].some((id) => known.has(id)) ? [['N', m.keys.newPack, openCreate] as Hint] : []),
+        ...(pack && personalPacks.has(pack) ? [['E', m.keys.editPack, () => startPackEdit(pack)] as Hint, ['D', m.keys.deletePack, () => setDialog({ kind: 'delete', id: pack, label: packLabel(pack) })] as Hint] : []),
+        ...(pack ? [['P', m.keys.useProfile, () => setDialog({ kind: 'profile', id: pack, label: packLabel(pack) })] as Hint] : []),
+        ['B', m.keys.backups, () => setDialog({ kind: 'backups' })] as Hint,
       ]
     : [];
   const hints: Hint[] = editingFilter
@@ -541,8 +607,8 @@ export function TreeSelect({
     ? [
         [m.keyNames.space, m.keys.toggle],
         ['/', m.keys.search, startSearch],
-        [m.keyNames.enter, m.keys.savePack, () => onAction?.({ kind: 'editPack', pack: packEdit.id, skills: [...selected] })],
-        [m.keyNames.esc, m.keys.cancelEdit, () => { setSelected(packEdit.saved); setPackEdit(null); }],
+        [m.keyNames.enter, m.keys.savePack, openEditSave],
+        [m.keyNames.esc, m.keys.cancelEdit, cancelPackEdit],
       ]
     : [
         [m.keyNames.space, m.keys.toggle],
@@ -559,6 +625,87 @@ export function TreeSelect({
         ['q', m.keys.quit, onCancel],
       ];
 
+  if (dialog && packOps) {
+    const close = () => setDialog(null);
+    if (dialog.kind === 'create') {
+      return (
+        <FormDialog
+          title={m.tree.packNewTitle(formatNumber(dialog.ids.length))}
+          fields={[{ label: m.tree.packNameField, value: '' }, { label: m.tree.packDescriptionField, value: m.cli.profileDefaultDescription(String(dialog.ids.length)) }]}
+          onSubmit={([name, description]) => attempt(() => {
+            const p = packOps.create({ name: name!, description: description || m.cli.profileDefaultDescription(String(dialog.ids.length)), skills: dialog.ids });
+            return m.cli.profileCreated(p.id, String(p.skills.length));
+          })}
+          onCancel={close}
+        />
+      );
+    }
+    if (dialog.kind === 'edit') {
+      const current = packOps.list().find((p) => p.id === dialog.id);
+      return (
+        <FormDialog
+          title={m.tree.packEditTitle(dialog.label, formatNumber(dialog.skills.length))}
+          fields={[{ label: m.tree.packNameField, value: current?.name ?? '' }, { label: m.tree.packDescriptionField, value: current?.description ?? '' }]}
+          onSubmit={([name, description]) => attempt(() => {
+            const p = packOps.update(dialog.id, { name, description: description || current?.description, skills: dialog.skills });
+            // Back to the selection the edit began with.
+            if (packEdit) setSelected(packEdit.saved);
+            setPackEdit(null);
+            return m.cli.packUpdated(p.id, String(p.skills.length));
+          })}
+          onCancel={close}
+        />
+      );
+    }
+    if (dialog.kind === 'delete') {
+      return (
+        <ConfirmDialog
+          tone="danger"
+          title={m.cli.packDeleteConfirm(dialog.label)}
+          onYes={() => {
+            const err = attempt(() => {
+              packOps.remove(dialog.id);
+              return m.cli.packDeleted(dialog.label);
+            });
+            if (err) done(`✗ ${err}`);
+          }}
+          onNo={close}
+        />
+      );
+    }
+    if (dialog.kind === 'backups') {
+      return (
+        <BackupsDialog
+          backups={packOps.backups()}
+          height={height}
+          onRestore={async (id) => {
+            try {
+              const undo = await packOps.restore(id);
+              setDialog(null);
+              onAction?.({ kind: 'restored', message: `✓ ${m.cli.profileRestored(id)} — ${m.cli.profileUndo(undo)}` });
+              return undefined;
+            } catch (err) {
+              return err instanceof Error ? err.message : String(err);
+            }
+          }}
+          onClose={close}
+        />
+      );
+    }
+    return (
+      <ProfileDialog
+        label={dialog.label}
+        height={height}
+        plan={(sc) => packOps.plan(dialog.id, sc)}
+        onConfirm={(sc) => {
+          setDialog(null);
+          onAction?.({ kind: 'profile', pack: dialog.id, scope: sc });
+        }}
+        onCancel={close}
+      />
+    );
+  }
+
   if (showWarnings) {
     return (
       <Box flexDirection="column">
@@ -566,7 +713,9 @@ export function TreeSelect({
         <Panel>
           <Box flexDirection="column">
             {warnings.map((w, i) => (
-              <Text key={i} wrap="wrap">{`• ${w}`}</Text>
+              <Box key={i} marginBottom={i < warnings.length - 1 ? 1 : 0}>
+                <Text wrap="wrap">{`• ${w}`}</Text>
+              </Box>
             ))}
           </Box>
         </Panel>
@@ -642,6 +791,7 @@ export function TreeSelect({
           <Text color={PALETTE.success}>
             {BOX.on} {m.tree.selected(selected.size)}
           </Text>
+          {flash && <Text color={flash.startsWith('✗') ? PALETTE.danger : PALETTE.pink}>{`   ${flash.startsWith('✗') ? '' : '✓ '}${flash}`}</Text>}
           {warnings.length > 0 && <Text color={PALETTE.gold}>{`   ⚠ ${formatNumber(warnings.length)} (!)`}</Text>}
           {packEdit && <Text color={PALETTE.gold}>{`   ✎ ${m.tree.editingPack(packEdit.label, formatNumber(selected.size))}`}</Text>}
           {!packEdit && (toInstall > 0 || toRemove > 0) && (

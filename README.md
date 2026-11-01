@@ -131,11 +131,11 @@ A profile is a pack activated on its own, to switch between configurations such 
 
 | | Terminal (tree) | Command line | Web page |
 |---|---|---|---|
-| Create | `N`: the ticked skills, then a name and a description | `profile create <name> <ids...>` (`-d`, `--from-installed`) | **Save as pack** (name, description) |
-| Change | `E` on a personal pack: tick its skills, Enter, then name and description | `profile edit <id>` (asks), or `--name`, `-d`, `--add`, `--remove` | **Edit this pack…** (name, description, skills) |
-| Delete | `D` on a personal pack | `profile delete <id>` | **Delete this pack** |
-| Activate as profile | `P` on any pack (scope asked) | `profile use <id>` (`-p`) | **Use this pack as a profile…** |
-| Restore a backup | `B`: numbered list | `profile backups`, `profile restore [id]` (`--initial`) | **Backups** |
+| Create | `N`: the ticked skills, named and described in the tree's own window | `profile create <name> <ids...>` (`-d`, `--from-installed`) | **Save as pack** (name, description) |
+| Change | `E` on a personal pack: tick its skills, Enter, then name and description in a window | `profile edit <id>` (asks), or `--name`, `-d`, `--add`, `--remove` | **Edit this pack…** (name, description, skills) |
+| Delete | `D` on a personal pack, confirmed in a window | `profile delete <id>` | **Delete this pack** |
+| Activate as profile | `P` on any pack: scope (← →) and plan in a window, then the install | `profile use <id>` (`-p`) | **Use this pack as a profile…** |
+| Restore a backup | `B`: the backups in a window, Enter then y | `profile backups`, `profile restore [id]` (`--initial`) | **Backups** |
 
 `profile list` shows every pack (✎ marks the personal ones) and the active profile.
 
@@ -320,7 +320,7 @@ Agents load the name and description of every installed skill at each session st
 | `p` | preview the focused skill's `SKILL.md` before installing it, with its warning signs (↑↓ scroll, esc back) |
 | `u` | mark the focused outdated skill, or the outdated skills of a group, for update |
 | `U` | mark every outdated skill for update |
-| `N` | new pack from the ticked skills (name and description asked) |
+| `N` | new pack from the ticked skills (named in a window, without leaving the tree) |
 | `E` / `D` | edit / delete the focused personal pack (in edit mode, ticks are its skills: Enter saves, Esc cancels) |
 | `P` | use the focused pack as a profile |
 | `B` | backups: restore one |

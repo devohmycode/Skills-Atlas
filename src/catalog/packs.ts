@@ -5,7 +5,7 @@ import { z } from 'zod';
 import bundled from '../../data/packs.json' with { type: 'json' };
 import { configPath } from '../config.js';
 import { parseSkillId } from '../install/plan.js';
-import type { Catalog, Skill } from '../types.js';
+import type { Catalog, Skill, Theme } from '../types.js';
 
 /** A curated set of skills for one kind of work, installed as a block. */
 export interface Pack {
@@ -158,4 +158,22 @@ export function refreshPacks(catalog: Catalog, packs: Pack[] = readPacks()): Cat
   const skills = catalog.skills.map((s) => (s.themes.some((th) => th.startsWith('pack:')) ? { ...s, themes: s.themes.filter((th) => !th.startsWith('pack:')) } : s));
   const byTheme = Object.fromEntries(Object.entries(catalog.stats.byTheme).filter(([th]) => !th.startsWith('pack:')));
   return withPacks({ ...catalog, skills, themes: catalog.themes.filter((th) => !th.id.startsWith('pack:')), stats: { ...catalog.stats, byTheme } }, packs);
+}
+
+/**
+ * Skills and themes with their pack themes rebuilt from `packs`: what the tree shows
+ * after a pack is created, changed or deleted, without reloading anything.
+ */
+export function packThemes<S extends Pick<Skill, 'id' | 'themes'>>(skills: S[], themes: Theme[], packs: Pack[]): { skills: S[]; themes: Theme[] } {
+  const members = new Map<string, string[]>();
+  for (const p of packs) for (const id of p.skills) members.set(id.toLowerCase(), [...(members.get(id.toLowerCase()) ?? []), packTheme(p.id)]);
+  const out = skills.map((s) => {
+    const own = s.themes.filter((th) => !th.startsWith('pack:'));
+    const extra = members.get(s.id.toLowerCase()) ?? [];
+    return own.length === s.themes.length && !extra.length ? s : { ...s, themes: [...new Set([...own, ...extra])] };
+  });
+  const others = themes.filter((th) => !th.id.startsWith('pack:'));
+  const after = Math.max(...others.map((th, i) => (['installed', 'suggested', 'recommended', 'trending'].includes(th.id) ? i : -1))) + 1;
+  const list = packs.map((p) => ({ id: packTheme(p.id), label: `📦 ${p.name}`, description: p.description, pack: packStatus(p, skills as unknown as Skill[]) }));
+  return { skills: out, themes: [...others.slice(0, after), ...list, ...others.slice(after)] };
 }

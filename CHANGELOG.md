@@ -12,6 +12,7 @@
 - **Shipped packs always show.** `packs.json` now holds only personal packs, added after the shipped ones; it no longer replaces them, and `[]` no longer hides them. Copies of shipped packs an earlier version wrote there are ignored.
 - **Tree: warnings on their own page.** Heavy context loads and incomplete update checks no longer stack above the tree: the status line shows `⚠ N`, `!` lists them, Esc goes back. The logo now shows on every screen when the terminal is tall enough, and every list sizes itself under it.
 - **Fix:** the questions the tree's `N`, `E`, `P` and `B` keys ask (pack name, backup number…) no longer end the program with *Detected unsettled top-level await*: stdin is held while a question waits.
+- **Packs, profiles and backups without leaving the tree.** `N`, `E`, `D`, `P` and `B` open the tree's own windows (name and description, confirmation, backups list, profile scope and plan); the pack themes update in place, a restore reads what is installed again, and only a confirmed profile leaves the tree to install, like any change. Warnings are spaced, and agents with the same load share one line.
 
 ## 0.30.0 — 2026-10-23
 

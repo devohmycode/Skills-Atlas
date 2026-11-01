@@ -13,7 +13,8 @@ import { ACCENT, Banner, bannerLines, Header, Hints, Panel, ReservedRows, useTer
 import { ListSelect } from './ListSelect.js';
 import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
-import { scopesLabel, TreeSelect, type TreeAction, type TreeMemory } from './TreeSelect.js';
+import { scopesLabel, TreeSelect, type PackOps, type TreeAction, type TreeMemory } from './TreeSelect.js';
+import { isBundledPack, packThemes } from '../catalog/packs.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 import type { ScopedUpdateCheck } from '../install/updates.js';
 
@@ -62,7 +63,8 @@ export interface AppProps {
   onDone: (result: WizardResult | null) => void;
   /** Turns on the tree's pack, profile and backup keys; the ids of the packs that can be edited. */
   personalPacks?: Set<string>;
-  packActions?: boolean;
+  /** Pack and backup operations for the tree's N, E, D, P and B keys. */
+  packOps?: PackOps;
 }
 
 type Step = 'loading' | 'tree' | 'scope' | 'agents' | 'method' | 'confirm';
@@ -105,7 +107,12 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone, personalPacks, packActions, warnings = [] } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone, personalPacks: initialPersonal, packOps, warnings = [] } = props;
+  // Packs change while the tree is open (N, E, D): their themes are rebuilt here, in place.
+  const [themeList, setThemeList] = useState(themes);
+  const [personalPacks, setPersonalPacks] = useState(initialPersonal);
+  // After a restore: what it did, above the tree read again.
+  const [restoredNotice, setRestoredNotice] = useState<string>();
   const m = t();
   const { exit } = useApp();
   const { rows, columns } = useTerminalSize();
@@ -155,7 +162,8 @@ export function App(props: AppProps) {
     loadInstalled(readScopes)
       .then((data) => {
         if (!live) return;
-        setTree(data);
+        // Packs changed in this session (N, E, D) keep their themes when what is installed is read again.
+        setTree(packOps ? { ...data, skills: packThemes(data.skills, themeList, packOps.list()).skills } : data);
         next('loading');
       })
       .catch((err: unknown) => {
@@ -215,10 +223,10 @@ export function App(props: AppProps) {
     return screen(
       <Box flexDirection="column">
         {error && <Text color={PALETTE.danger}>{error}</Text>}
-        {notice && <Text>{notice}</Text>}
+        {(restoredNotice ?? notice) && <Text color={restoredNotice ? PALETTE.pink : undefined}>{restoredNotice ?? notice}</Text>}
         <TreeSelect
           warnings={[...warnings, ...(unchecked > 0 ? [t().cli.updatesUnchecked(unchecked)] : [])]}
-          themes={tree.installed.size ? [INSTALLED_THEME, ...themes] : themes}
+          themes={tree.installed.size ? [INSTALLED_THEME, ...themeList] : themeList}
           skills={tree.skills}
           installed={tree.installed}
           scopes={loadInstalled ? readScopes : undefined}
@@ -245,10 +253,25 @@ export function App(props: AppProps) {
           }}
           onCancel={() => finish(null)}
           personalPacks={personalPacks}
-          onAction={packActions ? (action) => finish({ ids: [], remove: [], update: [], options: { ...defaults, skillsVersion }, action }) : undefined}
+          packOps={packOps}
+          onAction={(action) => {
+            if (action.kind === 'packsChanged' && packOps) {
+              const packs = packOps.list();
+              const rebuilt = packThemes(tree.skills, themeList, packs);
+              setTree({ ...tree, skills: rebuilt.skills });
+              setThemeList(rebuilt.themes);
+              setPersonalPacks(new Set(packs.filter((p) => !isBundledPack(p.id)).map((p) => p.id)));
+            } else if (action.kind === 'restored') {
+              // What is installed changed: read it again, then back to the tree.
+              setRestoredNotice(action.message);
+              setStep('loading');
+            } else if (action.kind === 'profile') {
+              finish({ ids: [], remove: [], update: [], options: { ...defaults, skillsVersion }, action });
+            }
+          }}
         />
       </Box>,
-      (error ? 1 : 0) + (notice ? notice.split('\n').length : 0),
+      (error ? 1 : 0) + ((restoredNotice ?? notice) ? (restoredNotice ?? notice)!.split('\n').length : 0),
     );
   }
 

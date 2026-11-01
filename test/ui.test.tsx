@@ -713,49 +713,117 @@ describe('pack keys in the tree', () => {
     skill('a/b@tailwind', ['frontend']),
     { ...skill('c/d@pentest', ['security', 'pack:frontend']) },
   ];
-  const tree = (onAction: (a: unknown) => void, onSubmit = vi.fn()) =>
-    render(<TreeSelect themes={packThemes} skills={packSkills} personalPacks={new Set(['mine'])} onAction={onAction as never} onSubmit={onSubmit} onCancel={() => {}} />);
+  /** Packs and backups in memory, each call recorded. */
+  function ops() {
+    let packs = [{ id: 'mine', name: 'Mine', description: 'mine', skills: ['a/b@react-hooks', 'gone/repo@old'] }];
+    const calls: unknown[][] = [];
+    const o = {
+      list: () => packs,
+      create: vi.fn((input: { name: string; description: string; skills: string[] }) => {
+        if (input.name === 'taken') throw new Error('pack id already exists');
+        const p = { id: input.name.toLowerCase().replace(/\W+/g, '-'), ...input };
+        packs = [...packs, p];
+        return p;
+      }),
+      update: vi.fn((id: string, patch: { name?: string; description?: string; skills?: string[] }) => {
+        packs = packs.map((p) => (p.id === id ? { ...p, ...patch } as typeof p : p));
+        return packs.find((p) => p.id === id)!;
+      }),
+      remove: vi.fn((id: string) => { packs = packs.filter((p) => p.id !== id); }),
+      backups: () => [{ id: 'b1', createdAt: '2026-11-01T10:00:00.000Z', scope: 'global' as const, reason: 'profile:mine', initial: true, skills: [{ name: 'pdf' }] }],
+      restore: vi.fn(async () => 'undo-1'),
+      plan: vi.fn(async (_pack: string, scope: string) => ({ keep: [], remove: scope === 'global' ? [{ id: 'x/y@old' }] : [], install: ['a/b@react-hooks'] })),
+    };
+    return { o, calls };
+  }
+  const tree = (o: ReturnType<typeof ops>['o'], onAction = vi.fn(), onSubmit = vi.fn()) =>
+    render(<TreeSelect themes={packThemes} skills={packSkills} personalPacks={new Set(['mine'])} packOps={o} onAction={onAction} onSubmit={onSubmit} onCancel={() => {}} />);
 
-  it('creates a pack from the ticked skills, and edits a personal pack by ticking its skills', async () => {
+  it('names a new pack in its own window, and shows an error there instead of leaving', async () => {
+    const { o } = ops();
     const onAction = vi.fn();
-    const onSubmit = vi.fn();
-    const { lastFrame, stdin } = tree(onAction, onSubmit);
+    const { lastFrame, stdin } = tree(o, onAction);
     await tick();
-    // N: nothing ticked, no pack.
     await press(stdin, 'N');
-    expect(onAction).not.toHaveBeenCalled();
-    // On 📦 Mine: open it, tick tailwind elsewhere, then N saves the ticked skills as a new pack.
+    expect(lastFrame()).not.toContain('New pack');
+    // Tick a skill under 📦 Mine, then N.
     await press(stdin, KEY.right, KEY.down, ' ', 'N');
-    expect(onAction).toHaveBeenLastCalledWith({ kind: 'createPack', ids: ['a/b@react-hooks'] });
-    // E on the personal pack: ticks become membership, and the status line says so.
-    await press(stdin, KEY.up, 'E');
+    expect(lastFrame()).toContain('New pack from the 1 ticked skill(s)');
+    await press(stdin, 'taken', KEY.enter, KEY.enter);
+    expect(lastFrame()).toContain('✗ pack id already exists');
+    // The name field has the focus again: erase, retype, then Enter twice (description, save).
+    await press(stdin, ...Array(5).fill('\u007F'), 'Design', KEY.enter, KEY.enter);
+    expect(o.create).toHaveBeenLastCalledWith({ name: 'Design', description: '1 skills', skills: ['a/b@react-hooks'] });
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'packsChanged' });
+    expect(lastFrame()).toContain('✓ Pack design created with 1 skills');
+  });
+
+  it('edits a personal pack by ticking its skills, then its name, keeping members the tree does not show', async () => {
+    const { o } = ops();
+    const onSubmit = vi.fn();
+    const { lastFrame, stdin } = tree(o, vi.fn(), onSubmit);
+    await tick();
+    await press(stdin, 'E');
     expect(lastFrame()).toContain('✎ Editing 📦 Mine: tick its skills (1)');
     expect(lastFrame()).not.toContain('will be uninstalled');
-    // Esc gives the selection back as it was.
     await press(stdin, KEY.escape);
     expect(lastFrame()).not.toContain('Editing');
-    await press(stdin, 'E', KEY.down, ' ', KEY.enter);
-    expect(onAction).toHaveBeenLastCalledWith({ kind: 'editPack', pack: 'mine', skills: [] });
-    // Enter in edit mode never installs.
+    await press(stdin, 'E', KEY.right, KEY.down, KEY.down, ' ', KEY.enter);
+    expect(lastFrame()).toContain('📦 Mine: 3 skill(s)');
+    await press(stdin, ' 2', KEY.enter, KEY.enter);
+    // Down twice lands on 📦 Frontend dev: space ticks its member, pentest.
+    expect(o.update).toHaveBeenLastCalledWith('mine', { name: 'Mine 2', description: 'mine', skills: ['a/b@react-hooks', 'c/d@pentest', 'gone/repo@old'] });
+    expect(lastFrame()).not.toContain('Editing');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('offers profile and backups for any pack, edit and delete only for personal ones', async () => {
-    const onAction = vi.fn();
-    const { lastFrame, stdin } = tree(onAction);
+  it('asks before deleting, and only offers edit and delete for personal packs', async () => {
+    const { o } = ops();
+    const { lastFrame, stdin } = tree(o);
     await tick();
     expect(lastFrame()).toContain('E edit pack');
     await press(stdin, 'D');
-    expect(onAction).toHaveBeenLastCalledWith({ kind: 'deletePack', pack: 'mine' });
-    await press(stdin, 'P');
-    expect(onAction).toHaveBeenLastCalledWith({ kind: 'profile', pack: 'mine' });
-    // The shipped Frontend pack: P works, E and D do nothing.
+    expect(lastFrame()).toContain('Delete the pack 📦 Mine?');
+    await press(stdin, 'n');
+    expect(o.remove).not.toHaveBeenCalled();
+    await press(stdin, 'D', 'y');
+    expect(o.remove).toHaveBeenCalledWith('mine');
+    // The shipped Frontend pack: no edit, no delete.
     await press(stdin, KEY.down);
     expect(lastFrame()).not.toContain('E edit pack');
-    onAction.mockClear();
     await press(stdin, 'E', 'D');
-    expect(onAction).not.toHaveBeenCalled();
-    await press(stdin, 'P', 'B');
-    expect(onAction.mock.calls).toEqual([[{ kind: 'profile', pack: 'frontend' }], [{ kind: 'backups' }]]);
+    expect(lastFrame()).not.toContain('Delete the pack');
+  });
+
+  it('chooses a profile scope in its window, then hands the install over', async () => {
+    const { o } = ops();
+    const onAction = vi.fn();
+    const { lastFrame, stdin } = tree(o, onAction);
+    await tick();
+    await press(stdin, 'P');
+    expect(lastFrame()).toContain('Profile 📦 Mine (global)');
+    expect(lastFrame()).toContain('− x/y@old');
+    expect(lastFrame()).toContain('+ a/b@react-hooks');
+    await press(stdin, KEY.right);
+    expect(o.plan).toHaveBeenLastCalledWith('mine', 'project');
+    expect(lastFrame()).toContain('Profile 📦 Mine (project)');
+    expect(lastFrame()).not.toContain('− x/y@old');
+    await press(stdin, KEY.enter);
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'profile', pack: 'mine', scope: 'project' });
+  });
+
+  it('restores a backup from its window, after a yes', async () => {
+    const { o } = ops();
+    const onAction = vi.fn();
+    const { lastFrame, stdin } = tree(o, onAction);
+    await tick();
+    await press(stdin, 'B');
+    expect(lastFrame()).toContain('2026-11-01 10:00');
+    expect(lastFrame()).toContain('profile:mine — pdf');
+    await press(stdin, KEY.enter, 'n');
+    expect(o.restore).not.toHaveBeenCalled();
+    await press(stdin, KEY.enter, 'y');
+    expect(o.restore).toHaveBeenCalledWith('b1');
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'restored', message: expect.stringContaining('Restored b1') });
   });
 });

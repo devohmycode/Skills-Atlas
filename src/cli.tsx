@@ -41,7 +41,7 @@ import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile
 const PROJECT_FILE = 'skills-atlas.json';
 import { newerVersion } from './version.js';
 import { App, type WizardResult } from './ui/App.js';
-import type { TreeAction, TreeMemory } from './ui/TreeSelect.js';
+import type { PackOps, TreeAction, TreeMemory } from './ui/TreeSelect.js';
 import { Progress } from './ui/Progress.js';
 import { colorDepth, logo } from './ui/logo.js';
 import { TERMINAL_PALETTE } from './ui/palette.js';
@@ -143,7 +143,10 @@ async function projectCatalog(opts: CommonOptions): Promise<Catalog> {
 /** A warning for each agent whose skill descriptions weigh on every session start (listed with `!` in the tree). */
 function contextWarnings(): string[] {
   try {
-    return heavyLoads(agentLoads(SCOPES.flatMap((sc) => scanInstalled(sc)))).map((l) => c.heavyLoad(l.agent, formatNumber(l.startup), formatNumber(STARTUP_BUDGET)));
+    // Agents reading the same folders load the same descriptions: one line for each load.
+    const byLoad = new Map<number, string[]>();
+    for (const l of heavyLoads(agentLoads(SCOPES.flatMap((sc) => scanInstalled(sc))))) byLoad.set(l.startup, [...(byLoad.get(l.startup) ?? []), l.agent]);
+    return [...byLoad].map(([startup, agents]) => c.heavyLoad(agents.join(', '), formatNumber(startup), formatNumber(STARTUP_BUDGET)));
   } catch {
     return [];
   }
@@ -363,6 +366,9 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
     // Until a run has its own summary to show, the line above the tree tells of a new version.
     const versionNotice = newer ? paint('dim', c.newVersion(newer, pkg.version)) : '';
     const wizard = async (notice: string) => {
+      // Packs may have changed since the last tree (its own windows, another terminal).
+      catalog = refreshPacks(catalog);
+      skills = querySkills(catalog, toQuery(catalog, opts));
       const { defaults, detected } = resolveDefaults();
       let result: WizardResult | null = null;
       const restoreScreen = opts.mouse ? enableMouse() : () => {};
@@ -383,7 +389,7 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           treeMemory={treeMemory}
           findUpdates={opts.offline ? undefined : (scopes) => checkUpdates(scopes)}
           audit={auditEnabled(readConfig(), opts.audit)}
-          packActions
+          packOps={packOps}
           personalPacks={new Set(readPacks().filter((p) => !isBundledPack(p.id)).map((p) => p.id))}
           onDone={(r) => (result = r)}
         />,
@@ -393,27 +399,32 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
       releaseStdin();
       return result as WizardResult | null;
     };
-    /** A pack, profile or backup key of the tree: done here, in the terminal, then back to the tree. */
-    const act = async (action: TreeAction): Promise<string> => {
-      let changedPacks = false;
-      let notice = '';
-      if (action.kind === 'createPack') changedPacks = !!(await createPack(catalog, action.ids));
-      else if (action.kind === 'editPack') {
-        // Members the tree does not show (filtered out, or gone from the catalog) stay in the pack.
-        const shown = new Set(skills.map((s) => s.id));
-        const kept = (readPacks().find((p) => p.id === action.pack)?.skills ?? []).filter((id) => !shown.has(id));
-        changedPacks = await editPack(catalog, action.pack, { skills: [...action.skills.filter((id) => shown.has(id)), ...kept] });
-      } else if (action.kind === 'deletePack') changedPacks = await removePack(action.pack);
-      else if (action.kind === 'profile') notice = await useProfile(action.pack, opts, true);
-      else notice = await pickAndRestore();
-      if (changedPacks) {
-        catalog = refreshPacks(catalog);
-        skills = querySkills(catalog, toQuery(catalog, opts));
-      }
-      // Time to read what happened before the tree takes the screen again.
-      if (process.stdin.isTTY) await prompt(paint('dim', `${c.backToTree} `));
-      return notice;
+    /** Pack and backup operations of the tree's own windows: nothing is asked outside of it. */
+    const packOps: PackOps = {
+      list: () => readPacks(),
+      create: ({ name, description, skills: ids }) => savePack({ id: packId(name), name, description, skills: ids }, catalog.skills),
+      update: (id, patch) => updatePack(id, patch, catalog.skills),
+      remove: (id) => deletePack(id),
+      backups: () => listBackups().map(({ dirs: _dirs, ...b }) => b),
+      restore: async (id) => {
+        const backup = listBackups().find((b) => b.id === id);
+        if (!backup) throw new Error(c.profileUnknownBackup(id));
+        const undo = restoreBackup(id, await listInstalled(backup.scope));
+        const config = readConfig();
+        const profiles = { ...(config.profiles ?? {}) };
+        delete profiles[backup.scope === 'global' ? 'global' : backup.cwd!];
+        writeConfig({ ...config, profiles });
+        return undo.id;
+      },
+      plan: async (id, scope) => {
+        const pack = readPacks().find((p) => p.id === id);
+        if (!pack) throw new Error(c.unknownPacks(id));
+        return profilePlan(pack, await listInstalled(scope));
+      },
     };
+    /** A profile confirmed in the tree: saved, then installed like any change; back to the tree with the summary. */
+    const act = async (action: TreeAction): Promise<string> =>
+      action.kind === 'profile' ? useProfile(action.pack, { ...opts, yes: true }, action.scope) : '';
     const runs = await browseLoop(wizard, (r) => (r.action ? act(r.action) : apply(r.ids, r.remove, r.options, opts, r.update)), opts);
     if (!runs) console.log(paint('dim', m.run.noChange));
   });
@@ -758,17 +769,14 @@ async function removePack(id: string, yes = false): Promise<boolean> {
  * Activates a pack as a profile in one scope (asked for in a terminal when no flag
  * says it): shows the plan, asks for a yes, saves the scope, then applies.
  */
-async function useProfile(id: string, opts: InstallFlags, askScope = false): Promise<string> {
+async function useProfile(id: string, opts: InstallFlags, chosenScope?: Scope): Promise<string> {
   const pack = readPacks().find((p) => p.id === id);
   if (!pack) {
     console.error(paint('red', `✗ ${c.unknownPacks(id)}`));
     return '';
   }
   const preset = presetFromFlags(opts);
-  let scope: Scope = preset.scope ?? 'global';
-  if (!preset.scope && askScope && process.stdin.isTTY) {
-    scope = /^p/i.test(await prompt(`${c.profileScopePrompt} `, 'g')) ? 'project' : 'global';
-  }
+  const scope: Scope = chosenScope ?? preset.scope ?? 'global';
   const installed = await listInstalled(scope);
   const plan = profilePlan(pack, installed);
   console.log(paint('bold', c.profileTitle(pack.name, t().tree.where[scope])));
@@ -833,23 +841,6 @@ async function restoreScope(backup: Backup, yes = false): Promise<boolean> {
   console.log(paint('pink', `✓ ${c.profileRestored(backup.id)}`));
   console.log(paint('dim', c.profileUndo(undo.id)));
   return true;
-}
-
-/** From the tree: the backups listed, one picked by its number (Enter cancels), then restored. */
-async function pickAndRestore(): Promise<string> {
-  const backups = listBackups();
-  if (!backups.length) {
-    console.log(paint('dim', c.profileNoBackup));
-    return '';
-  }
-  printBackups(backups);
-  const n = Number.parseInt(await prompt(`${c.backupPickPrompt} `), 10);
-  const backup = backups[n - 1];
-  if (!backup) {
-    console.log(paint('dim', m.run.noChange));
-    return '';
-  }
-  return (await restoreScope(backup)) ? paint('pink', `✓ ${c.profileRestored(backup.id)}`) : '';
 }
 
 const profile = program.command('profile').description(c.profileCmd);
