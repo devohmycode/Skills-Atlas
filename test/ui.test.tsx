@@ -610,7 +610,14 @@ describe('installed skills in the wizard', () => {
     await tick();
     await tick();
     expect(lastFrame()).toContain('↑ 1 update (u)');
+    // Warnings are one ⚠ count on the status line; ! lists them on their own page, Esc goes back.
+    expect(lastFrame()).not.toContain('Update check incomplete');
+    expect(lastFrame()).toContain('⚠ 1 (!)');
+    await press(stdin, '!');
+    expect(lastFrame()).toContain('Warnings (1)');
     expect(lastFrame()).toContain('Update check incomplete: 1 repository check(s) failed');
+    await press(stdin, KEY.escape);
+    expect(lastFrame()).not.toContain('Warnings (1)');
     await press(stdin, KEY.right, KEY.down);
     expect(lastFrame()).toContain('↑ update available');
     await press(stdin, 'u');

@@ -88,6 +88,8 @@ export interface TreeSelectProps {
   onAction?: (action: TreeAction) => void;
   /** Ids of the packs that can be edited and deleted (the personal ones). */
   personalPacks?: Set<string>;
+  /** Warnings about this machine: a ⚠ count on the status line, the list on its own page with `!`. */
+  warnings?: string[];
 }
 
 /** Lines used around the list: header, status, search, details panel, hints (may wrap). */
@@ -101,6 +103,7 @@ const OFFICIAL_MARK = '◆';
 const RECOMMENDED_MARK = '★';
 const RECOMMENDED = 'recommended';
 const NO_PACKS = new Set<string>();
+const NO_WARNINGS: string[] = [];
 const EMPTY_INSTALLED = new Map<string, InstalledEntry>();
 const NO_UPDATES = new Set<string>();
 const UPDATE_MARK = '↑';
@@ -174,9 +177,11 @@ export function TreeSelect({
   hasBin = onPath,
   onAction,
   personalPacks = NO_PACKS,
+  warnings = NO_WARNINGS,
 }: TreeSelectProps) {
   const m = t();
   // Editing a pack's skills: ticks mean membership, not installs; the selection before it comes back on Esc.
+  const [showWarnings, setShowWarnings] = useState(false);
   const [packEdit, setPackEdit] = useState<{ id: string; label: string; saved: Set<string> } | null>(null);
   const installed = packEdit ? EMPTY_INSTALLED : installedProp;
   // Catalog skills (not home-made ones), the only ones a pack can hold.
@@ -442,6 +447,10 @@ export function TreeSelect({
 
   useInput((input, key) => {
     if (isMouseInput(input)) return;
+    if (showWarnings) {
+      if (key.escape || key.return || input === '!' || input === 'q') setShowWarnings(false);
+      return;
+    }
     if (preview) {
       if (key.upArrow || input === 'k') scrollPreview(-1);
       else if (key.downArrow || input === 'j') scrollPreview(1);
@@ -496,7 +505,8 @@ export function TreeSelect({
       onAction({ kind: 'profile', pack: focusedPack(row)! });
     } else if (!packEdit && onAction && input === 'B') {
       onAction({ kind: 'backups' });
-    } else if (input === '/') startSearch();
+    } else if (input === '!' && warnings.length) setShowWarnings(true);
+    else if (input === '/') startSearch();
     else if (input === 's') cycleSort();
     else if (input === 'o') toggleOfficial();
     else if (input === 'a') toggleAll();
@@ -543,10 +553,27 @@ export function TreeSelect({
         ['o', m.keys.official, toggleOfficial],
         ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint, ['p', m.keys.preview, openPreview] as Hint] : []),
         ...(updates.size ? [['u', m.keys.update] as Hint, ['U', m.keys.updateAll, () => toggleUpdate([...updates])] as Hint] : []),
+        ...(warnings.length ? [['!', m.keys.warnings(warnings.length), () => setShowWarnings(true)] as Hint] : []),
         ...packHints,
         [m.keyNames.enter, m.keys.continue, canSubmit ? submit : undefined],
         ['q', m.keys.quit, onCancel],
       ];
+
+  if (showWarnings) {
+    return (
+      <Box flexDirection="column">
+        <Text bold color={PALETTE.gold}>{`⚠ ${m.tree.warningsTitle(formatNumber(warnings.length))}`}</Text>
+        <Panel>
+          <Box flexDirection="column">
+            {warnings.map((w, i) => (
+              <Text key={i} wrap="wrap">{`• ${w}`}</Text>
+            ))}
+          </Box>
+        </Panel>
+        <Hints items={[[m.keyNames.esc, m.keys.back, () => setShowWarnings(false)]]} />
+      </Box>
+    );
+  }
 
   if (preview) {
     const s = preview.skill;
@@ -615,6 +642,7 @@ export function TreeSelect({
           <Text color={PALETTE.success}>
             {BOX.on} {m.tree.selected(selected.size)}
           </Text>
+          {warnings.length > 0 && <Text color={PALETTE.gold}>{`   ⚠ ${formatNumber(warnings.length)} (!)`}</Text>}
           {packEdit && <Text color={PALETTE.gold}>{`   ✎ ${m.tree.editingPack(packEdit.label, formatNumber(selected.size))}`}</Text>}
           {!packEdit && (toInstall > 0 || toRemove > 0) && (
             <Text>

@@ -299,7 +299,7 @@ Agents load the name and description of every installed skill at each session st
 
 - the `SKILL.md` preview (`p`), the web page's **Details**, `skills-atlas show` (on stderr, `cost` with `--json`) and the MCP server's `show_skill` give a skill's two costs before you install it;
 - `skills-atlas installed --size` lists, under each agent, every skill's startup and on-use tokens and its size on disk, with the agent's total startup load (`startup_tokens` and `cost` with `--json`);
-- when an agent loads more than 5,000 tokens of skill descriptions at each start, a warning names it above the tree and under `installed --size`: untick the skills you do not use.
+- when an agent loads more than 5,000 tokens of skill descriptions at each start, a warning names it under `installed --size`, and in the tree's warnings (`⚠ N` on the status line, listed with `!`): untick the skills you do not use.
 
 ### Installation diagnostics
 
@@ -324,6 +324,7 @@ Agents load the name and description of every installed skill at each session st
 | `E` / `D` | edit / delete the focused personal pack (in edit mode, ticks are its skills: Enter saves, Esc cancels) |
 | `P` | use the focused pack as a profile |
 | `B` | backups: restore one |
+| `!` | warnings (heavy context loads, incomplete update checks): the status line shows only `⚠ N`, `!` lists them, Esc goes back |
 | enter | continue |
 | `q` | quit |
 

@@ -18,7 +18,7 @@ it('creates a profile, shows what activating it would do without touching anythi
   try {
     const created = run('profile', 'create', 'My Docs', 'anthropics/skills@pdf', 'nobody/none@x');
     expect(created.status).toBe(0);
-    expect(created.stdout).toContain('Profile my-docs created with 1 skills');
+    expect(created.stdout).toContain('Pack my-docs created with 1 skills');
     expect(created.stderr).toContain('nobody/none@x');
     expect(JSON.parse(readFileSync(join(cwd, 'config', 'skills-atlas', 'packs.json'), 'utf8')).at(-1)).toMatchObject({ id: 'my-docs', skills: ['anthropics/skills@pdf'] });
     expect(JSON.parse(run('profile', 'list', '--json').stdout).map((p: { id: string }) => p.id)).toContain('my-docs');

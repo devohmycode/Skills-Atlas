@@ -10,6 +10,8 @@
 - **Profiles.** `skills-atlas profile use <pack>` (and **Use this pack as a profile…** on the web page) keeps only a pack's skills in a scope: the others, home-made ones included, are removed after the whole scope is saved byte for byte. `profile restore` (and **Backups** on the web page) puts a scope back exactly, offline, saving the current state first; `--initial` returns to the configuration before any profile. `profile create`, `list` and `backups` manage the rest.
 - **Manage personal packs everywhere.** In the tree, `N` saves the ticked skills as a pack (name and description asked), `E` edits a personal pack by ticking its skills, `D` deletes it, `P` activates any pack as a profile and `B` restores a backup. `profile edit` and `profile delete` do the same on the command line; the web page gets **Edit this pack…** (name, description, skills) and **Delete this pack**, and its Save as pack fills the id from the name. Shipped packs stay read-only; backups are never touched by pack changes.
 - **Shipped packs always show.** `packs.json` now holds only personal packs, added after the shipped ones; it no longer replaces them, and `[]` no longer hides them. Copies of shipped packs an earlier version wrote there are ignored.
+- **Tree: warnings on their own page.** Heavy context loads and incomplete update checks no longer stack above the tree: the status line shows `⚠ N`, `!` lists them, Esc goes back. The logo now shows on every screen when the terminal is tall enough, and every list sizes itself under it.
+- **Fix:** the questions the tree's `N`, `E`, `P` and `B` keys ask (pack name, backup number…) no longer end the program with *Detected unsettled top-level await*: stdin is held while a question waits.
 
 ## 0.30.0 — 2026-10-23
 

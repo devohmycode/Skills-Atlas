@@ -9,7 +9,7 @@ import { riskWhere } from '../risks.js';
 import { auditSkills, auditTarget, failsAudit, type AuditResult } from '../audit.js';
 import { formatCommand, planInstall, planRemovals, planUpdates, type Update } from '../install/plan.js';
 import { SCOPES, type InstallMethod, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
-import { ACCENT, Banner, Header, Hints, Panel, useTerminalSize, type Hint, type StepId } from './Layout.js';
+import { ACCENT, Banner, bannerLines, Header, Hints, Panel, ReservedRows, useTerminalSize, type Hint, type StepId } from './Layout.js';
 import { ListSelect } from './ListSelect.js';
 import { isMouseInput } from './mouse.js';
 import { padEnd } from './width.js';
@@ -49,6 +49,8 @@ export interface AppProps {
   loadInstalled?: (scopes: Scope[]) => Promise<TreeData>;
   /** Summary of the previous run, shown above the tree. */
   notice?: string;
+  /** Warnings about this machine (heavy context loads…): one ⚠ count in the tree, listed with `!`. */
+  warnings?: string[];
   /** Shared by the successive trees of one session: open groups and focused row. */
   treeMemory?: TreeMemory;
   /** `owner/repo@name` (lower case) of the installed skills with a newer version, per scope; checked in the background. */
@@ -75,6 +77,8 @@ const STEP_OF: Record<Step, StepId> = {
 };
 /** The big logo needs about this many rows on top of the step content. */
 const BANNER_MIN_ROWS = 26;
+/** Rows the tree keeps for itself under the logo; below that, the logo is left out on the tree. */
+const TREE_MIN_ROWS = 30;
 
 /** The skills CLI only asks for a method when agents use distinct directories. */
 function needsMethod(agents: string[]): boolean {
@@ -101,10 +105,10 @@ function nextStep(from: Step | undefined, preset: AppProps['preset'], a: Answers
 }
 
 export function App(props: AppProps) {
-  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone, personalPacks, packActions } = props;
+  const { themes, skills, preset, defaults, detectedAgents = [], skillsVersion, initialIds, loadInstalled, sort, search, official, notice, treeMemory, findUpdates, audit = true, readSkill, onDone, personalPacks, packActions, warnings = [] } = props;
   const m = t();
   const { exit } = useApp();
-  const { rows } = useTerminalSize();
+  const { rows, columns } = useTerminalSize();
   const hasTree = !initialIds;
   const [ids, setIds] = useState<string[]>(initialIds ?? []);
   const [removals, setRemovals] = useState<Removal[]>([]);
@@ -187,12 +191,17 @@ export function App(props: AppProps) {
     };
   }, [step === 'tree', tree]);
 
-  /** Every screen: header with the steps, the logo on the first ones, then the content. */
-  const screen = (content: ReactNode) => (
+  /**
+   * Every screen: the logo when the terminal is tall enough (the tree needs more room under it),
+   * the header with the steps, then the content, which sizes itself without the rows above it.
+   */
+  const logoRows = bannerLines(columns);
+  const showBanner = rows >= (step === 'tree' ? logoRows + TREE_MIN_ROWS : BANNER_MIN_ROWS);
+  const screen = (content: ReactNode, above = 0) => (
     <Box flexDirection="column" paddingX={1} paddingTop={1}>
-      {step !== 'tree' && history.length === 0 && rows >= BANNER_MIN_ROWS && <Banner />}
+      {showBanner && <Banner />}
       <Header step={STEP_OF[step]} />
-      {content}
+      <ReservedRows.Provider value={(showBanner ? logoRows : 0) + above}>{content}</ReservedRows.Provider>
     </Box>
   );
 
@@ -207,8 +216,8 @@ export function App(props: AppProps) {
       <Box flexDirection="column">
         {error && <Text color={PALETTE.danger}>{error}</Text>}
         {notice && <Text>{notice}</Text>}
-        {unchecked > 0 && <Text color={PALETTE.gold}>{t().cli.updatesUnchecked(unchecked)}</Text>}
         <TreeSelect
+          warnings={[...warnings, ...(unchecked > 0 ? [t().cli.updatesUnchecked(unchecked)] : [])]}
           themes={tree.installed.size ? [INSTALLED_THEME, ...themes] : themes}
           skills={tree.skills}
           installed={tree.installed}
@@ -239,6 +248,7 @@ export function App(props: AppProps) {
           onAction={packActions ? (action) => finish({ ids: [], remove: [], update: [], options: { ...defaults, skillsVersion }, action }) : undefined}
         />
       </Box>,
+      (error ? 1 : 0) + (notice ? notice.split('\n').length : 0),
     );
   }
 

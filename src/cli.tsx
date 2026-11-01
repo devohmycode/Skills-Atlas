@@ -140,13 +140,12 @@ async function projectCatalog(opts: CommonOptions): Promise<Catalog> {
   }
 }
 
-/** A warning, above the tree, for each agent whose skill descriptions weigh on every session start. */
-function contextNotice(): string {
+/** A warning for each agent whose skill descriptions weigh on every session start (listed with `!` in the tree). */
+function contextWarnings(): string[] {
   try {
-    const heavy = heavyLoads(agentLoads(SCOPES.flatMap((sc) => scanInstalled(sc))));
-    return heavy.map((l) => paint('yellow', `⚠ ${c.heavyLoad(l.agent, formatNumber(l.startup), formatNumber(STARTUP_BUDGET))}`)).join('\n');
+    return heavyLoads(agentLoads(SCOPES.flatMap((sc) => scanInstalled(sc)))).map((l) => c.heavyLoad(l.agent, formatNumber(l.startup), formatNumber(STARTUP_BUDGET)));
   } catch {
-    return '';
+    return [];
   }
 }
 
@@ -379,7 +378,8 @@ filterOptions(installOptions(program.command('browse', { isDefault: true })))
           sort={opts.sort}
           search={opts.search}
           official={opts.official}
-          notice={[notice || versionNotice, contextNotice()].filter(Boolean).join('\n')}
+          notice={notice || versionNotice}
+          warnings={contextWarnings()}
           treeMemory={treeMemory}
           findUpdates={opts.offline ? undefined : (scopes) => checkUpdates(scopes)}
           audit={auditEnabled(readConfig(), opts.audit)}
@@ -669,12 +669,17 @@ async function ask(question: string): Promise<boolean> {
 
 /** Asks for a line of text on the terminal; an empty answer keeps `fallback`. */
 async function prompt(question: string, fallback = ''): Promise<string> {
+  // After the tree, stdin is paused and unref'd so that the process can end: a question
+  // must hold it again, or Node exits while waiting for the answer.
+  process.stdin.ref();
+  process.stdin.resume();
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
     const answer = (await rl.question(fallback ? `${question} [${fallback}] ` : question)).trim();
     return answer || fallback;
   } finally {
     rl.close();
+    releaseStdin();
   }
 }
 
