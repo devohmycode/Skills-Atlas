@@ -8,7 +8,7 @@
 import { onPath, prerequisites } from './prereqs.js';
 
 export type RiskLevel = 'high' | 'medium' | 'info';
-export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode' | 'missingBin' | 'requires' | 'unaudited';
+export type RiskRule = 'pipeShell' | 'credentials' | 'destructive' | 'hidden' | 'sudo' | 'secrets' | 'sendsData' | 'runsCode' | 'missingBin' | 'requires' | 'unaudited' | 'remoteContent' | 'hardcodedKey' | 'lookalike';
 
 export interface Risk {
   rule: RiskRule;
@@ -22,7 +22,26 @@ export interface Risk {
   file?: string;
 }
 
-const RULES: { rule: RiskRule; level: RiskLevel; label: string; re: RegExp }[] = [
+/** A key that is a placeholder, not a secret: `sk-xxxxxxxx`, `ghp_your_token_here`. */
+const PLACEHOLDER = /x{6,}|0{8,}|1234567|example|your|placeholder|redacted|\.{3}|<|\*{3}/i;
+const KEY = /\b(sk-(ant-|proj-|live-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35})|-----BEGIN [A-Z ]*PRIVATE KEY-----/g;
+
+/** The keys of a line that look real, each cut to its first characters: a report must not spread the key. */
+function hardcodedKeys(text: string): string[] {
+  return [...text.matchAll(KEY)].map((m) => m[0]).filter((k) => !PLACEHOLDER.test(k));
+}
+const maskKeys = (text: string): string => text.replace(KEY, (k) => (PLACEHOLDER.test(k) ? k : `${k.slice(0, 8)}…`));
+
+interface Rule {
+  rule: RiskRule;
+  level: RiskLevel;
+  label: string;
+  re: RegExp;
+  /** Not reported on a line that already matched one of these: they say more about the same line. */
+  unless?: RiskRule[];
+}
+
+const RULES: Rule[] = [
   {
     rule: 'pipeShell', level: 'high', label: 'downloads and runs code',
     re: /\b(curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*\|\s*(sudo\s+)?((ba|z)?sh\b|iex\b|(python3?|node)\s+-(\s|$))|base64\s+(-d|--decode)[^\n]*\|\s*(ba)?sh\b/i,
@@ -44,6 +63,11 @@ const RULES: { rule: RiskRule; level: RiskLevel; label: string; re: RegExp }[] =
     re: /\bcurl\b[^\n]*(\s-d\s|\s--data|\s-X\s*(POST|PUT)|\s-F\s|\s--upload-file)|\bwget\b[^\n]*--post-(data|file)|\bmethod:\s*['"](POST|PUT)['"]|\brequests\.(post|put)\(/i,
   },
   {
+    // A verb that reads, then a URL: what is served there can change after the review, and pinning the skill does not pin it.
+    rule: 'remoteContent', level: 'medium', label: 'reads content from a URL, which can change after the review', unless: ['pipeShell', 'sendsData'],
+    re: /\b(fetch(es|ed|ing)?|download(s|ed|ing)?|retrieve(s|d)?|load(s|ed|ing)?|read(s|ing)?(?!\s+more\b)|follow(s|ing)?|consult|curl|wget|WebFetch|web_fetch|Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\b[^\n]{0,80}?https?:\/\/[^\s)>"'`\]]+/i,
+  },
+  {
     rule: 'runsCode', level: 'info', label: 'installs or runs packages or scripts',
     re: /\b(npx|bunx|uvx|pipx)\s+(-y\s+)?[@\w]|\b(pip3?|npm|pnpm|yarn|brew|apt(-get)?|cargo|go)\s+(install|add|i)\b|\b(scripts?|bin)\/[\w.-]+\.(sh|py|js|ts|ps1|rb)\b/i,
   },
@@ -55,12 +79,17 @@ const ORDER: Record<RiskLevel, number> = { high: 0, medium: 1, info: 2 };
 export function scanRisks(markdown: string, has: (bin: string) => boolean = onPath): Risk[] {
   const found = new Map<RiskRule, Risk>();
   markdown.split('\n').forEach((text, i) => {
-    for (const r of RULES) {
-      if (!r.re.test(text)) continue;
-      const seen = found.get(r.rule);
+    const here = new Set<RiskRule>();
+    const add = (rule: RiskRule, level: RiskLevel, label: string) => {
+      here.add(rule);
+      const seen = found.get(rule);
       if (seen) seen.count++;
-      else found.set(r.rule, { rule: r.rule, level: r.level, label: r.label, line: i + 1, count: 1, excerpt: text.trim().slice(0, 160) });
+      else found.set(rule, { rule, level, label, line: i + 1, count: 1, excerpt: maskKeys(text.trim()).slice(0, 160) });
+    };
+    for (const r of RULES) {
+      if (r.re.test(text) && !r.unless?.some((u) => here.has(u))) add(r.rule, r.level, r.label);
     }
+    if (hardcodedKeys(text).length) add('hardcodedKey', 'medium', 'holds what looks like a secret key');
   });
   // What the frontmatter says the skill needs: a missing program makes its first real task fail.
   const pre = prerequisites(markdown);
@@ -74,12 +103,21 @@ export function scanRisks(markdown: string, has: (bin: string) => boolean = onPa
 export const sortRisks = (risks: Risk[]): Risk[] =>
   risks.sort((a, b) => ORDER[a.level] - ORDER[b.level] || (a.file ?? '').localeCompare(b.file ?? '') || a.line - b.line);
 
+/** Files left unread, as a finding: never treated as audited. */
+export const unaudited = (paths: string[]): Risk => ({
+  rule: 'unaudited', level: 'info', label: 'files not audited', line: 0, count: paths.length,
+  excerpt: paths.slice(0, 5).join(', ') + (paths.length > 5 ? ` (+${paths.length - 5})` : ''),
+});
+
 /** One line for an agent: `Risk check: …` or that nothing matched. */
 export function riskReport(risks: Risk[]): string {
   if (!risks.length) return 'skills-atlas risk check: no warning sign found (a pattern check, not a guarantee).';
   const lines = risks.map((r) => `- ${r.level}: ${r.label} (${riskWhere(r)}${r.count > 1 ? `, ${r.count} lines` : ''}): ${r.excerpt}`);
   return ['skills-atlas risk check (a pattern check, not a guarantee):', ...lines].join('\n');
 }
+
+/** What a one-line finding needs after its label to be understood: the missing program, the skill it resembles. */
+export const riskNote = (r: Pick<Risk, 'rule' | 'excerpt'>): string => (r.rule === 'missingBin' || r.rule === 'lookalike' ? ` (${r.excerpt})` : '');
 
 /** Where a finding is, for people: `scripts/setup.sh:12`, or `SKILL.md:3`. */
 export const riskWhere = (r: Pick<Risk, 'file' | 'line'>): string => `${r.file ?? 'SKILL.md'}${r.line ? `:${r.line}` : ''}`;

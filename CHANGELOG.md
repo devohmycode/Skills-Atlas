@@ -3,6 +3,10 @@
 ## Unreleased
 
 - **A source that fails no longer drops its skills.** The crawl keeps what that source listed in the previous snapshot. The snapshot of 2026-11-10, built while claude-plugins.dev answered HTTP 402, had lost 35,750 skills; the one of 2026-11-04 is restored.
+- **Content read from a URL is a warning sign.** A line where the skill fetches, reads or downloads something at a URL is reported (medium): what is served there can change after the review, and pinning the skill to a commit does not pin it.
+- **Secret keys written in a skill are reported** (medium), cut to their first characters; placeholders such as `sk-xxxxxxxx` are not.
+- **Look-alike names.** The audit, `show` and the web preview name the far more installed skill a skill could be taken for: a name, or an owner's name, one character away.
+- **The update diff covers the whole folder.** The files an update adds, changes or removes are listed and shown next to the `SKILL.md`, and their new warning signs are reported with their file; `outdated_skills` returns them as `files_changed`.
 
 ## 0.30.0 — 2026-10-23
 

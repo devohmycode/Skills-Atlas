@@ -23,11 +23,11 @@ import { readFileSync } from 'node:fs';
 import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './agent-api.js';
 import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
-import { auditEnabled, auditSkills, auditTarget, failsAudit } from './audit.js';
+import { auditEnabled, auditSkills, auditTarget, failsAudit, withLookalikes } from './audit.js';
 import { lockSelection, projectRevisionDrift, type Revisions } from './revisions.js';
 import { fetchSkillFiles, fetchSkillMarkdown } from './github.js';
-import { riskWhere } from './risks.js';
-import { updateDiff } from './install/diff.js';
+import { riskNote, riskWhere } from './risks.js';
+import { fileSummary, updateDiff } from './install/diff.js';
 import { browseLoop } from './browse.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
@@ -473,9 +473,10 @@ async function auditGate(ids: string[], flags: InstallFlags, revisions?: Revisio
   const catalog = await loadLatestCatalog({ offline: true }).catch(() => undefined);
   const known = new Map(catalog?.skills.map((s) => [s.id.toLowerCase(), s]));
   const left = new Set<string>();
-  for (const r of await auditSkills(ids.map((id) => auditTarget(id, known)), s => fetchSkillMarkdown(s, revisions?.[s.id.toLowerCase()]), s => fetchSkillFiles(s, revisions?.[s.id.toLowerCase()]))) {
+  const results = await auditSkills(ids.map((id) => auditTarget(id, known)), s => fetchSkillMarkdown(s, revisions?.[s.id.toLowerCase()]), s => fetchSkillFiles(s, revisions?.[s.id.toLowerCase()]));
+  for (const r of withLookalikes(results, catalog?.skills ?? [])) {
     for (const x of r.risks.filter((x) => x.level !== 'info')) {
-      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  ${r.id}  ${riskWhere(x)}`));
+      console.error(paint(x.level === 'high' ? 'red' : 'yellow', `  ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${riskNote(x)}  ${r.id}  ${riskWhere(x)}`));
     }
     if (r.error) console.error(paint('yellow', `  ? ${r.id}: ${m.confirm.auditUnread}`));
     if (r.error && revisions?.[r.id.toLowerCase()]) fail(`cannot audit pinned skill ${r.id}: ${r.error}`);
@@ -779,8 +780,9 @@ installOptions(program.command('update'))
     for (const s of chosen) {
       const diff = await updateDiff(auditTarget(s.id, known), local).catch(() => undefined);
       console.log(`  ${paint('pink', '↑')} ${s.id}${diff ? paint('dim', `  +${diff.added} −${diff.removed}`) : ''}`);
+      for (const f of diff?.files ?? []) console.log(paint('dim', `      ${fileSummary(f)}`));
       for (const x of diff?.risks.filter((x) => x.level !== 'info') ?? []) {
-        console.log(paint(x.level === 'high' ? 'red' : 'yellow', `      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  SKILL.md:${x.line}  ${x.excerpt}`));
+        console.log(paint(x.level === 'high' ? 'red' : 'yellow', `      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}  ${riskWhere(x)}  ${x.excerpt}`));
       }
     }
     // A new version is new content: it is audited like an install.

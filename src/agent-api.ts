@@ -1,6 +1,6 @@
 import { AGENTS } from './agents.js';
 import { querySkills } from './catalog/query.js';
-import { auditSkills } from './audit.js';
+import { auditSkills, withLookalikes } from './audit.js';
 import { fetchSkillFiles, fetchSkillMarkdown, githubUrl } from './github.js';
 import { parseSkillId } from './install/plan.js';
 import { listInstalled } from './install/run.js';
@@ -65,7 +65,7 @@ export async function showSkill(catalog: Catalog, id: string): Promise<{ skill: 
   const skill = findSkill(catalog, id);
   const markdown = await fetchSkillMarkdown(skill);
   // The audit's view: the other files of the folder too, the SKILL.md read once.
-  const [audit] = await auditSkills([skill], async () => markdown, fetchSkillFiles);
+  const [audit] = withLookalikes(await auditSkills([skill], async () => markdown, fetchSkillFiles), catalog.skills);
   return { skill: summarize(skill), markdown, risks: audit!.risks };
 }
 

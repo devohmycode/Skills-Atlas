@@ -76,7 +76,7 @@ export const ko: Messages = {
     updates: (n) => `업데이트 ${n}개 (u)`,
     previewLoading: 'SKILL.md 불러오는 중…',
     previewFailed: (msg) => `SKILL.md를 불러올 수 없습니다: ${msg}`,
-    risks: { pipeShell: "코드를 내려받아 실행", credentials: "자격 증명 파일에 접근", destructive: "광범위하게 삭제", hidden: "에이전트에게 숨기거나 지시를 무시하라고 요구", sudo: "관리자 권한으로 명령 실행", secrets: "환경 변수에서 비밀 정보를 읽음", sendsData: "서버로 데이터 전송", runsCode: "패키지나 스크립트를 설치·실행", missingBin: "이 컴퓨터에 없는 프로그램이 필요함", requires: "요구 사항을 명시함", unaudited: "감사하지 않은 파일" },
+    risks: { pipeShell: "코드를 내려받아 실행", credentials: "자격 증명 파일에 접근", destructive: "광범위하게 삭제", hidden: "에이전트에게 숨기거나 지시를 무시하라고 요구", sudo: "관리자 권한으로 명령 실행", secrets: "환경 변수에서 비밀 정보를 읽음", sendsData: "서버로 데이터 전송", runsCode: "패키지나 스크립트를 설치·실행", missingBin: "이 컴퓨터에 없는 프로그램이 필요함", requires: "요구 사항을 명시함", unaudited: "감사하지 않은 파일", remoteContent: "URL에서 내용을 읽음(검토 후 바뀔 수 있음)", hardcodedKey: "비밀 키로 보이는 문자열 포함", lookalike: "훨씬 많이 설치된 스킬과 비슷한 이름" },
     riskLevels: { high: "높음", medium: "중간", info: "정보" },
     risksFound: (n) => `경고 신호 ${n}개 (패턴 검사이며 보장은 아님)`,
     diffSummary: (added, removed) => `설치된 버전 이후 변경: +${added} −${removed}줄`,

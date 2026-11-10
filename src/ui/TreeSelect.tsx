@@ -5,7 +5,7 @@ import { byGrowth, TRENDING_THEME } from '../catalog/trending.js';
 import { createSearchIndex, groupByTheme, isStale, popularityLabel, SORT_ORDERS, type SortOrder } from '../catalog/query.js';
 import { fetchSkillMarkdown, githubUrl, openGitHub } from '../github.js';
 import { scanRisks, type Risk, type RiskLevel } from '../risks.js';
-import { diffText, updateDiff, type UpdateDiff } from '../install/diff.js';
+import { diffReport, updateDiff, type UpdateDiff } from '../install/diff.js';
 import { onPath } from '../prereqs.js';
 import { formatNumber, t, themeLabel } from '../i18n/index.js';
 import type { InstalledEntry } from '../catalog/installed.js';
@@ -348,12 +348,12 @@ export function TreeSelect({
     const skill = focused.skill;
     if (live.current.toUpdate.has(skill.id)) {
       const known = diffs.current.get(skill.id);
-      setPreview({ skill, text: known && diffText(known.lines), diff: known, top: 0 });
+      setPreview({ skill, text: known && diffReport(known), diff: known, top: 0 });
       if (known) return;
       loadDiff(skill).then(
         (diff) => {
           diffs.current.set(skill.id, diff);
-          setPreview((p) => (p?.skill === skill ? { ...p, text: diffText(diff.lines), diff } : p));
+          setPreview((p) => (p?.skill === skill ? { ...p, text: diffReport(diff), diff } : p));
         },
         (err: unknown) => {
           const error = m.tree.previewFailed(err instanceof Error ? err.message : String(err));

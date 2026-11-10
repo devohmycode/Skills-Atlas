@@ -5,8 +5,8 @@ import { INSTALLED_THEME, type TreeData } from '../catalog/installed.js';
 import type { SortOrder } from '../catalog/query.js';
 import { t } from '../i18n/index.js';
 import { nameCollisions, type Collision } from '../install/collisions.js';
-import { riskWhere } from '../risks.js';
-import { auditSkills, auditTarget, failsAudit, type AuditResult } from '../audit.js';
+import { riskNote, riskWhere } from '../risks.js';
+import { auditSkills, auditTarget, failsAudit, withLookalikes, type AuditResult } from '../audit.js';
 import { formatCommand, planInstall, planRemovals, planUpdates, type Update } from '../install/plan.js';
 import { SCOPES, type InstallMethod, type InstallOptions, type Removal, type Scope, type Skill, type Theme } from '../types.js';
 import { ACCENT, Banner, Header, Hints, Panel, useTerminalSize, type Hint, type StepId } from './Layout.js';
@@ -346,7 +346,7 @@ function Confirm({ ids, remove, update, collisions, options, audit, targets, rea
   useEffect(() => {
     if (results) return;
     let live = true;
-    void auditSkills(audited.map((id) => auditTarget(id, targets)), readSkill).then((r) => live && setResults(r));
+    void auditSkills(audited.map((id) => auditTarget(id, targets)), readSkill).then((r) => live && setResults(withLookalikes(r, [...targets.values()])));
     return () => {
       live = false;
     };
@@ -380,7 +380,7 @@ function Confirm({ ids, remove, update, collisions, options, audit, targets, rea
   const riskLine = (r: AuditResult, level: 'high' | 'medium') =>
     r.risks.filter((x) => x.level === level).slice(0, 2).map((x) => (
       <Text key={x.rule} color={level === 'high' ? PALETTE.danger : PALETTE.gold} wrap="truncate-end">
-        {`      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${x.rule === 'missingBin' ? ` (${x.excerpt})` : ''}  `}
+        {`      ${m.tree.riskLevels[x.level]} · ${m.tree.risks[x.rule]}${riskNote(x)}  `}
         <Text dimColor>{riskWhere(x)}</Text>
       </Text>
     ));

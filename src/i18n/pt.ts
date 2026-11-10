@@ -78,7 +78,7 @@ export const pt: Messages = {
     updates: (n) => `${n} ${s(n, 'atualização', 'atualizações')} (u)`,
     previewLoading: 'Carregando SKILL.md…',
     previewFailed: (msg) => `Não foi possível carregar o SKILL.md: ${msg}`,
-    risks: { pipeShell: "baixa e executa código", credentials: "acessa arquivos de credenciais", destructive: "apaga de forma ampla", hidden: "pede ao agente que esconda coisas ou ignore suas instruções", sudo: "executa comandos como administrador", secrets: "lê segredos do ambiente", sendsData: "envia dados a um servidor", runsCode: "instala ou executa pacotes ou scripts", missingBin: "precisa de um programa ausente nesta máquina", requires: "indica os seus requisitos", unaudited: "ficheiros não auditados" },
+    risks: { pipeShell: "baixa e executa código", credentials: "acessa arquivos de credenciais", destructive: "apaga de forma ampla", hidden: "pede ao agente que esconda coisas ou ignore suas instruções", sudo: "executa comandos como administrador", secrets: "lê segredos do ambiente", sendsData: "envia dados a um servidor", runsCode: "instala ou executa pacotes ou scripts", missingBin: "precisa de um programa ausente nesta máquina", requires: "indica os seus requisitos", unaudited: "ficheiros não auditados", remoteContent: "lê conteúdo de um URL, que pode mudar depois da revisão", hardcodedKey: "contém o que parece uma chave secreta", lookalike: "nome parecido com o de uma skill muito mais instalada" },
     riskLevels: { high: "alto", medium: "médio", info: "info" },
     risksFound: (n) => `${n} ${s(n, 'sinal de alerta', 'sinais de alerta')} (verificação por padrões, não uma garantia)`,
     diffSummary: (added, removed) => `Alterações desde a sua versão: +${added} −${removed} linhas`,
