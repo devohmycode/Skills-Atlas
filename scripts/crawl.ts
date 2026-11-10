@@ -39,9 +39,10 @@ const started = Date.now();
 const log = (msg: string) => console.error(`[${((Date.now() - started) / 1000).toFixed(0)}s] ${msg}`);
 
 const token = githubToken();
-const catalog = await buildCatalog({ maxSkillsShOwners, enrich, githubToken: token, log });
-// The snapshot about to be replaced is the previous crawl's: growth is measured against it.
+// The snapshot about to be replaced is the previous crawl's: growth is measured against it,
+// and a source that fails keeps the skills it had there.
 const previous = await loadCatalog(out).catch(() => undefined);
+const catalog = await buildCatalog({ maxSkillsShOwners, enrich, githubToken: token, previous, log });
 catalog.stats.growthSince = markGrowth(catalog.skills, previous);
 log(`growth: ${catalog.skills.filter((s) => s.growth).length} skills gained installs since ${catalog.stats.growthSince ?? 'nothing (no previous snapshot)'}`);
 if (requires) {

@@ -348,7 +348,7 @@ The snapshot is built from:
 
 **Rate limits.** The skills.sh search API allows 30 requests per minute. The crawl queries it at that pace, about 2 s per owner. The scheduled workflow covers the top 600 owners; a local crawl covers none by default. With `VERCEL_OIDC_TOKEN`, the crawl uses the [official API](https://skills.sh/docs/api) instead, which returns the full leaderboard.
 
-New snapshots retain collection status per source. If a source was unavailable during collection, the terminal and web interface warn that the catalog is partial. `packs --json` also includes `available`, `total` and `missing` fields. Older snapshots without source diagnostics remain readable; their source health is unknown. No extra source checks run while browsing.
+New snapshots retain collection status per source. If a source was unavailable during collection, the terminal and web interface warn that the catalog is partial; the snapshot keeps the skills that source listed in the previous one (`carried` in the source's status), so that a registry being down does not drop them, with fresh install counts for those another source knows too. `packs --json` also includes `available`, `total` and `missing` fields. Older snapshots without source diagnostics remain readable; their source health is unknown. No extra source checks run while browsing.
 
 **Processing:**
 

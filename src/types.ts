@@ -66,7 +66,8 @@ export interface Catalog {
   skills: Skill[];
   stats: {
     /** Absent in older snapshots, whose source health is unknown. */
-    sources?: Record<Origin, { status: 'ok' | 'error'; count: number; error?: string }>;
+    /** `carried`: entries of a failed source kept from the previous snapshot, as old as that source's last good crawl. */
+    sources?: Record<Origin, { status: 'ok' | 'error'; count: number; error?: string; carried?: number }>;
     raw: Record<Origin, number>;
     merged: number;
     /** Skills flagged `official` (absent from snapshots older than the flag). */

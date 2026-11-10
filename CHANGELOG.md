@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A source that fails no longer drops its skills.** The crawl keeps what that source listed in the previous snapshot. The snapshot of 2026-11-10, built while claude-plugins.dev answered HTTP 402, had lost 35,750 skills; the one of 2026-11-04 is restored.
+
 ## 0.30.0 — 2026-10-23
 
 - **Update checks say when they are incomplete.** A repository GitHub does not answer for (HTTP 403 rate limit, timeout, invalid answer), a truncated tree or a skill folder it no longer has is reported instead of read as up to date: the tree shows a warning, `outdated` and `update` name each on stderr and exit with 1, and `update` still runs the updates it confirmed. `outdated --json` keeps its array on stdout. A skill installed at the repository root is now checked too.

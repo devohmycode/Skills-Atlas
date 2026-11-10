@@ -28,6 +28,26 @@ describe('catalog source health', () => {
     });
   });
 
+  it('keeps what a failed source listed in the previous snapshot, with fresh counts from the sources that answered', async () => {
+    const previous = await buildCatalog();
+    previous.generatedAt = '2026-11-04T00:00:00.000Z';
+    previous.skills = [
+      { id: 'anthropics/skills@pdf', name: 'pdf', source: 'anthropics/skills', installs: 5, labels: [], origins: ['skills.sh', 'claude-plugins.dev'], themes: [] },
+      { id: 'o/r@only-there', name: 'only-there', source: 'o/r', path: 'skills/only-there', installs: 7, stars: 2, labels: [], origins: ['claude-plugins.dev'], themes: [] },
+      { id: 'o/r@elsewhere', name: 'elsewhere', source: 'o/r', installs: 9, labels: [], origins: ['smithery'], themes: [] },
+    ];
+    vi.mocked(fetchClaudePluginsDev).mockRejectedValue(new Error('HTTP 402'));
+    const catalog = await buildCatalog({ previous });
+    expect(catalog.stats.sources?.['claude-plugins.dev']).toEqual({ status: 'error', count: 0, error: 'HTTP 402', carried: 2 });
+    expect(catalog.skills.map((s) => [s.id, s.installs, s.origins])).toEqual([
+      ['anthropics/skills@pdf', 10, ['skills.sh', 'claude-plugins.dev']],
+      ['o/r@only-there', 7, ['claude-plugins.dev']],
+    ]);
+    expect(catalog.skills[1]).toMatchObject({ path: 'skills/only-there', stars: 2 });
+    // Without a previous snapshot the source is skipped, as before.
+    expect((await buildCatalog()).skills.map((s) => s.id)).toEqual(['anthropics/skills@pdf']);
+  });
+
   it('bounds external diagnostic text and still refuses a completely failed collection', async () => {
     vi.mocked(fetchSmithery).mockRejectedValue(new Error('x'.repeat(1000)));
     expect((await buildCatalog()).stats.sources?.smithery.error).toHaveLength(300);
