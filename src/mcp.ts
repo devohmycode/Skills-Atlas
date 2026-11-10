@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
-import { installedSkills, outdatedSkills, searchSkills, showSkill } from './agent-api.js';
+import { agentIds, installedSkills, outdatedSkills, searchSkills, showSkill } from './agent-api.js';
 import { unknownAgents } from './agents.js';
 import { auditSkills, auditTarget, failsAudit } from './audit.js';
 import { updateDiff } from './install/diff.js';
@@ -9,6 +9,8 @@ import { nameCollisions } from './install/collisions.js';
 import { formatCommand, parseSkillId, planInstall, planRemove } from './install/plan.js';
 import { isSuccess, listInstalled, runAll } from './install/run.js';
 import { riskReport, riskWhere } from './risks.js';
+import { describeInstalled, findOverlaps, OVERLAP_THRESHOLD } from './overlaps.js';
+import { scanUsage, transcriptsDir, usageReport } from './usage.js';
 import { SCOPES, type Catalog, type Scope, type Skill } from './types.js';
 
 /**
@@ -76,6 +78,18 @@ const TOOLS = {
     inputSchema: { type: 'object', properties: { scope: { type: 'string', enum: ['project', 'global'], description: 'Default: both.' } } },
     annotations: { readOnlyHint: true },
   },
+  unused_skills: {
+    description: 'List the installed skills Claude Code has not used in the last days, read from its session transcripts on this machine, as { since, transcripts_read, unused, used, too_recent, unknown }. too_recent were installed during the window; unknown are not installed for Claude Code, so nothing is known of them. With transcripts_read at 0 nothing is known at all. Propose removing the unused ones, and remove only what the user confirms.',
+    schema: z.object({ days: z.number().int().min(1).max(3650).optional() }),
+    inputSchema: { type: 'object', properties: { days: { type: 'integer', minimum: 1, description: 'How many days back to look. Default: 30.' } } },
+    annotations: { readOnlyHint: true },
+  },
+  overlapping_skills: {
+    description: 'List pairs of installed skills, seen by a same agent, whose descriptions are close enough to be taken for one another, the closest first: score (0 to 1), the two skills with their descriptions, and the words they share. A word comparison, not a verdict: read both descriptions before advising to keep one or to reword them.',
+    schema: z.object({ threshold: z.number().gt(0).max(1).optional() }),
+    inputSchema: { type: 'object', properties: { threshold: { type: 'number', description: 'Similarity from which a pair is listed. Default: 0.5.' } } },
+    annotations: { readOnlyHint: true },
+  },
   outdated_skills: {
     description: 'List global skills with a newer version on GitHub, as { skills, unchecked }: each skill with the lines the update changes in SKILL.md and the warning signs it adds (new_risks); unchecked lists the repositories that could not be checked (source, reason), so the check is complete only when it is empty. Tell the user about new_risks and unchecked before updating. Update one with install_skills, scope global, with its own agents.',
     schema: z.object({}),
@@ -132,6 +146,22 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       return json(readPacks());
     case 'list_installed':
       return json(await (opts.installed ?? installedSkills)(input.scope ? [input.scope as Scope] : SCOPES));
+    case 'unused_skills': {
+      const since = new Date(Date.now() - (input.days ?? 30) * 86_400_000);
+      const scan = scanUsage(transcriptsDir(), since);
+      const report = usageReport((await Promise.all(SCOPES.map((sc) => listInstalled(sc)))).flat(), scan, since);
+      const ref = (s: { source?: string; name: string; scope: Scope }) => ({ id: `${s.source ?? 'local'}@${s.name}`, name: s.name, scope: s.scope });
+      return json({
+        since: since.toISOString().slice(0, 10), transcripts_read: scan.files, transcripts_skipped: scan.skipped,
+        unused: report.unused.map(ref), used: report.used.map((s) => ({ ...ref(s), count: s.count, last: s.last })),
+        too_recent: report.recent.map(ref), unknown: report.unknown.map(ref),
+      });
+    }
+    case 'overlapping_skills': {
+      const found = findOverlaps(describeInstalled((await Promise.all(SCOPES.map((sc) => listInstalled(sc)))).flat()), input.threshold ?? OVERLAP_THRESHOLD);
+      const ref = (s: (typeof found)[number]['a']) => ({ id: `${s.source ?? 'local'}@${s.name}`, name: s.name, scope: s.scope, description: s.description });
+      return json(found.map((o) => ({ score: o.score, a: ref(o.a), b: ref(o.b), shared: o.shared, agents: agentIds(o.agents) })));
+    }
     case 'outdated_skills': {
       // Each update with what it changes: line counts and the warning signs the new version adds.
       const { skills: outdated, unchecked } = await outdatedSkills();

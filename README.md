@@ -168,7 +168,7 @@ Copies do not count. A repository that shares at least three growing skill names
 Three ways to let an agent find and install skills for you, from the lightest:
 
 - **The skill.** `npx skills add devohmycode/skills-atlas -s skills-atlas` teaches any agent the commands above (`list --json`, `show`, `install … -y`, `outdated --json`). Ask "find me a skill to draw diagrams": the agent searches, reads the candidates' `SKILL.md`, then installs the one you pick.
-- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill` (with its risk check), `list_packs`, `list_installed`, `outdated_skills` (`{ skills, unchecked }`), `install_skills` (with `dry_run`; it refuses to replace a skill of the same name unless `replace: true`) and `remove_skills`. Installs and removals run one at a time per server, each re-checking what is installed; reads and dry runs do not wait. In Claude Code:
+- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill` (with its risk check), `list_packs`, `list_installed`, `unused_skills` (what Claude Code has not used lately), `overlapping_skills` (descriptions an agent may confuse), `outdated_skills` (`{ skills, unchecked }`), `install_skills` (with `dry_run`; it refuses to replace a skill of the same name unless `replace: true`) and `remove_skills`. Installs and removals run one at a time per server, each re-checking what is installed; reads and dry runs do not wait. In Claude Code:
 
   ```bash
   claude mcp add skills-atlas -- npx -y skills-atlas@latest mcp
@@ -267,6 +267,28 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 ![Skills Atlas agent step listing every supported agent, with the agents detected on this machine flagged and two of them ticked](https://raw.githubusercontent.com/devohmycode/Skills-Atlas/main/docs/agents.png?v=0.7.2)
 
 *Agents step: every agent the skills CLI supports, with those detected on this machine flagged `· detected`.*
+
+### Unused skills
+
+Every installed skill costs its name and description in each session, used or not. `skills-atlas unused` reads Claude Code's session transcripts on this machine (`~/.claude/projects`, or `CLAUDE_CONFIG_DIR`) and lists the installed skills it has not used in the last 30 days (`--days <n>`): a skill counts as used when the agent called it with the Skill tool, when you typed it as a slash command, or when the agent read its `SKILL.md`, subagents included. Nothing leaves the machine and nothing read is kept.
+
+- **Too early to tell**: a skill installed (or updated, which reinstalls it) during the window is listed apart, not as unused.
+- **Usage unknown**: skills not installed for Claude Code. Only its transcripts are read; the other agents' usage is not measured.
+- **No transcript in the window** is an error, never "everything is unused".
+- `--remove` uninstalls the unused skills listed, from the scopes they are in (`--dry-run` prints the commands); `-g` or `-p` keeps to one scope, `--json` prints `{ since, transcripts_read, transcripts_skipped, unused, used, too_recent, unknown }`, each used skill with its `count` and the day of its `last` use.
+
+It reads only the transcripts changed in the window, and in them only the lines that can hold a call; with several gigabytes of transcripts it still takes tens of seconds. Transcripts above 1 GB are skipped and counted.
+
+### Skills an agent may confuse
+
+An agent chooses a skill from its name and description alone: two installed skills that describe the same job compete for the same requests. `skills-atlas overlaps` compares the descriptions of the installed skills a same agent sees and lists the close pairs, the closest first, with a score from 0 to 1 and the words they share:
+
+```
+  0.89  review (global)  ~  review-bugbot (global)
+        shared words: bugbot, review, subagent, chang, code · Codex, Cursor, Droid +9
+```
+
+Words are weighed by how rare they are among your installed skills, so that “use when the user asks” counts for little. `--threshold <n>` moves the bar (0.5 by default: lower lists more pairs), `-g` or `-p` keeps to one scope, `--json` adds both descriptions. It is a word comparison, in English and French stop words only: it points at pairs worth reading side by side, it does not prove they conflict, and skills of one family (`storage-get`, `storage-delete`) match by design.
 
 ### Installation diagnostics
 

@@ -20,7 +20,7 @@ import { diagnoseInstalled } from './install/doctor.js';
 import { isSuccess, listInstalled, runAll, type CommandOutcome } from './install/run.js';
 import { SCOPES, type Catalog, type InstallMethod, type InstallOptions, type Removal, type Scope } from './types.js';
 import { readFileSync } from 'node:fs';
-import { installedSkills, outdatedSkills, showSkill, skillsByAgent } from './agent-api.js';
+import { agentIds, installedSkills, outdatedSkills, showSkill, skillsByAgent } from './agent-api.js';
 import { serveMcp } from './mcp.js';
 import { complete, completionScript, type CompletionContext } from './completion.js';
 import { auditEnabled, auditSkills, auditTarget, failsAudit, withLookalikes } from './audit.js';
@@ -29,6 +29,8 @@ import { fetchSkillFiles, fetchSkillMarkdown } from './github.js';
 import { riskNote, riskWhere } from './risks.js';
 import { fileSummary, updateDiff } from './install/diff.js';
 import { browseLoop } from './browse.js';
+import { describeInstalled, findOverlaps, OVERLAP_THRESHOLD } from './overlaps.js';
+import { scanUsage, transcriptsDir, usageReport } from './usage.js';
 import { missingSkills, missingSkillsByAgent, parseSelection, parseSelectionFile, toSelection } from './selection.js';
 
 /** The skills a project expects, at its root, versioned with its code. */
@@ -695,6 +697,76 @@ program
     if (opts.json) return void process.stdout.write(`${JSON.stringify(issues, null, 2)}\n`);
     if (!issues.length) return console.log(paint('dim', m.doctor.healthy));
     for (const issue of issues) console.log(`  ${t().tree.where[issue.scope]} · ${issue.message}: ${issue.path}${issue.name ? ` (${issue.name})` : ''}`);
+  });
+
+program
+  .command('unused')
+  .description(c.unusedCmd)
+  .option('--days <n>', c.daysOption, '30')
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('--remove', c.unusedRemove)
+  .option('--dry-run', c.dryRun)
+  .option('--json', c.json)
+  .action(async (opts: { days: string; global?: boolean; project?: boolean; remove?: boolean; dryRun?: boolean; json?: boolean }) => {
+    const days = Number(opts.days);
+    if (!Number.isInteger(days) || days < 1) fail(c.badNumber('--days'));
+    const scopes: Scope[] = opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
+    const since = new Date(Date.now() - days * 86_400_000);
+    const dir = transcriptsDir();
+    if (process.stderr.isTTY && !opts.json) console.error(paint('dim', c.usageReading(dir)));
+    const scan = scanUsage(dir, since);
+    const report = usageReport((await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat(), scan, since);
+    const id = (s: { source?: string; name: string }) => `${s.source ?? 'local'}@${s.name}`;
+    if (opts.json) {
+      return void process.stdout.write(`${JSON.stringify({
+        since: since.toISOString().slice(0, 10), transcripts_read: scan.files, transcripts_skipped: scan.skipped,
+        unused: report.unused.map((s) => ({ id: id(s), name: s.name, scope: s.scope })),
+        used: report.used.map((s) => ({ id: id(s), name: s.name, scope: s.scope, count: s.count, last: s.last })),
+        too_recent: report.recent.map((s) => ({ id: id(s), name: s.name, scope: s.scope })),
+        unknown: report.unknown.map((s) => ({ id: id(s), name: s.name, scope: s.scope })),
+      }, null, 2)}\n`);
+    }
+    // Without a transcript nothing is known: every skill would read as unused.
+    if (!scan.files) return fail(c.usageNoTranscripts(dir));
+    console.log(paint('dim', c.usageRead(formatNumber(scan.files), since.toISOString().slice(0, 10))));
+    if (!report.unused.length) console.log(c.unusedNone);
+    else {
+      console.log(paint('bold', c.unusedTitle(report.unused.length, days)));
+      for (const s of report.unused) console.log(`  ${padEnd(s.name, 34)} ${paint('dim', `${padEnd(s.source ?? 'local', 36)} ${t().tree.where[s.scope]}`)}`);
+    }
+    if (report.recent.length) console.log(paint('dim', c.unusedRecent(report.recent.map((s) => s.name).join(', '))));
+    if (report.unknown.length) console.log(paint('dim', c.unusedUnknown(report.unknown.length)));
+    if (!report.unused.length) return;
+    if (!opts.remove) return console.log(paint('dim', c.unusedHint));
+    const removals = new Map<string, Removal>();
+    for (const s of report.unused) removals.set(s.name, { name: s.name, scopes: [...(removals.get(s.name)?.scopes ?? []), s.scope] });
+    await apply([], [...removals.values()], { agents: [], scope: 'global', method: 'symlink', skillsVersion: SKILLS_VERSION }, { dryRun: opts.dryRun, mouse: false, skillsVersion: SKILLS_VERSION });
+  });
+
+program
+  .command('overlaps')
+  .description(c.overlapsCmd)
+  .option('--threshold <n>', c.thresholdOption, String(OVERLAP_THRESHOLD))
+  .option('-g, --global', c.global)
+  .option('-p, --project', c.project)
+  .option('--json', c.json)
+  .action(async (opts: { threshold: string; global?: boolean; project?: boolean; json?: boolean }) => {
+    const threshold = Number(opts.threshold);
+    if (!(threshold > 0 && threshold <= 1)) fail(c.badNumber('--threshold'));
+    const scopes: Scope[] = opts.global && !opts.project ? ['global'] : opts.project && !opts.global ? ['project'] : SCOPES;
+    const found = findOverlaps(describeInstalled((await Promise.all(scopes.map((sc) => listInstalled(sc)))).flat()), threshold);
+    if (opts.json) {
+      const ref = (s: (typeof found)[number]['a']) => ({ id: `${s.source ?? 'local'}@${s.name}`, name: s.name, scope: s.scope, description: s.description });
+      return void process.stdout.write(`${JSON.stringify(found.map((o) => ({ score: o.score, a: ref(o.a), b: ref(o.b), shared: o.shared, agents: agentIds(o.agents) })), null, 2)}\n`);
+    }
+    if (!found.length) return console.log(paint('dim', c.overlapsNone));
+    console.log(paint('bold', c.overlapsTitle(found.length)));
+    for (const o of found) {
+      console.log(`\n  ${paint('yellow', o.score.toFixed(2))}  ${o.a.name} ${paint('dim', `(${t().tree.where[o.a.scope]})`)}  ~  ${o.b.name} ${paint('dim', `(${t().tree.where[o.b.scope]})`)}`);
+      console.log(paint('dim', `        ${c.overlapsShared}: ${o.shared.join(', ')} · ${o.agents.slice(0, 3).join(', ')}${o.agents.length > 3 ? ` +${o.agents.length - 3}` : ''}`));
+    }
+    console.log(paint('dim', `\n${c.overlapsHint}`));
   });
 
 program
