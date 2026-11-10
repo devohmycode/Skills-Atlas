@@ -4,7 +4,7 @@
 
 ## 0.40.0 — 2026-11-10
 
-Validation: 286 tests and TypeScript checks.
+Validation: 323 tests and TypeScript checks.
 
 - **`skills-atlas unused`** lists the installed skills Claude Code has not used in the last 30 days, read from its session transcripts on this machine, and `--remove` uninstalls them. Skills installed during the window and skills of other agents are listed apart, never as unused. Also as the MCP tool `unused_skills`.
 - **`skills-atlas overlaps`** lists the installed skills whose descriptions are close enough for an agent to take one for the other, with a score and the words they share. Also as the MCP tool `overlapping_skills`.
@@ -13,6 +13,17 @@ Validation: 286 tests and TypeScript checks.
 - **Secret keys written in a skill are reported** (medium), cut to their first characters; placeholders such as `sk-xxxxxxxx` are not.
 - **Look-alike names.** The audit, `show` and the web preview name the far more installed skill a skill could be taken for: a name, or an owner's name, one character away.
 - **The update diff covers the whole folder.** The files an update adds, changes or removes are listed and shown next to the `SKILL.md`, and their new warning signs are reported with their file; `outdated_skills` returns them as `files_changed`.
+- **Project skills get updates too.** `outdated`, `update` and `u` in the tree check the project's skills as well as global ones: the installed files are compared blob by blob with the repository's HEAD. A copy edited by hand (its files no longer match the lock's `computedHash`) is reported as modified and never overwritten; a pinned one is left to `lock`. `-p`/`-g` limit either command to one scope; `outdated --json` entries carry their `scope`.
+- **`skills-atlas suggest`** finds what a project is built with (manifests, workspaces and telltale files, about 45 technologies) and suggests catalog skills for each, publisher's own first, without what is installed; `--json` and `-n` available.
+- **💡 For this project** opens the tree and the web page when the current directory uses known technologies: the suggested skills, in rank order, each tagged with its technology.
+- **MCP:** new `suggest_skills`, `update_skills`, `rollback_skill`, `doctor` and `sync_project` tools, audited like installs; `install_skills` takes `packs`; `outdated_skills` covers both scopes and returns `modified`.
+- **Context cost.** The preview, the web page's Details, `show` and MCP `show_skill` estimate what a skill costs in context: its description at every session start, its `SKILL.md` when used. `installed --size` adds each skill's tokens and size on disk and each agent's startup load; an agent loading more than 5,000 tokens of descriptions is flagged there and above the tree.
+- **Profiles.** `skills-atlas profile use <pack>` (and **Use this pack as a profile…** on the web page) keeps only a pack's skills in a scope: the others, home-made ones included, are removed after the whole scope is saved byte for byte. `profile restore` (and **Backups** on the web page) puts a scope back exactly, offline, saving the current state first; `--initial` returns to the configuration before any profile. `profile create`, `list` and `backups` manage the rest.
+- **Manage personal packs everywhere.** In the tree, `N` saves the ticked skills as a pack (name and description asked), `E` edits a personal pack by ticking its skills, `D` deletes it, `P` activates any pack as a profile and `B` restores a backup. `profile edit` and `profile delete` do the same on the command line; the web page gets **Edit this pack…** (name, description, skills) and **Delete this pack**, and its Save as pack fills the id from the name. Shipped packs stay read-only; backups are never touched by pack changes.
+- **Shipped packs always show.** `packs.json` now holds only personal packs, added after the shipped ones; it no longer replaces them, and `[]` no longer hides them. Copies of shipped packs an earlier version wrote there are ignored.
+- **Tree: warnings on their own page.** Heavy context loads and incomplete update checks no longer stack above the tree: the status line shows `⚠ N`, `!` lists them, Esc goes back. The logo now shows on every screen when the terminal is tall enough, and every list sizes itself under it.
+- **Fix:** the questions the tree's `N`, `E`, `P` and `B` keys ask (pack name, backup number…) no longer end the program with *Detected unsettled top-level await*: stdin is held while a question waits.
+- **Packs, profiles and backups without leaving the tree.** `N`, `E`, `D`, `P` and `B` open the tree's own windows (name and description, confirmation, backups list, profile scope and plan); the pack themes update in place, a restore reads what is installed again, and only a confirmed profile leaves the tree to install, like any change. Warnings are spaced, and agents with the same load share one line.
 
 ## 0.30.0 — 2026-10-23
 

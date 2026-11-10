@@ -70,7 +70,7 @@ export function cleanDescription(text: string | null | undefined, max = 400): st
  * Reads `description` from a SKILL.md frontmatter, including the folded (`>`)
  * and literal (`|`) block forms. Not a full YAML parser.
  */
-export function frontmatterDescription(markdown: string): string | undefined {
+export function frontmatterDescription(markdown: string, max = 400): string | undefined {
   const fm = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(markdown)?.[1];
   if (!fm) return undefined;
   const lines = fm.split(/\r?\n/);
@@ -79,12 +79,12 @@ export function frontmatterDescription(markdown: string): string | undefined {
   const inline = lines[i]!.replace(/^description\s*:\s*/, '').trim();
   if (inline && !BROKEN.test(inline)) {
     const unquoted = /^(["'])([\s\S]*)\1$/.exec(inline);
-    return cleanDescription(unquoted ? unquoted[2]!.replace(/\\"/g, '"').replace(/''/g, "'") : inline);
+    return cleanDescription(unquoted ? unquoted[2]!.replace(/\\"/g, '"').replace(/''/g, "'") : inline, max);
   }
   const block: string[] = [];
   for (const line of lines.slice(i + 1)) {
     if (line.trim() && !/^\s/.test(line)) break;
     block.push(line.trim());
   }
-  return cleanDescription(block.join(' '));
+  return cleanDescription(block.join(' '), max);
 }

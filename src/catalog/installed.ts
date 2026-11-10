@@ -9,6 +9,8 @@ export interface InstalledEntry {
   scopes: Scope[];
   /** Display names of the agents it is installed for, all scopes together. */
   agents: string[];
+  /** The same, scope by scope: an update reinstalls in one scope for that scope's agents. */
+  agentsByScope?: Partial<Record<Scope, string[]>>;
 }
 
 export interface TreeData {
@@ -47,9 +49,11 @@ export function mergeInstalled(catalogSkills: Skill[], visible: Skill[], install
     if (entry) {
       if (!entry.scopes.includes(inst.scope)) entry.scopes.push(inst.scope);
       for (const a of inst.agents) if (!entry.agents.includes(a)) entry.agents.push(a);
+      const scoped = (entry.agentsByScope ??= {});
+      scoped[inst.scope] = [...new Set([...(scoped[inst.scope] ?? []), ...inst.agents])];
       continue;
     }
-    entries.set(base.id, { name: inst.name, scopes: [inst.scope], agents: [...inst.agents] });
+    entries.set(base.id, { name: inst.name, scopes: [inst.scope], agents: [...inst.agents], agentsByScope: { [inst.scope]: [...inst.agents] } });
     shown.set(base.id, { ...base, themes: [INSTALLED_THEME.id, ...base.themes] });
   }
   for (const e of entries.values()) e.scopes.sort((a, b) => (a === 'project' ? -1 : b === 'project' ? 1 : 0));

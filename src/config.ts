@@ -12,6 +12,8 @@ export interface UserConfig {
   lang?: string;
   /** `false` (set with `skills-atlas audit off`): install without the security audit. */
   audit?: boolean;
+  /** The profile last activated: under `global`, or under a project's path. */
+  profiles?: Record<string, string>;
 }
 
 export function configPath(): string {

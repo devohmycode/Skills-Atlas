@@ -13,8 +13,9 @@ Browse public **Agent Skills** (`SKILL.md` format) by theme in a collapsible ter
 🤖 Visit [Website](https://skillsatlas.replit.app/).
 
 - **Find**: about 75,000 skills from skills.sh, claude-plugins.dev and Smithery, in 20 themes, plus [★ Recommended](#recommended-skills) repositories, [🔥 Trending](#trending) skills and [📦 Packs](#packs) to install as a block.
-- **Check before installing**: read any skill's `SKILL.md` with `p`, with a [risk check](#risk-check) that points at what it runs, reads or sends. A skill that would [replace another of the same name](#installed-skills) is flagged before anything runs.
+- **Check before installing**: read any skill's `SKILL.md` with `p`, with a [risk check](#risk-check) that points at what it runs, reads or sends, at content it fetches from a URL and at a name imitating a far more installed skill. A skill that would [replace another of the same name](#installed-skills) is flagged before anything runs.
 - **Keep up to date**: installed skills are detected and ticked; untick to uninstall, press `u` to [update](#installed-skills) the outdated ones, and see [which agent has what](#usage).
+- **Keep it lean**: see what each skill [costs in context](#context-cost), which ones [were not used lately](#unused-skills), which ones [an agent may confuse](#skills-an-agent-may-confuse), and switch between sets of skills with [profiles](#profiles).
 - **Share**: `export` and `import` a selection, or commit a [`skills-atlas.json`](#a-projects-skills-skills-atlasjson) so that `skills-atlas sync` gives every teammate the same skills.
 - **From your agent**: a skill, an MCP server and a Claude Code plugin let [Claude and other agents](#from-claude-and-other-agents) search, read and install skills for you.
 - **Everywhere**: 79 agents, a terminal tree and a [web page](#web-interface), nine languages, [shell completion](#usage), and it works offline.
@@ -60,14 +61,21 @@ skills-atlas ui                               # the same in your browser, with t
 skills-atlas export > my-skills.json          # installed skills as a selection file (-g / -p for one scope)
 skills-atlas import my-skills.json -a claude-code -g  # install the same skills on another machine or project
 skills-atlas show obra/superpowers@brainstorming      # a skill's SKILL.md, read from GitHub (--json available)
-skills-atlas outdated                         # global skills with a newer version on GitHub (--json available)
-skills-atlas update                           # update them all (or name some; --dry-run available)
+skills-atlas outdated                         # installed skills, project and global, with a newer version on GitHub (-p/-g, --json)
+skills-atlas update                           # update them all, each in its scope (or name some; -p/-g, --dry-run)
+skills-atlas suggest                          # skills for this project, from its package.json, pyproject.toml, Dockerfile… (--json)
 skills-atlas rollback <id>                    # reinstall the version it had before its last update (--list, --to <sha>)
 skills-atlas mcp                              # MCP server on stdio, for Claude and other agents
 skills-atlas installed -a claude-code codex   # installed skills by agent: what each one sees (--json available)
+skills-atlas installed --size                 # the same, with what each skill costs in context (tokens) and on disk
+skills-atlas unused                           # installed skills Claude Code has not used in 30 days (--days, --remove, --json)
+skills-atlas overlaps                         # installed skills an agent may confuse: close descriptions (--threshold, --json)
 skills-atlas packs                            # curated packs: frontend, security, quality, writing
 skills-atlas install --pack security -a claude-code -g   # install a whole pack
 skills-atlas sync                             # install what this project's skills-atlas.json lists and is missing
+skills-atlas profile create Design <ids...>   # a personal pack to use as a profile (--from-installed available)
+skills-atlas profile use design               # keep only that pack's skills in the global scope (-p: this project), after a backup
+skills-atlas profile restore                  # put the scope back exactly as before (--initial: before any profile)
 skills-atlas completion bash                  # shell completion script (bash, zsh, fish, powershell)
 ```
 
@@ -116,7 +124,25 @@ A pack is a set of skills meant to be installed together: **📦 Frontend dev**,
 
 In the web interface, **Save as pack** saves the checked catalog skills, including installed ones that remain checked, as a personal pack. Enter a unique lowercase id (letters, digits and hyphens), a name and description; a pack contains 1–100 skills. Saving adds to your personal file, preserves bundled packs on the first save, and opens the new pack immediately without restarting. Duplicate ids and invalid existing files are rejected without overwriting them. The offline demo explicitly disables saving.
 
-The packs ship in [`data/packs.json`](data/packs.json). As for Recommended, a personal `~/.config/skills-atlas/packs.json` replaces them, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; `[]` hides them.
+The packs ship in [`data/packs.json`](data/packs.json). They always show. Personal packs are added to them from `~/.config/skills-atlas/packs.json`, with the same shape: `[{ "id", "name", "description", "skills": ["owner/repo@skill", …] }]`; an entry under a shipped pack's id is ignored.
+
+### Profiles
+
+A profile is a pack activated on its own, to switch between configurations such as *Design* or *Backend*. `skills-atlas profile use <pack>` (or, on the web page, a pack's **Use this pack as a profile…**) shows what stays, what goes and what comes, then, once confirmed: saves the scope, removes every skill of the scope that is not in the pack (home-made ones included), and installs the pack's missing skills, audited like any install. A profile changes one scope: the global one, or the project with `-p`.
+
+**Nothing is lost.** Before each profile change, the whole scope is saved in `~/.local/state/skills-atlas/backups/` (or `$XDG_STATE_HOME`): every skills directory as it is on disk (folders copied, links kept as links) and the lock file, byte for byte. Home-made and edited skills are thus moved to the backup, not deleted. `skills-atlas profile restore [id]` (or **Backups** on the web page) puts the scope back exactly as it was, offline, and saves the current state first, so a restore can be undone too. The first backup of a scope is its initial configuration, kept for good: `profile restore --initial` returns to it. The ten latest others are kept.
+
+**Personal packs** are kept in `~/.config/skills-atlas/packs.json` (or `$XDG_CONFIG_HOME`), as many as you like, next to the shipped ones (which can be used but not changed). Changing or deleting a pack never touches the backups: the initial configuration stays restorable.
+
+| | Terminal (tree) | Command line | Web page |
+|---|---|---|---|
+| Create | `N`: the ticked skills, named and described in the tree's own window | `profile create <name> <ids...>` (`-d`, `--from-installed`) | **Save as pack** (name, description) |
+| Change | `E` on a personal pack: tick its skills, Enter, then name and description in a window | `profile edit <id>` (asks), or `--name`, `-d`, `--add`, `--remove` | **Edit this pack…** (name, description, skills) |
+| Delete | `D` on a personal pack, confirmed in a window | `profile delete <id>` | **Delete this pack** |
+| Activate as profile | `P` on any pack: scope (← →) and plan in a window, then the install | `profile use <id>` (`-p`) | **Use this pack as a profile…** |
+| Restore a backup | `B`: the backups in a window, Enter then y | `profile backups`, `profile restore [id]` (`--initial`) | **Backups** |
+
+`profile list` shows every pack (✎ marks the personal ones) and the active profile.
 
 ### A project's skills: skills-atlas.json
 
@@ -168,7 +194,7 @@ Copies do not count. A repository that shares at least three growing skill names
 Three ways to let an agent find and install skills for you, from the lightest:
 
 - **The skill.** `npx skills add devohmycode/skills-atlas -s skills-atlas` teaches any agent the commands above (`list --json`, `show`, `install … -y`, `outdated --json`). Ask "find me a skill to draw diagrams": the agent searches, reads the candidates' `SKILL.md`, then installs the one you pick.
-- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill` (with its risk check), `list_packs`, `list_installed`, `unused_skills` (what Claude Code has not used lately), `overlapping_skills` (descriptions an agent may confuse), `outdated_skills` (`{ skills, unchecked }`), `install_skills` (with `dry_run`; it refuses to replace a skill of the same name unless `replace: true`) and `remove_skills`. Installs and removals run one at a time per server, each re-checking what is installed; reads and dry runs do not wait. In Claude Code:
+- **The MCP server.** `skills-atlas mcp` serves the same catalog as tools: `search_skills`, `list_themes`, `show_skill` (with its risk check), `list_packs`, `list_installed`, `unused_skills` (what Claude Code has not used lately), `overlapping_skills` (descriptions an agent may confuse), `suggest_skills` (skills for the current project), `outdated_skills` (`{ skills, unchecked, modified }`), `update_skills`, `rollback_skill`, `doctor`, `sync_project` (the project's `skills-atlas.json`), `install_skills` (ids or `packs`, with `dry_run`; it refuses to replace a skill of the same name unless `replace: true`) and `remove_skills`. Updates, rollbacks and syncs are audited like installs: a failing skill passes only with `ignore_audit: true`. Installs and removals run one at a time per server, each re-checking what is installed; reads and dry runs do not wait. In Claude Code:
 
   ```bash
   claude mcp add skills-atlas -- npx -y skills-atlas@latest mcp
@@ -260,7 +286,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 - **Pre-ticked**: installed skills are ticked and marked with their scope, `● project`, `● global` or `● project + global`, under their theme and in an **Already installed** group at the top. That group also holds skills the catalog does not know, such as home-made ones.
 - **Uninstall**: unticking an installed skill marks it `✗ will be uninstalled`. On confirmation it is removed from every agent of every scope it was found in, with one `npx skills remove -s … -y [-g]` per scope, then checked on disk.
 - **Same name, one folder**: the skills CLI installs by name, so a skill from another repository replaces an installed one of the same name. The review screen lists such replacements before anything runs; `install` and `import` print them.
-- **Updates**: globally installed skills with a newer version on GitHub read `↑ update available`, and the status line counts them. Press `u` to mark them: they are reinstalled at their latest version for the agents that already have them. The check runs in the background, one GitHub request per repository, with `GITHUB_TOKEN`, `GH_TOKEN` or the GitHub CLI's token when there is one (without a token GitHub allows 60 requests an hour). Project skills are not checked: their lock records a hash GitHub cannot be compared with. A repository GitHub does not answer for (rate limit, timeout, private or deleted), a truncated tree or a skill folder it no longer has makes the check incomplete, never "up to date": the tree shows a warning, and `outdated` and `update` name each one on stderr and exit with 1 (`outdated --json` keeps its array on stdout; `update` still runs the confirmed updates). Before you update, `p` on a skill marked for update shows what changes in its `SKILL.md` and in the other text files of its folder, each under its own `=== ~ scripts/run.sh  +3 −1` line (added lines green, removed red), and only the warning signs the new version brings, each with its file: a script can change while the `SKILL.md` stays the same. `skills-atlas update` prints each skill's `+added −removed` lines for its `SKILL.md`, one line per other file added (`+`), changed (`~`) or removed (`-`), and those new warning signs before running anything, `--dry-run` included; the MCP server's `outdated_skills` returns `{ skills, unchecked }`, each skill with `lines_added`, `lines_removed`, `files_changed` and `new_risks`, and `unchecked` listing what could not be checked (`source`, `reason`). Before each update, skills-atlas records the commit each skill was installed from, in `~/.config/skills-atlas/history.json`, five per skill, but only a commit it can prove: one a rollback installed while the lock still records the same folder hash (kept in `revisions.json` next to it), the installer's own ref, or the last commit touching the folder before the lock's install date whose folder hash on GitHub matches the lock's. A version that cannot be proven (offline, a folder hash that matches no such commit) is not recorded, and `update` says that skill has no way back. `skills-atlas rollback <id>` reinstalls the latest of them for the skill's own agents, audited at that revision; `--list` shows them and `--to <sha>` picks one. Skills updated before this version have no way back.
+- **Updates**: installed skills with a newer version on GitHub read `↑ update available`, and the status line counts them. Press `u` to mark them: they are reinstalled at their latest version, in their own scope, for the agents that already have them. A project skill is compared file by file with its repository (its lock records a content hash, not GitHub's folder hash); one whose files no longer match its lock was edited by hand and is never updated, only named. Rollback covers global updates. The check runs in the background, one GitHub request per repository, with `GITHUB_TOKEN`, `GH_TOKEN` or the GitHub CLI's token when there is one (without a token GitHub allows 60 requests an hour). Project skills are not checked: their lock records a hash GitHub cannot be compared with. A repository GitHub does not answer for (rate limit, timeout, private or deleted), a truncated tree or a skill folder it no longer has makes the check incomplete, never "up to date": the tree shows a warning, and `outdated` and `update` name each one on stderr and exit with 1 (`outdated --json` keeps its array on stdout; `update` still runs the confirmed updates). Before you update, `p` on a skill marked for update shows what changes in its `SKILL.md` and in the other text files of its folder, each under its own `=== ~ scripts/run.sh  +3 −1` line (added lines green, removed red), and only the warning signs the new version brings, each with its file: a script can change while the `SKILL.md` stays the same. `skills-atlas update` prints each skill's `+added −removed` lines for its `SKILL.md`, one line per other file added (`+`), changed (`~`) or removed (`-`), and those new warning signs before running anything, `--dry-run` included; the MCP server's `outdated_skills` returns `{ skills, unchecked }`, each skill with `lines_added`, `lines_removed`, `files_changed` and `new_risks`, and `unchecked` listing what could not be checked (`source`, `reason`). Before each update, skills-atlas records the commit each skill was installed from, in `~/.config/skills-atlas/history.json`, five per skill, but only a commit it can prove: one a rollback installed while the lock still records the same folder hash (kept in `revisions.json` next to it), the installer's own ref, or the last commit touching the folder before the lock's install date whose folder hash on GitHub matches the lock's. A version that cannot be proven (offline, a folder hash that matches no such commit) is not recorded, and `update` says that skill has no way back. `skills-atlas rollback <id>` reinstalls the latest of them for the skill's own agents, audited at that revision; `--list` shows them and `--to <sha>` picks one. Skills updated before this version have no way back.
 - **Install**: ticking a skill that is not installed installs it. The scope is asked after the tree, pre-filled with your last choice, unless `-p`/`-g` sets it.
 - **Questions**: the status line shows the balance `+N −M`. Scope, agents and method are only asked when there is something to install.
 
@@ -270,7 +296,7 @@ Only `repository` (a GitHub repository URL) and `reason` are required. Without `
 
 ### Unused skills
 
-Every installed skill costs its name and description in each session, used or not. `skills-atlas unused` reads Claude Code's session transcripts on this machine (`~/.claude/projects`, or `CLAUDE_CONFIG_DIR`) and lists the installed skills it has not used in the last 30 days (`--days <n>`): a skill counts as used when the agent called it with the Skill tool, when you typed it as a slash command, or when the agent read its `SKILL.md`, subagents included. Nothing leaves the machine and nothing read is kept.
+Every installed skill costs its name and description in each session, used or not ([how much](#context-cost)). `skills-atlas unused` reads Claude Code's session transcripts on this machine (`~/.claude/projects`, or `CLAUDE_CONFIG_DIR`) and lists the installed skills it has not used in the last 30 days (`--days <n>`): a skill counts as used when the agent called it with the Skill tool, when you typed it as a slash command, or when the agent read its `SKILL.md`, subagents included. Nothing leaves the machine and nothing read is kept.
 
 - **Too early to tell**: a skill installed (or updated, which reinstalls it) during the window is listed apart, not as unused.
 - **Usage unknown**: skills not installed for Claude Code. Only its transcripts are read; the other agents' usage is not measured.
@@ -289,6 +315,18 @@ An agent chooses a skill from its name and description alone: two installed skil
 ```
 
 Words are weighed by how rare they are among your installed skills, so that “use when the user asks” counts for little. `--threshold <n>` moves the bar (0.5 by default: lower lists more pairs), `-g` or `-p` keeps to one scope, `--json` adds both descriptions. It is a word comparison, in English and French stop words only: it points at pairs worth reading side by side, it does not prove they conflict, and skills of one family (`storage-get`, `storage-delete`) match by design.
+
+### Suggestions for a project
+
+`skills-atlas suggest [dir]` reads the project's manifests and telltale files (`package.json` and its `apps/`, `packages/` workspaces, `pyproject.toml` and requirements files, `Cargo.toml`, `go.mod`, `Gemfile`, `composer.json`, `Dockerfile`, `.github/workflows`, `prisma/schema.prisma`, `wrangler.toml`…) to find what it is built with: about 45 technologies, from React and FastAPI to Supabase, Terraform and the Claude API. For each, it lists up to three catalog skills (`-n` to change it): the technology's own publisher first (`supabase/…`, `prisma/…`), then skills named after it, most installed first. Skills already installed, of archived or idle repositories, deprecated, installed fewer than 500 times, or copies of the same name are left out, and the packs that fit are named. It only reads files, runs nothing and sends nothing; the MCP server's `suggest_skills` gives agents the same answer. The tree and the web page show the same suggestions as their first theme, **💡 For this project**, each skill tagged with the technology it fits.
+
+### Context cost
+
+Agents load the name and description of every installed skill at each session start, so they know when to use one; the whole `SKILL.md` enters the context only when the skill is used. skills-atlas estimates both (about 4 characters per token, one per CJK character; an estimate, not a tokenizer count):
+
+- the `SKILL.md` preview (`p`), the web page's **Details**, `skills-atlas show` (on stderr, `cost` with `--json`) and the MCP server's `show_skill` give a skill's two costs before you install it;
+- `skills-atlas installed --size` lists, under each agent, every skill's startup and on-use tokens and its size on disk, with the agent's total startup load (`startup_tokens` and `cost` with `--json`);
+- when an agent loads more than 5,000 tokens of skill descriptions at each start, a warning names it under `installed --size`, and in the tree's warnings (`⚠ N` on the status line, listed with `!`): untick the skills you do not use.
 
 ### Installation diagnostics
 
@@ -309,6 +347,11 @@ Words are weighed by how rare they are among your installed skills, so that “u
 | `p` | preview the focused skill's `SKILL.md` before installing it, with its warning signs (↑↓ scroll, esc back) |
 | `u` | mark the focused outdated skill, or the outdated skills of a group, for update |
 | `U` | mark every outdated skill for update |
+| `N` | new pack from the ticked skills (named in a window, without leaving the tree) |
+| `E` / `D` | edit / delete the focused personal pack (in edit mode, ticks are its skills: Enter saves, Esc cancels) |
+| `P` | use the focused pack as a profile |
+| `B` | backups: restore one |
+| `!` | warnings (heavy context loads, incomplete update checks): the status line shows only `⚠ N`, `!` lists them, Esc goes back |
 | enter | continue |
 | `q` | quit |
 

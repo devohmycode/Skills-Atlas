@@ -32,7 +32,8 @@ describe('catalog health CLI', () => {
     expect(listed.stderr).toContain('Partial catalog: smithery');
     const packs = run(['packs', '--json']);
     expect(packs.status).toBe(0);
-    expect(JSON.parse(packs.stdout)).toEqual([expect.objectContaining({ available: 1, total: 2, missing: ['x/y@absent'], skills: ['a/b@known', 'x/y@absent'] })]);
+    // The shipped packs come first, then the personal one.
+    expect(JSON.parse(packs.stdout).at(-1)).toEqual(expect.objectContaining({ id: 'test', available: 1, total: 2, missing: ['x/y@absent'], skills: ['a/b@known', 'x/y@absent'] }));
     const legacy = { ...catalog, stats: { raw: catalog.stats.raw, merged: 1, byTheme: { code: 1 } } };
     writeFileSync(path, JSON.stringify(legacy));
     const older = run(['list', '--offline', '--catalog', path, '--json']);

@@ -6,6 +6,8 @@ export interface Update {
   id: string;
   /** Agent display names, as the installed-skill scan reports them, or agent ids. */
   agents: string[];
+  /** Where it is installed and outdated; global when absent. */
+  scope?: Scope;
 }
 
 export interface InstallCommand {
@@ -76,20 +78,23 @@ export function planInstall(ids: string[], opts: InstallOptions, revisions: Reco
 }
 
 /**
- * Updates are reinstalls: `skills add` again, in the global scope (the only
- * one whose lock lets updates be detected), for the agents that have each
- * skill. `skills update` is not used: it can exit 0 having skipped the skill.
- * Agents unknown to the list fall back to the options' agents.
+ * Updates are reinstalls: `skills add` again, in the skill's own scope (global
+ * when it names none), for the agents that have each skill. `skills update` is
+ * not used: it can exit 0 having skipped the skill. Agents unknown to the list
+ * fall back to the options' agents.
  */
 export function planUpdates(updates: Update[], opts: InstallOptions): InstallCommand[] {
   const byAgents = new Map<string, string[]>();
   for (const u of updates) {
     // Display names from the tree's scan, or agent ids from `outdated`.
     const ids = u.agents.map((name) => AGENTS.find((a) => a.displayName === name || a.id === name)?.id).filter((id): id is string => !!id);
-    const key = [...new Set(ids.length ? ids : opts.agents)].sort().join(' ');
+    const key = `${u.scope ?? 'global'} ${[...new Set(ids.length ? ids : opts.agents)].sort().join(' ')}`;
     byAgents.set(key, [...(byAgents.get(key) ?? []), u.id]);
   }
-  return [...byAgents].flatMap(([agents, ids]) => planInstall(ids, { ...opts, agents: agents.split(' '), scope: 'global' }));
+  return [...byAgents].flatMap(([key, ids]) => {
+    const [scope, ...agents] = key.split(' ');
+    return planInstall(ids, { ...opts, agents, scope: scope as Scope });
+  });
 }
 
 /**

@@ -5,7 +5,10 @@ import { gzipSync } from 'node:zlib';
 import { z } from 'zod';
 import { AGENTS, detectAgents, unknownAgents } from '../agents.js';
 import { INSTALLED_THEME, mergeInstalled, type InstalledEntry } from '../catalog/installed.js';
-import { PackSaveError, packTheme, savePack } from '../catalog/packs.js';
+import { deletePack, isBundledPack, PackSaveError, packStatus, packTheme, readPacks, savePack, updatePack } from '../catalog/packs.js';
+import { markdownCost } from '../context.js';
+import { backupScope, listBackups, profilePlan, restoreBackup, type Backup } from '../profiles.js';
+import { resolve } from 'node:path';
 import { byGrowth } from '../catalog/trending.js';
 import { createSearchIndex, SORT_ORDERS } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
@@ -38,6 +41,8 @@ export interface ServerOptions {
   readSkill?: typeof fetchSkillMarkdown;
   /** Personal pack destination; injected tests never touch the user profile. */
   packsPath?: string;
+  /** Where profile backups are kept; injected in tests. */
+  backupsRoot?: string;
 }
 
 export interface AtlasServer {
@@ -65,6 +70,8 @@ const Body = z.object({
   }),
   /** Install only the requested agents that do not have the skill yet in the scope. */
   retry: z.boolean().optional(),
+  /** Activate a pack as a profile: the server plans it (install and remove are ignored) and backs the scope up first. */
+  profile: z.object({ pack: z.string() }).optional(),
 });
 
 /** Agent ids from the display names the installed-skill scan reports. */
@@ -83,6 +90,7 @@ const slim = (s: Skill) => ({
   growth: s.growth,
   official: s.official,
   recommendation: s.recommendation,
+  suggestion: s.suggestion,
   themes: s.themes,
   requires: s.requires,
   updatedAt: s.updatedAt,
@@ -148,11 +156,14 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       locale: locale(),
       sources: opts.sources,
       messages: { ...t().web, risks: t().tree.risks, riskLevels: t().tree.riskLevels, needs: t().tree.needs, updated: t().tree.updated('{date}'), archived: t().tree.archived, stale: t().tree.stale('{date}'),
-        noRisk: t().tree.noRisk, previewLoading: t().tree.previewLoading,
+        noRisk: t().tree.noRisk, previewLoading: t().tree.previewLoading, cost: t().tree.cost('{startup}', '{onUse}'),
         auditOff: t().confirm.auditOff, auditUnread: t().confirm.auditUnread, auditToggle: t().confirm.auditToggle },
       cwd,
       skillsVersion: opts.skillsVersion,
       canSavePacks: true,
+      backups: listBackups(undefined, cwd, opts.backupsRoot).map(({ dirs: _dirs, ...b }) => b),
+      packs: readPacks(opts.packsPath).map((p) => ({ ...p, personal: !isBundledPack(p.id) })),
+      profiles: readConfig().profiles ?? {},
       themes: [INSTALLED_THEME, ...themes].map((th) => ({ id: th.id, label: themeLabel(th), description: th.description, pack: th.pack })),
       agents: AGENTS.map((a) => ({ id: a.id, name: a.displayName, detected: detected.has(a.id) })),
       defaults: {
@@ -180,15 +191,49 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       queryCache = { key, matching, counts };
     }
     const { matching, counts } = queryCache;
-    const inTheme = theme === 'trending' && !query.trim() ? byGrowth(matching.filter((s) => s.themes.includes(theme))) : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
+    const inTheme = theme === 'trending' && !query.trim() ? byGrowth(matching.filter((s) => s.themes.includes(theme)))
+      // Suggestions keep their rank: grouped by technology, the best fit first.
+      : theme === 'suggested' && !query.trim() ? matching.filter((s) => s.suggestion).sort((a, b) => a.suggestion!.order - b.suggestion!.order)
+      : theme ? matching.filter((s) => s.themes.includes(theme)) : matching;
     return { total: inTheme.length, all: matching.length, counts, items: inTheme.slice(offset, offset + limit).map(slim) };
+  }
+
+  /** Pack themes and memberships rebuilt from the packs file, after a pack is saved, changed or deleted. */
+  function applyPacks() {
+    const packs = readPacks(opts.packsPath);
+    const members = new Map<string, string[]>();
+    for (const p of packs) for (const id of p.skills) members.set(id.toLowerCase(), [...(members.get(id.toLowerCase()) ?? []), packTheme(p.id)]);
+    const decorate = (s: Skill) => {
+      const own = s.themes.filter((th) => !th.startsWith('pack:'));
+      const extra = members.get(s.id.toLowerCase()) ?? [];
+      return own.length === s.themes.length && !extra.length ? s : { ...s, themes: [...new Set([...own, ...extra])] };
+    };
+    skills = skills.map(decorate);
+    catalogSkills = catalogSkills.map(decorate);
+    const others = themes.filter((th) => !th.id.startsWith('pack:'));
+    const after = Math.max(...others.map((th, i) => (['suggested', 'recommended', 'trending'].includes(th.id) ? i : -1))) + 1;
+    themes = [...others.slice(0, after), ...packs.map((p) => ({ id: packTheme(p.id), label: `📦 ${p.name}`, description: p.description, pack: packStatus(p, catalogSkills) })), ...others.slice(after)];
+    search = createSearchIndex(skills);
+    queryCache = undefined;
   }
 
   /** Checks a request body against the catalog and what is installed, then plans the commands. */
   async function plan(raw: unknown) {
     const parsed = Body.safeParse(raw);
     if (!parsed.success) throw new HttpError(400, 'invalid request');
-    const { install: requested, remove, options, auditOverrides, retry } = parsed.data;
+    const { options, auditOverrides, retry, profile } = parsed.data;
+    let { install: requested, remove } = parsed.data;
+    // A profile: the pack's missing skills come in, every other skill of the scope goes (to the backup).
+    let profileRun: { pack: string; installed: InstalledSkill[]; removals: Removal[] } | undefined;
+    if (profile) {
+      const pack = readPacks(opts.packsPath).find((p) => p.id === profile.pack);
+      if (!pack) throw new HttpError(404, 'unknown pack');
+      const inScope = await list(options.scope, cwd);
+      const pp = profilePlan(pack, inScope);
+      requested = pp.install.filter((id) => catalogIds.has(id));
+      remove = [];
+      profileRun = { pack: pack.id, installed: inScope, removals: pp.remove.map((r) => ({ name: r.name, scopes: [options.scope] })) };
+    }
     const install = [...new Set(requested)];
     if (auditOverrides.some((id) => !install.includes(id))) throw new HttpError(400, 'invalid audit overrides');
     const inst = await installed();
@@ -208,7 +253,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     const allowed = install.filter((id) => !blocked.includes(id));
     const collisions = replacements(install, inst.installed, options.scope);
     const full: InstallOptions = { ...options, skillsVersion: opts.skillsVersion };
-    const removals: Removal[] = remove.map((id) => {
+    const removals: Removal[] = profileRun?.removals ?? remove.map((id) => {
       const e = inst.installed.get(id) as InstalledEntry;
       return { name: e.name, scopes: [...e.scopes] };
     });
@@ -228,21 +273,30 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       installs = [...byAgents.values()].flatMap((g) => planInstall(g.ids, { ...full, agents: g.agents }));
     } else if (allowed.length) installs = planInstall(allowed, full);
     const commands = [...planRemovals(removals, opts.skillsVersion), ...installs];
-    return { commands, options: full, installs: installs.length, blocked, audit: { enabled, results }, collisions };
+    return { commands, options: full, installs: installs.length, blocked, audit: { enabled, results }, collisions, profileRun };
   }
 
   /** Runs the plan, streaming one JSON line per event: start, phase, done, then end. */
   async function apply(raw: unknown, res: ServerResponse) {
-    const { commands, options, installs, blocked, audit, collisions } = await plan(raw);
+    const { commands, options, installs, blocked, audit, collisions, profileRun } = await plan(raw);
     if (blocked.length) throw new HttpError(409, `${t().web.auditBlocked}: ${blocked.join(', ')}`);
     if (!commands.length) throw new HttpError(400, 'nothing to do');
     if (running) throw new HttpError(409, t().web.busy);
     running = true;
+    // Nothing of the scope is removed before it is saved, home-made and edited skills included.
+    let backup: Backup | undefined;
+    try {
+      if (profileRun) backup = backupScope(options.scope, `profile:${profileRun.pack}`, profileRun.installed, cwd, opts.backupsRoot);
+    } catch (err) {
+      running = false;
+      throw err;
+    }
     // Same memory as the terminal: the next run starts from these choices.
     if (installs) writeConfig({ ...readConfig(), agents: options.agents, scope: options.scope, method: options.method });
     res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
     const send = (event: object) => res.write(`${JSON.stringify(event)}\n`);
     send({ type: 'audit', audit, collisions });
+    if (backup) send({ type: 'backup', id: backup.id });
     const phases = commands.map((): Phase => 'queued');
     const stderr = commands.map(() => '');
     try {
@@ -257,7 +311,11 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
         onDone: (o, i) =>
           send({ type: 'done', i, ok: isSuccess(o), results: o.results, error: isSuccess(o) ? undefined : o.stderr.slice(-800) }),
       });
-      send({ type: 'end', ok: outcomes.every(isSuccess) });
+      if (profileRun) {
+        const config = readConfig();
+        writeConfig({ ...config, profiles: { ...(config.profiles ?? {}), [options.scope === 'global' ? 'global' : resolve(cwd)]: profileRun.pack } });
+      }
+      send({ type: 'end', ok: outcomes.every(isSuccess), backup: backup?.id });
     } catch (err) {
       send({ type: 'end', ok: false, error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -304,29 +362,62 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       const collisions = replacements([skill.id], inst.installed, scope);
       try {
         const markdown = await readSkill(skill);
-        return json(req, res, { id: skill.id, markdown, risks: withLookalikes([{ id: skill.id, risks: scanRisks(markdown) }], catalogSkills)[0]!.risks, collisions });
+        return json(req, res, { id: skill.id, markdown, risks: withLookalikes([{ id: skill.id, risks: scanRisks(markdown) }], catalogSkills)[0]!.risks, collisions, cost: markdownCost(markdown, skill.name) });
       } catch (err) {
         return json(req, res, { id: skill.id, risks: [], collisions, error: err instanceof Error ? err.message : String(err) });
       }
     }
     if (req.method === 'POST' && url.pathname === '/api/packs') {
       const pack = savePack(await readJson(req), catalogSkills, opts.packsPath);
-      const theme = packTheme(pack.id);
-      const ids = new Set(pack.skills);
-      const decorate = (s: Skill) => ids.has(s.id) ? { ...s, themes: [...new Set([...s.themes, theme])] } : s;
-      skills = skills.map(decorate);
-      catalogSkills = catalogSkills.map(decorate);
-      const after = Math.max(...themes.map((th, i) => th.id.startsWith('pack:') || th.id === 'recommended' || th.id === 'trending' ? i : -1)) + 1;
-      themes = [...themes.slice(0, after), { id: theme, label: `📦 ${pack.name}`, description: pack.description }, ...themes.slice(after)];
-      search = createSearchIndex(skills);
-      queryCache = undefined;
+      applyPacks();
       return json(req, res, { pack }, 201);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/packs/update') {
+      const body = z.object({ id: z.string(), name: z.string().optional(), description: z.string().optional(), skills: z.array(z.string()).max(100).optional() }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      const { id, ...patch } = body.data;
+      const pack = updatePack(id, patch, catalogSkills, opts.packsPath);
+      applyPacks();
+      return json(req, res, { pack });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/packs/delete') {
+      const body = z.object({ id: z.string() }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      deletePack(body.data.id, opts.packsPath);
+      applyPacks();
+      return json(req, res, { deleted: body.data.id });
     }
     if (req.method === 'POST' && url.pathname === '/api/plan') {
       const { commands, audit, blocked, collisions } = await plan(await readJson(req));
       return json(req, res, { commands: commands.map(formatCommand), audit, blocked, collisions });
     }
     if (req.method === 'POST' && url.pathname === '/api/apply') return apply(await readJson(req), res);
+    if (req.method === 'POST' && url.pathname === '/api/profile/plan') {
+      const body = z.object({ pack: z.string(), scope: z.enum(['project', 'global']) }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      const pack = readPacks(opts.packsPath).find((p) => p.id === body.data.pack);
+      if (!pack) throw new HttpError(404, 'unknown pack');
+      const pp = profilePlan(pack, await list(body.data.scope, cwd));
+      return json(req, res, { ...pp, unknown: pp.install.filter((id) => !catalogIds.has(id)), install: pp.install.filter((id) => catalogIds.has(id)) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/backups/restore') {
+      const body = z.object({ id: z.string() }).safeParse(await readJson(req));
+      if (!body.success) throw new HttpError(400, 'invalid request');
+      if (running) throw new HttpError(409, t().web.busy);
+      const backup = listBackups(undefined, cwd, opts.backupsRoot).find((b) => b.id === body.data.id);
+      if (!backup) throw new HttpError(404, 'unknown backup');
+      running = true;
+      try {
+        const undo = restoreBackup(backup.id, await list(backup.scope, cwd), cwd, opts.backupsRoot);
+        const config = readConfig();
+        const profiles = { ...(config.profiles ?? {}) };
+        delete profiles[backup.scope === 'global' ? 'global' : resolve(cwd)];
+        writeConfig({ ...config, profiles });
+        return json(req, res, { restored: backup.id, undo: undo.id });
+      } finally {
+        running = false;
+      }
+    }
     throw new HttpError(404, 'not found');
   }
 
