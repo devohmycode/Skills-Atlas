@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+## 0.40.0 — 2026-11-10
+
+Validation: 286 tests and TypeScript checks.
+
 - **`skills-atlas unused`** lists the installed skills Claude Code has not used in the last 30 days, read from its session transcripts on this machine, and `--remove` uninstalls them. Skills installed during the window and skills of other agents are listed apart, never as unused. Also as the MCP tool `unused_skills`.
 - **`skills-atlas overlaps`** lists the installed skills whose descriptions are close enough for an agent to take one for the other, with a score and the words they share. Also as the MCP tool `overlapping_skills`.
-
 - **A source that fails no longer drops its skills.** The crawl keeps what that source listed in the previous snapshot. The snapshot of 2026-11-10, built while claude-plugins.dev answered HTTP 402, had lost 35,750 skills; the one of 2026-11-04 is restored.
 - **Content read from a URL is a warning sign.** A line where the skill fetches, reads or downloads something at a URL is reported (medium): what is served there can change after the review, and pinning the skill to a commit does not pin it.
 - **Secret keys written in a skill are reported** (medium), cut to their first characters; placeholders such as `sk-xxxxxxxx` are not.
