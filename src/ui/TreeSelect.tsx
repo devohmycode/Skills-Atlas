@@ -1,3 +1,4 @@
+import { markdownCost } from '../context.js';
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useRef, useState } from 'react';
 import { groupByRepository } from '../catalog/groups.js';
@@ -14,6 +15,8 @@ import { ACCENT, BOX, Hints, Panel, useTerminalSize, type Hint } from './Layout.
 import { isMouseInput, useListMouse } from './mouse.js';
 import { TERMINAL_PALETTE as PALETTE } from './palette.js';
 import { fit, padStart, width, wrapLines } from './width.js';
+import { BackupsDialog, ConfirmDialog, FormDialog, ProfileDialog, type BackupSummary, type ProfilePreview } from './Dialogs.js';
+import type { Pack } from '../catalog/packs.js';
 
 type Row =
   | { kind: 'theme'; theme: Theme; skills: Skill[]; expanded: boolean }
@@ -47,6 +50,35 @@ function rowKey(r: Row): string {
   return `s:${r.themeId}:${r.skill.id}`;
 }
 
+/**
+ * What the tree tells its caller after a pack, profile or backup key: a profile to install
+ * (it leaves the tree, like any install), packs changed (the themes to rebuild), or a
+ * backup restored (what is installed to read again).
+ */
+export type TreeAction =
+  | { kind: 'profile'; pack: string; scope: Scope }
+  | { kind: 'packsChanged' }
+  | { kind: 'restored'; message: string };
+
+/** Pack and backup operations, done without leaving the tree. Errors are thrown with a message to show. */
+export interface PackOps {
+  list: () => Pack[];
+  create: (input: { name: string; description: string; skills: string[] }) => Pack;
+  update: (id: string, patch: { name?: string; description?: string; skills?: string[] }) => Pack;
+  remove: (id: string) => void;
+  backups: () => BackupSummary[];
+  /** Returns the id of the backup taken just before, to undo the restore. */
+  restore: (id: string) => Promise<string>;
+  plan: (pack: string, scope: Scope) => Promise<ProfilePreview>;
+}
+
+type Dialog =
+  | { kind: 'create'; ids: string[] }
+  | { kind: 'edit'; id: string; label: string; skills: string[] }
+  | { kind: 'delete'; id: string; label: string }
+  | { kind: 'backups' }
+  | { kind: 'profile'; id: string; label: string };
+
 export interface TreeSelectProps {
   themes: Theme[];
   skills: Skill[];
@@ -75,6 +107,13 @@ export interface TreeSelectProps {
   loadPreview?: (skill: Skill) => Promise<string>;
   /** Whether a program a skill needs is on this machine; the PATH by default. */
   hasBin?: (bin: string) => boolean;
+  /** Pack, profile and backup keys (N, E, D, P, B), done in the tree's own windows; without it they are not offered. */
+  packOps?: PackOps;
+  onAction?: (action: TreeAction) => void;
+  /** Ids of the packs that can be edited and deleted (the personal ones). */
+  personalPacks?: Set<string>;
+  /** Warnings about this machine: a ⚠ count on the status line, the list on its own page with `!`. */
+  warnings?: string[];
 }
 
 /** Lines used around the list: header, status, search, details panel, hints (may wrap). */
@@ -87,6 +126,8 @@ const THEME_BOX_COLUMN = 7;
 const OFFICIAL_MARK = '◆';
 const RECOMMENDED_MARK = '★';
 const RECOMMENDED = 'recommended';
+const NO_PACKS = new Set<string>();
+const NO_WARNINGS: string[] = [];
 const EMPTY_INSTALLED = new Map<string, InstalledEntry>();
 const NO_UPDATES = new Set<string>();
 const UPDATE_MARK = '↑';
@@ -104,7 +145,12 @@ function buildRows(groups: { theme: Theme; skills: Skill[] }[], expanded: Set<st
     out.push({ kind: 'theme', theme: g.theme, skills: g.skills, expanded: isOpen });
     if (!isOpen) continue;
     if (g.theme.id !== RECOMMENDED) {
-      for (const skill of g.theme.id === TRENDING_THEME.id && !filter.trim() ? byGrowth(g.skills) : g.skills) out.push({ kind: 'skill', skill, themeId: g.theme.id });
+      const ordered = filter.trim() ? g.skills
+        : g.theme.id === TRENDING_THEME.id ? byGrowth(g.skills)
+        // Suggestions keep their rank: grouped by technology, the best fit first.
+        : g.theme.id === 'suggested' ? [...g.skills].sort((a, b) => (a.suggestion?.order ?? 0) - (b.suggestion?.order ?? 0))
+        : g.skills;
+      for (const skill of ordered) out.push({ kind: 'skill', skill, themeId: g.theme.id });
       continue;
     }
     for (const repo of byRepository(g.skills)) {
@@ -140,7 +186,7 @@ export function TreeSelect({
   themes,
   skills,
   initialSelected = [],
-  installed = EMPTY_INSTALLED,
+  installed: installedProp = EMPTY_INSTALLED,
   scopes,
   initialSort,
   initialSearch = '',
@@ -153,8 +199,26 @@ export function TreeSelect({
   loadPreview = fetchSkillMarkdown,
   loadDiff = (s) => updateDiff(s),
   hasBin = onPath,
+  onAction,
+  packOps,
+  personalPacks = NO_PACKS,
+  warnings = NO_WARNINGS,
 }: TreeSelectProps) {
   const m = t();
+  // Editing a pack's skills: ticks mean membership, not installs; the selection before it comes back on Esc.
+  const [showWarnings, setShowWarnings] = useState(false);
+  const [dialog, setDialog] = useState<Dialog | null>(null);
+  // What the last pack or backup action did, on the status line until the next key.
+  const [flash, setFlash] = useState<string>();
+  const [packEdit, setPackEdit] = useState<{ id: string; label: string; saved: Set<string> } | null>(null);
+  const installed = packEdit ? EMPTY_INSTALLED : installedProp;
+  // Catalog skills (not home-made ones), the only ones a pack can hold.
+  const known = useMemo(() => new Set(skills.filter((sk) => sk.origins.length).map((sk) => sk.id)), [skills]);
+  /** The pack of the focused row: its theme row, or a skill listed under it. */
+  const focusedPack = (row: Row | undefined): string | undefined => {
+    const id = row?.kind === 'theme' ? row.theme.id : row?.kind === 'skill' ? row.themeId : undefined;
+    return id?.startsWith('pack:') ? id.slice(5) : undefined;
+  };
   const { columns, rows: termRows } = useTerminalSize();
   const [expanded, setExpandedState] = useState<Set<string>>(() => new Set(memory?.expanded));
   const [selected, setSelectedState] = useState<Set<string>>(new Set(initialSelected));
@@ -380,7 +444,9 @@ export function TreeSelect({
   // At most three warnings show above the text; the rest are in `skills-atlas show`.
   // An update shows what it changes, and only the warning signs it brings.
   const risks: Risk[] = useMemo(() => preview?.diff?.risks ?? (preview?.text !== undefined ? scanRisks(preview.text) : []), [preview?.text, preview?.diff]);
-  const riskTitle = preview?.diff ? 1 : 0;
+  // What the skill would cost in an agent's context: its description at every start, the SKILL.md when used.
+  const previewCost = useMemo(() => (preview?.text !== undefined && !preview.diff ? markdownCost(preview.text, preview.skill.name) : undefined), [preview?.text, preview?.diff]);
+  const riskTitle = preview?.diff ? 1 : previewCost ? 1 : 0;
   const riskLines = preview?.text === undefined ? 0 : 1 + riskTitle + Math.min(3, risks.length);
   const previewHeight = Math.max(5, termRows - 8 - riskLines);
   const previewLines = preview?.text !== undefined ? wrapLines(preview.text, Math.max(20, columns - 6)) : [];
@@ -409,6 +475,13 @@ export function TreeSelect({
 
   useInput((input, key) => {
     if (isMouseInput(input)) return;
+    // An open window takes the keys.
+    if (dialog) return;
+    if (flash) setFlash(undefined);
+    if (showWarnings) {
+      if (key.escape || key.return || input === '!' || input === 'q') setShowWarnings(false);
+      return;
+    }
     if (preview) {
       if (key.upArrow || input === 'k') scrollPreview(-1);
       else if (key.downArrow || input === 'j') scrollPreview(1);
@@ -444,12 +517,28 @@ export function TreeSelect({
       setCursor(liveRows().findIndex((r) => r.kind === 'theme' && r.theme.id === themeId));
     } else if (input === ' ' && row) {
       toggle(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
-    } else if (input === '/') startSearch();
+    } else if (packEdit && key.return) {
+      openEditSave();
+    } else if (packEdit && key.escape && !live.current.filter) {
+      cancelPackEdit();
+    } else if (!packEdit && packOps && input === 'N') {
+      openCreate();
+    } else if (!packEdit && packOps && input === 'E' && focusedPack(row) && personalPacks.has(focusedPack(row)!)) {
+      startPackEdit(focusedPack(row)!);
+    } else if (!packEdit && packOps && input === 'D' && focusedPack(row) && personalPacks.has(focusedPack(row)!)) {
+      setDialog({ kind: 'delete', id: focusedPack(row)!, label: packLabel(focusedPack(row)!) });
+    } else if (!packEdit && packOps && input === 'P' && focusedPack(row)) {
+      setDialog({ kind: 'profile', id: focusedPack(row)!, label: packLabel(focusedPack(row)!) });
+    } else if (!packEdit && packOps && input === 'B') {
+      setDialog({ kind: 'backups' });
+    } else if (input === '!' && warnings.length) setShowWarnings(true);
+    else if (input === '/') startSearch();
     else if (input === 's') cycleSort();
     else if (input === 'o') toggleOfficial();
     else if (input === 'a') toggleAll();
     else if (input === 'g') openFocusedGitHub();
     else if (input === 'p') openPreview();
+    else if (packEdit && (input === 'u' || input === 'U' || input === 'q')) return;
     else if (input === 'u' && row) toggleUpdate(row.kind === 'skill' ? [row.skill.id] : row.skills.map((s) => s.id));
     else if (input === 'U') toggleUpdate([...updates]);
     else if (key.escape && live.current.filter) setFilter('');
@@ -459,11 +548,67 @@ export function TreeSelect({
     else if (input === 'q' || key.escape) onCancel();
   });
 
+  // Pack windows: name and describe, confirm, pick a backup, choose a profile's scope.
+  const packLabel = (id: string) => {
+    const theme = themes.find((th) => th.id === `pack:${id}`);
+    return theme ? themeLabel(theme) : id;
+  };
+  const tickedForPack = () => [...live.current.selected].filter((id) => known.has(id));
+  const openCreate = () => {
+    const ids = tickedForPack();
+    if (ids.length) setDialog({ kind: 'create', ids });
+  };
+  const startPackEdit = (id: string) => {
+    setPackEdit({ id, label: packLabel(id), saved: new Set(live.current.selected) });
+    setSelected(new Set(skills.filter((sk) => sk.themes.includes(`pack:${id}`)).map((sk) => sk.id)));
+  };
+  const cancelPackEdit = () => {
+    if (!packEdit) return;
+    setSelected(packEdit.saved);
+    setPackEdit(null);
+  };
+  const openEditSave = () => {
+    if (!packEdit) return;
+    // Members the tree does not show (filtered out, gone from the catalog) stay in the pack.
+    const shown = new Set(skills.map((sk) => sk.id));
+    const hidden = (packOps?.list().find((p) => p.id === packEdit.id)?.skills ?? []).filter((id) => !shown.has(id));
+    setDialog({ kind: 'edit', id: packEdit.id, label: packEdit.label, skills: [...[...live.current.selected].filter((id) => known.has(id)), ...hidden] });
+  };
+  const done = (message: string, change?: TreeAction) => {
+    setDialog(null);
+    setFlash(message);
+    if (change) onAction?.(change);
+  };
+  const attempt = (run: () => string): string | undefined => {
+    try {
+      done(run(), { kind: 'packsChanged' });
+      return undefined;
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  };
+
   // Buttons do what their key does; continue is only clickable once something changes.
+  const pack = focusedPack(rows[current]);
+  const packHints: Hint[] = packOps
+    ? [
+        ...(known.size && [...selected].some((id) => known.has(id)) ? [['N', m.keys.newPack, openCreate] as Hint] : []),
+        ...(pack && personalPacks.has(pack) ? [['E', m.keys.editPack, () => startPackEdit(pack)] as Hint, ['D', m.keys.deletePack, () => setDialog({ kind: 'delete', id: pack, label: packLabel(pack) })] as Hint] : []),
+        ...(pack ? [['P', m.keys.useProfile, () => setDialog({ kind: 'profile', id: pack, label: packLabel(pack) })] as Hint] : []),
+        ['B', m.keys.backups, () => setDialog({ kind: 'backups' })] as Hint,
+      ]
+    : [];
   const hints: Hint[] = editingFilter
     ? [
         [m.keyNames.enter, m.keys.done, endSearch],
         [m.keyNames.esc, m.keys.clear, clearSearch],
+      ]
+    : packEdit
+    ? [
+        [m.keyNames.space, m.keys.toggle],
+        ['/', m.keys.search, startSearch],
+        [m.keyNames.enter, m.keys.savePack, openEditSave],
+        [m.keyNames.esc, m.keys.cancelEdit, cancelPackEdit],
       ]
     : [
         [m.keyNames.space, m.keys.toggle],
@@ -474,9 +619,110 @@ export function TreeSelect({
         ['o', m.keys.official, toggleOfficial],
         ...(canOpenGitHub ? [['g', m.keys.github, openFocusedGitHub] as Hint, ['p', m.keys.preview, openPreview] as Hint] : []),
         ...(updates.size ? [['u', m.keys.update] as Hint, ['U', m.keys.updateAll, () => toggleUpdate([...updates])] as Hint] : []),
+        ...(warnings.length ? [['!', m.keys.warnings(warnings.length), () => setShowWarnings(true)] as Hint] : []),
+        ...packHints,
         [m.keyNames.enter, m.keys.continue, canSubmit ? submit : undefined],
         ['q', m.keys.quit, onCancel],
       ];
+
+  if (dialog && packOps) {
+    const close = () => setDialog(null);
+    if (dialog.kind === 'create') {
+      return (
+        <FormDialog
+          title={m.tree.packNewTitle(formatNumber(dialog.ids.length))}
+          fields={[{ label: m.tree.packNameField, value: '' }, { label: m.tree.packDescriptionField, value: m.cli.profileDefaultDescription(String(dialog.ids.length)) }]}
+          onSubmit={([name, description]) => attempt(() => {
+            const p = packOps.create({ name: name!, description: description || m.cli.profileDefaultDescription(String(dialog.ids.length)), skills: dialog.ids });
+            return m.cli.profileCreated(p.id, String(p.skills.length));
+          })}
+          onCancel={close}
+        />
+      );
+    }
+    if (dialog.kind === 'edit') {
+      const current = packOps.list().find((p) => p.id === dialog.id);
+      return (
+        <FormDialog
+          title={m.tree.packEditTitle(dialog.label, formatNumber(dialog.skills.length))}
+          fields={[{ label: m.tree.packNameField, value: current?.name ?? '' }, { label: m.tree.packDescriptionField, value: current?.description ?? '' }]}
+          onSubmit={([name, description]) => attempt(() => {
+            const p = packOps.update(dialog.id, { name, description: description || current?.description, skills: dialog.skills });
+            // Back to the selection the edit began with.
+            if (packEdit) setSelected(packEdit.saved);
+            setPackEdit(null);
+            return m.cli.packUpdated(p.id, String(p.skills.length));
+          })}
+          onCancel={close}
+        />
+      );
+    }
+    if (dialog.kind === 'delete') {
+      return (
+        <ConfirmDialog
+          tone="danger"
+          title={m.cli.packDeleteConfirm(dialog.label)}
+          onYes={() => {
+            const err = attempt(() => {
+              packOps.remove(dialog.id);
+              return m.cli.packDeleted(dialog.label);
+            });
+            if (err) done(`✗ ${err}`);
+          }}
+          onNo={close}
+        />
+      );
+    }
+    if (dialog.kind === 'backups') {
+      return (
+        <BackupsDialog
+          backups={packOps.backups()}
+          height={height}
+          onRestore={async (id) => {
+            try {
+              const undo = await packOps.restore(id);
+              setDialog(null);
+              onAction?.({ kind: 'restored', message: `✓ ${m.cli.profileRestored(id)} — ${m.cli.profileUndo(undo)}` });
+              return undefined;
+            } catch (err) {
+              return err instanceof Error ? err.message : String(err);
+            }
+          }}
+          onClose={close}
+        />
+      );
+    }
+    return (
+      <ProfileDialog
+        label={dialog.label}
+        height={height}
+        plan={(sc) => packOps.plan(dialog.id, sc)}
+        onConfirm={(sc) => {
+          setDialog(null);
+          onAction?.({ kind: 'profile', pack: dialog.id, scope: sc });
+        }}
+        onCancel={close}
+      />
+    );
+  }
+
+  if (showWarnings) {
+    return (
+      <Box flexDirection="column">
+        <Text bold color={PALETTE.gold}>{`⚠ ${m.tree.warningsTitle(formatNumber(warnings.length))}`}</Text>
+        <Panel>
+          <Box flexDirection="column">
+            {warnings.map((w, i) => (
+              <Box key={i} marginBottom={i < warnings.length - 1 ? 1 : 0}>
+                <Text wrap="wrap">{`• ${w}`}</Text>
+              </Box>
+            ))}
+          </Box>
+        </Panel>
+        <Hints items={[[m.keyNames.esc, m.keys.back, () => setShowWarnings(false)]]} />
+      </Box>
+    );
+  }
 
   if (preview) {
     const s = preview.skill;
@@ -496,6 +742,7 @@ export function TreeSelect({
         {preview.text !== undefined && (
           <Box flexDirection="column">
             {preview.diff && <Text bold>{m.tree.diffSummary(preview.diff.added, preview.diff.removed)}</Text>}
+            {!preview.diff && previewCost && <Text dimColor>{m.tree.cost(formatNumber(previewCost.startup), formatNumber(previewCost.onUse))}</Text>}
             {risks.length ? (
               <Text color={levelColor[risks[0]!.level]} bold>{`⚠ ${preview.diff ? m.tree.newRisksFound(risks.length) : m.tree.risksFound(risks.length)}`}</Text>
             ) : (
@@ -544,7 +791,10 @@ export function TreeSelect({
           <Text color={PALETTE.success}>
             {BOX.on} {m.tree.selected(selected.size)}
           </Text>
-          {(toInstall > 0 || toRemove > 0) && (
+          {flash && <Text color={flash.startsWith('✗') ? PALETTE.danger : PALETTE.pink}>{`   ${flash.startsWith('✗') ? '' : '✓ '}${flash}`}</Text>}
+          {warnings.length > 0 && <Text color={PALETTE.gold}>{`   ⚠ ${formatNumber(warnings.length)} (!)`}</Text>}
+          {packEdit && <Text color={PALETTE.gold}>{`   ✎ ${m.tree.editingPack(packEdit.label, formatNumber(selected.size))}`}</Text>}
+          {!packEdit && (toInstall > 0 || toRemove > 0) && (
             <Text>
               {'   '}
               <Text color={PALETTE.success}>+{toInstall}</Text> <Text color={PALETTE.danger}>−{toRemove}</Text>
@@ -676,6 +926,7 @@ export function TreeSelect({
                 )}
               </Text>
               <Text>
+                {row.skill.suggestion ? <Text color={PALETTE.success}>{`💡 ${m.tree.suggestedFor(row.skill.suggestion.for)}   `}</Text> : null}
                 {row.skill.growth ? <Text color={row.skill.growthSuspect ? PALETTE.gold : PALETTE.success}>{`↑ ${m.tree.growth(formatNumber(row.skill.growth))}${row.skill.growthSuspect ? ` (${m.tree.growthSuspect(row.skill.growthSuspect)})` : ''}   `}</Text> : null}
                 {row.skill.updatedAt ? <Text dimColor>{`${m.tree.updated(row.skill.updatedAt)}  ·  `}</Text> : null}
                 {row.skill.repo?.license ? <Text dimColor>{`${row.skill.repo.license}  ·  `}</Text> : null}

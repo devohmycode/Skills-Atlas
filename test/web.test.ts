@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { InstallCommand } from '../src/install/plan.js';
 import type { CommandOutcome, InstalledSkill } from '../src/install/run.js';
-import type { Skill } from '../src/types.js';
+import type { Skill, Theme } from '../src/types.js';
 import { startServer, type AtlasServer } from '../src/web/server.js';
 import { withRecommendations } from '../src/catalog/recommended.js';
 import { querySkills } from '../src/catalog/query.js';
@@ -332,4 +332,76 @@ describe('personal pack API', () => {
       expect(readFileSync(packsPath, 'utf8')).toBe('{bad');
     } finally { await local.close(); rmSync(dir, { recursive: true, force: true }); }
   });
+});
+
+it('activates a pack as a profile in one scope, after a backup, and restores that backup', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-web-profile-'));
+  const cwd = join(dir, 'project');
+  const backupsRoot = join(dir, 'backups');
+  const packsPath = join(dir, 'packs.json');
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(join(cwd, '.claude', 'skills', 'mine'), { recursive: true });
+  writeFileSync(join(cwd, '.claude', 'skills', 'mine', 'SKILL.md'), 'my own');
+  writeFileSync(packsPath, JSON.stringify([{ id: 'design', name: 'Design', description: 'design work', skills: ['a/b@tailwind'] }]));
+  // pentest is installed in both scopes: a project profile removes it from the project only.
+  const project: InstalledSkill[] = [{ name: 'mine', scope: 'project', agents: ['Claude Code'] }, { name: 'pentest', source: 'c/d', scope: 'project', agents: ['Claude Code'] }];
+  const global: InstalledSkill[] = [{ name: 'pentest', source: 'c/d', scope: 'global', agents: ['Claude Code'] }];
+  const commandsRun: InstallCommand[][] = [];
+  const local = await startServer({ skills, catalogSkills: skills, themes: [], skillsVersion: '1.7.0', port: 0, cwd, packsPath, backupsRoot,
+    listInstalled: async (scope) => (scope === 'project' ? project : global), readSkill: async () => '# clean',
+    runAll: async (commands) => { commandsRun.push(commands); return []; } });
+  const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${local.port}${path}`, { method: 'POST',
+    headers: { 'x-atlas-token': local.token, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  try {
+    const plan = await (await post('/api/profile/plan', { pack: 'design', scope: 'project' })).json();
+    expect(plan).toEqual({ keep: [], remove: [{ name: 'mine', id: 'local@mine' }, { name: 'pentest', id: 'c/d@pentest' }], install: ['a/b@tailwind'], unknown: [] });
+    const res = await post('/api/apply', { install: ['c/d@pentest'], remove: [], options: { agents: ['claude-code'], scope: 'project', method: 'symlink' }, profile: { pack: 'design' } });
+    const events = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+    const backup = events.find((e) => e.type === 'backup').id as string;
+    expect(events.at(-1)).toMatchObject({ type: 'end', ok: true, backup });
+    // The server's own plan: the client's install list is ignored, removals stay in the project.
+    expect(commandsRun[0]!.map((c) => c.args.join(' '))).toEqual([
+      '-y skills@1.7.0 remove -s mine pentest -y',
+      '-y skills@1.7.0 add a/b -s tailwind -a claude-code -y --json',
+    ]);
+    const state = await (await fetch(`http://127.0.0.1:${local.port}/api/state`, { headers: { 'x-atlas-token': local.token } })).json();
+    expect(state.backups).toEqual([expect.objectContaining({ id: backup, scope: 'project', reason: 'profile:design', initial: true })]);
+    expect(state.profiles).toMatchObject({ [cwd]: 'design' });
+    // The skill the run removed comes back from the backup, byte for byte.
+    rmSync(join(cwd, '.claude', 'skills', 'mine'), { recursive: true });
+    const restored = await (await post('/api/backups/restore', { id: backup })).json();
+    expect(restored.restored).toBe(backup);
+    expect(readFileSync(join(cwd, '.claude', 'skills', 'mine', 'SKILL.md'), 'utf8')).toBe('my own');
+    expect((await post('/api/backups/restore', { id: 'nope' })).status).toBe(404);
+  } finally {
+    await local.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it('edits and deletes a personal pack, refreshing its theme, and refuses a shipped one', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-web-packs-'));
+  const packsPath = join(dir, 'packs.json');
+  writeFileSync(packsPath, JSON.stringify([{ id: 'mine', name: 'Mine', description: 'd', skills: ['a/b@tailwind'] }, { id: 'frontend', name: 'Frontend dev', description: 'shipped', skills: ['a/b@react-hooks'] }]));
+  const local = await startServer({ skills, catalogSkills: skills, themes: [], skillsVersion: '1.7.0', port: 0, packsPath, listInstalled: async () => [] });
+  const headers = { 'x-atlas-token': local.token, 'content-type': 'application/json' };
+  const post = (path: string, body: unknown) => fetch(`http://127.0.0.1:${local.port}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+  const state = async () => (await fetch(`http://127.0.0.1:${local.port}/api/state`, { headers })).json();
+  const inTheme = async (theme: string) => (await (await fetch(`http://127.0.0.1:${local.port}/api/skills?theme=${encodeURIComponent(theme)}`, { headers })).json()).items.map((s: Skill) => s.id);
+  try {
+    // The shipped packs always show, read-only; the file's copy of `frontend` is ignored.
+    expect((await state()).packs.map((p: { id: string; personal: boolean }) => [p.id, p.personal])).toEqual([['frontend', false], ['security', false], ['quality', false], ['writing', false], ['mine', true]]);
+    const res = await post('/api/packs/update', { id: 'mine', name: 'Design', description: 'UI', skills: ['a/b@tailwind', 'c/d@pentest'] });
+    expect((await res.json()).pack).toEqual({ id: 'mine', name: 'Design', description: 'UI', skills: ['a/b@tailwind', 'c/d@pentest'] });
+    expect((await state()).themes.find((th: Theme) => th.id === 'pack:mine').label).toBe('📦 Design');
+    expect((await inTheme('pack:mine')).sort()).toEqual(['a/b@tailwind', 'c/d@pentest']);
+    expect((await post('/api/packs/update', { id: 'frontend', name: 'x' })).status).toBe(400);
+    expect((await post('/api/packs/delete', { id: 'nope' })).status).toBe(404);
+    expect((await post('/api/packs/delete', { id: 'mine' })).status).toBe(200);
+    expect((await state()).themes.some((th: Theme) => th.id === 'pack:mine')).toBe(false);
+    expect(await inTheme('pack:mine')).toEqual([]);
+  } finally {
+    await local.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

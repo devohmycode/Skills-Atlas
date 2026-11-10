@@ -443,7 +443,7 @@ describe('saving packs in the web interface', () => {
     expect(ui.packSelection()).toEqual([known.id, skill.id]);
     ui.openPack();
     expect(element('pack-dialog').showModal).toHaveBeenCalledOnce();
-    expect(element('pack-id').focus).toHaveBeenCalledOnce();
+    expect(element('pack-name').focus).toHaveBeenCalledOnce();
     element('pack-id').value = 'mine';
     element('pack-name').value = '<img src=x onerror=bad()>';
     element('pack-description').value = 'My selection';

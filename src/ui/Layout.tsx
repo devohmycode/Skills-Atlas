@@ -1,5 +1,5 @@
 import { Box, Text, useStdout } from 'ink';
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { t } from '../i18n/index.js';
 import { logo } from './logo.js';
 import { useClick } from './mouse.js';
@@ -10,12 +10,20 @@ export const ACCENT = PALETTE.accent;
 export type StepId = 'scope' | 'select' | 'agents' | 'method' | 'confirm';
 export const STEPS: StepId[] = ['select', 'scope', 'agents', 'method', 'confirm'];
 
+/** Rows already taken above a screen's content (the logo, notices): lists size themselves without them. */
+export const ReservedRows = createContext(0);
+
+/** The terminal's size, less the rows reserved above the current content. */
 export function useTerminalSize(): { columns: number; rows: number } {
   const { stdout } = useStdout();
-  return { columns: stdout?.columns ?? 80, rows: stdout?.rows ?? 24 };
+  const reserved = useContext(ReservedRows);
+  return { columns: stdout?.columns ?? 80, rows: Math.max(8, (stdout?.rows ?? 24) - reserved) };
 }
 
-/** Full ASCII logo and tagline, for the first screens when the terminal is tall enough. */
+/** Lines the banner takes: the logo, the tagline and the blank line under them. */
+export const bannerLines = (columns: number): number => logo(columns).split('\n').length + 2;
+
+/** Full ASCII logo and tagline, on every screen when the terminal is tall enough. */
 export function Banner() {
   const { columns } = useTerminalSize();
   return (

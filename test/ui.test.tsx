@@ -602,7 +602,7 @@ describe('installed skills in the wizard', () => {
 
   it('flags an outdated skill, marks it with u and reinstalls it for its agents', async () => {
     let result: WizardResult | null = null;
-    const findUpdates = vi.fn(async () => ({ outdated: new Set(['c/d@pentest']), unchecked: [{ source: 'x/y', reason: 'HTTP 403' }] }));
+    const findUpdates = vi.fn(async () => ({ outdated: { global: new Set(['c/d@pentest']), project: new Set<string>() }, unchecked: [{ source: 'x/y', reason: 'HTTP 403' }], modified: [] }));
     const { lastFrame, stdin } = render(
       <App themes={themes} skills={skills} preset={{}} defaults={defaults} skillsVersion="1.7.0" readSkill={cleanSkill}
         loadInstalled={loadInstalled} findUpdates={findUpdates} onDone={(r) => (result = r)} />,
@@ -610,7 +610,14 @@ describe('installed skills in the wizard', () => {
     await tick();
     await tick();
     expect(lastFrame()).toContain('↑ 1 update (u)');
+    // Warnings are one ⚠ count on the status line; ! lists them on their own page, Esc goes back.
+    expect(lastFrame()).not.toContain('Update check incomplete');
+    expect(lastFrame()).toContain('⚠ 1 (!)');
+    await press(stdin, '!');
+    expect(lastFrame()).toContain('Warnings (1)');
     expect(lastFrame()).toContain('Update check incomplete: 1 repository check(s) failed');
+    await press(stdin, KEY.escape);
+    expect(lastFrame()).not.toContain('Warnings (1)');
     await press(stdin, KEY.right, KEY.down);
     expect(lastFrame()).toContain('↑ update available');
     await press(stdin, 'u');
@@ -622,10 +629,11 @@ describe('installed skills in the wizard', () => {
     expect(lastFrame()).toContain('↑ will be updated');
     // An update alone asks nothing: straight to the review.
     await press(stdin, KEY.enter);
-    expect(lastFrame()).toContain('Update 1 skill to the latest version (global)');
+    expect(lastFrame()).toContain('Update 1 skill to the latest version');
+    expect(lastFrame()).toContain('c/d@pentest (Global)');
     expect(lastFrame()).toContain('npx -y skills@1.7.0 add c/d -s pentest -a claude-code -g -y --json');
     await press(stdin, KEY.enter);
-    expect(result).toMatchObject({ ids: [], remove: [], update: [{ id: 'c/d@pentest', agents: ['Claude Code'] }] });
+    expect(result).toMatchObject({ ids: [], remove: [], update: [{ id: 'c/d@pentest', scope: 'global', agents: ['Claude Code'] }] });
   });
 
   it('reads only the scope given as a flag', async () => {
@@ -695,5 +703,127 @@ describe('French interface', () => {
     } finally {
       setLang('en');
     }
+  });
+});
+
+describe('pack keys in the tree', () => {
+  const packThemes: Theme[] = [{ id: 'pack:mine', label: '📦 Mine' }, { id: 'pack:frontend', label: '📦 Frontend dev' }, ...themes];
+  const packSkills = [
+    { ...skill('a/b@react-hooks', ['frontend', 'pack:mine']) },
+    skill('a/b@tailwind', ['frontend']),
+    { ...skill('c/d@pentest', ['security', 'pack:frontend']) },
+  ];
+  /** Packs and backups in memory, each call recorded. */
+  function ops() {
+    let packs = [{ id: 'mine', name: 'Mine', description: 'mine', skills: ['a/b@react-hooks', 'gone/repo@old'] }];
+    const calls: unknown[][] = [];
+    const o = {
+      list: () => packs,
+      create: vi.fn((input: { name: string; description: string; skills: string[] }) => {
+        if (input.name === 'taken') throw new Error('pack id already exists');
+        const p = { id: input.name.toLowerCase().replace(/\W+/g, '-'), ...input };
+        packs = [...packs, p];
+        return p;
+      }),
+      update: vi.fn((id: string, patch: { name?: string; description?: string; skills?: string[] }) => {
+        packs = packs.map((p) => (p.id === id ? { ...p, ...patch } as typeof p : p));
+        return packs.find((p) => p.id === id)!;
+      }),
+      remove: vi.fn((id: string) => { packs = packs.filter((p) => p.id !== id); }),
+      backups: () => [{ id: 'b1', createdAt: '2026-11-01T10:00:00.000Z', scope: 'global' as const, reason: 'profile:mine', initial: true, skills: [{ name: 'pdf' }] }],
+      restore: vi.fn(async () => 'undo-1'),
+      plan: vi.fn(async (_pack: string, scope: string) => ({ keep: [], remove: scope === 'global' ? [{ id: 'x/y@old' }] : [], install: ['a/b@react-hooks'] })),
+    };
+    return { o, calls };
+  }
+  const tree = (o: ReturnType<typeof ops>['o'], onAction = vi.fn(), onSubmit = vi.fn()) =>
+    render(<TreeSelect themes={packThemes} skills={packSkills} personalPacks={new Set(['mine'])} packOps={o} onAction={onAction} onSubmit={onSubmit} onCancel={() => {}} />);
+
+  it('names a new pack in its own window, and shows an error there instead of leaving', async () => {
+    const { o } = ops();
+    const onAction = vi.fn();
+    const { lastFrame, stdin } = tree(o, onAction);
+    await tick();
+    await press(stdin, 'N');
+    expect(lastFrame()).not.toContain('New pack');
+    // Tick a skill under 📦 Mine, then N.
+    await press(stdin, KEY.right, KEY.down, ' ', 'N');
+    expect(lastFrame()).toContain('New pack from the 1 ticked skill(s)');
+    await press(stdin, 'taken', KEY.enter, KEY.enter);
+    expect(lastFrame()).toContain('✗ pack id already exists');
+    // The name field has the focus again: erase, retype, then Enter twice (description, save).
+    await press(stdin, ...Array(5).fill('\u007F'), 'Design', KEY.enter, KEY.enter);
+    expect(o.create).toHaveBeenLastCalledWith({ name: 'Design', description: '1 skills', skills: ['a/b@react-hooks'] });
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'packsChanged' });
+    expect(lastFrame()).toContain('✓ Pack design created with 1 skills');
+  });
+
+  it('edits a personal pack by ticking its skills, then its name, keeping members the tree does not show', async () => {
+    const { o } = ops();
+    const onSubmit = vi.fn();
+    const { lastFrame, stdin } = tree(o, vi.fn(), onSubmit);
+    await tick();
+    await press(stdin, 'E');
+    expect(lastFrame()).toContain('✎ Editing 📦 Mine: tick its skills (1)');
+    expect(lastFrame()).not.toContain('will be uninstalled');
+    await press(stdin, KEY.escape);
+    expect(lastFrame()).not.toContain('Editing');
+    await press(stdin, 'E', KEY.right, KEY.down, KEY.down, ' ', KEY.enter);
+    expect(lastFrame()).toContain('📦 Mine: 3 skill(s)');
+    await press(stdin, ' 2', KEY.enter, KEY.enter);
+    // Down twice lands on 📦 Frontend dev: space ticks its member, pentest.
+    expect(o.update).toHaveBeenLastCalledWith('mine', { name: 'Mine 2', description: 'mine', skills: ['a/b@react-hooks', 'c/d@pentest', 'gone/repo@old'] });
+    expect(lastFrame()).not.toContain('Editing');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('asks before deleting, and only offers edit and delete for personal packs', async () => {
+    const { o } = ops();
+    const { lastFrame, stdin } = tree(o);
+    await tick();
+    expect(lastFrame()).toContain('E edit pack');
+    await press(stdin, 'D');
+    expect(lastFrame()).toContain('Delete the pack 📦 Mine?');
+    await press(stdin, 'n');
+    expect(o.remove).not.toHaveBeenCalled();
+    await press(stdin, 'D', 'y');
+    expect(o.remove).toHaveBeenCalledWith('mine');
+    // The shipped Frontend pack: no edit, no delete.
+    await press(stdin, KEY.down);
+    expect(lastFrame()).not.toContain('E edit pack');
+    await press(stdin, 'E', 'D');
+    expect(lastFrame()).not.toContain('Delete the pack');
+  });
+
+  it('chooses a profile scope in its window, then hands the install over', async () => {
+    const { o } = ops();
+    const onAction = vi.fn();
+    const { lastFrame, stdin } = tree(o, onAction);
+    await tick();
+    await press(stdin, 'P');
+    expect(lastFrame()).toContain('Profile 📦 Mine (global)');
+    expect(lastFrame()).toContain('− x/y@old');
+    expect(lastFrame()).toContain('+ a/b@react-hooks');
+    await press(stdin, KEY.right);
+    expect(o.plan).toHaveBeenLastCalledWith('mine', 'project');
+    expect(lastFrame()).toContain('Profile 📦 Mine (project)');
+    expect(lastFrame()).not.toContain('− x/y@old');
+    await press(stdin, KEY.enter);
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'profile', pack: 'mine', scope: 'project' });
+  });
+
+  it('restores a backup from its window, after a yes', async () => {
+    const { o } = ops();
+    const onAction = vi.fn();
+    const { lastFrame, stdin } = tree(o, onAction);
+    await tick();
+    await press(stdin, 'B');
+    expect(lastFrame()).toContain('2026-11-01 10:00');
+    expect(lastFrame()).toContain('profile:mine — pdf');
+    await press(stdin, KEY.enter, 'n');
+    expect(o.restore).not.toHaveBeenCalled();
+    await press(stdin, KEY.enter, 'y');
+    expect(o.restore).toHaveBeenCalledWith('b1');
+    expect(onAction).toHaveBeenLastCalledWith({ kind: 'restored', message: expect.stringContaining('Restored b1') });
   });
 });
