@@ -13,7 +13,26 @@ export interface BuildOptions {
   /** How many popular skills without description to complete from GitHub (0 = none). */
   enrich?: number;
   githubToken?: string;
+  /** The snapshot being replaced: a source that fails keeps the skills it had there. */
+  previous?: Catalog;
   log?: (msg: string) => void;
+}
+
+/**
+ * What a source listed in the previous snapshot, as raw entries. A skill only that
+ * source knew keeps its counts; one other sources know too takes theirs, which are fresh.
+ */
+export function carriedOver(previous: Catalog, origin: Origin): RawSkill[] {
+  return previous.skills
+    .filter((s) => s.origins.includes(origin))
+    .map((s) => {
+      const alone = s.origins.length === 1;
+      return {
+        origin, name: s.name, source: s.source, path: s.path, description: s.description,
+        ...(alone ? { installs: s.installs, stars: s.stars, labels: s.labels } : {}),
+        ...(origin === 'skills.sh' ? { rank: s.rank } : {}),
+      };
+    });
 }
 
 /**
@@ -51,8 +70,9 @@ export function assemble(
 }
 
 /**
- * Crawls every source. A failing source is logged and skipped so that one
- * registry being down does not block the snapshot; all of them failing, or no skill at all, does.
+ * Crawls every source. A failing source is logged and does not block the snapshot:
+ * it keeps the skills it listed in the previous one, so that a registry being down
+ * for a day does not drop half the catalog. All of them failing, or no skill at all, does block.
  */
 export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
   const log = opts.log ?? (() => {});
@@ -83,6 +103,12 @@ export async function buildCatalog(opts: BuildOptions = {}): Promise<Catalog> {
     }
   });
   if (settled.every((r) => r.status === 'rejected')) throw new Error('every catalog source failed');
+  for (const origin of origins) {
+    if (sources[origin].status !== 'error' || !opts.previous) continue;
+    raw[origin] = carriedOver(opts.previous, origin);
+    sources[origin].carried = raw[origin].length;
+    log(`${origin}: ${raw[origin].length} entries kept from the snapshot of ${opts.previous.generatedAt.slice(0, 10)}`);
+  }
   let merged = dedupe(Object.values(raw).flat());
   if (opts.enrich) {
     const { filled, missing } = await enrichDescriptions(merged, { max: opts.enrich, githubToken: opts.githubToken, log });
