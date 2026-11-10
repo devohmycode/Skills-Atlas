@@ -78,7 +78,7 @@ export const it: Messages = {
     updates: (n) => `${n} ${s(n, 'aggiornamento', 'aggiornamenti')} (u)`,
     previewLoading: 'Caricamento di SKILL.md…',
     previewFailed: (msg) => `Impossibile caricare SKILL.md: ${msg}`,
-    risks: { pipeShell: "scarica ed esegue codice", credentials: "accede a file di credenziali", destructive: "cancella in modo esteso", hidden: "chiede all'agente di nascondere cose o ignorare le istruzioni", sudo: "esegue comandi come amministratore", secrets: "legge segreti dall'ambiente", sendsData: "invia dati a un server", runsCode: "installa o esegue pacchetti o script", missingBin: "richiede un programma assente su questa macchina", requires: "indica i suoi requisiti", unaudited: "file non verificati" },
+    risks: { pipeShell: "scarica ed esegue codice", credentials: "accede a file di credenziali", destructive: "cancella in modo esteso", hidden: "chiede all'agente di nascondere cose o ignorare le istruzioni", sudo: "esegue comandi come amministratore", secrets: "legge segreti dall'ambiente", sendsData: "invia dati a un server", runsCode: "installa o esegue pacchetti o script", missingBin: "richiede un programma assente su questa macchina", requires: "indica i suoi requisiti", unaudited: "file non verificati", remoteContent: "legge contenuti da un URL, che possono cambiare dopo la revisione", hardcodedKey: "contiene quella che sembra una chiave segreta", lookalike: "nome simile a una skill molto più installata" },
     riskLevels: { high: "alto", medium: "medio", info: "info" },
     risksFound: (n) => `${n} ${s(n, 'segnale di allarme', 'segnali di allarme')} (controllo per schemi, non una garanzia)`,
     diffSummary: (added, removed) => `Modifiche dalla tua versione: +${added} −${removed} righe`,

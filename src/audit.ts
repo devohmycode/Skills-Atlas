@@ -1,6 +1,7 @@
 import pLimit from 'p-limit';
 import { fetchSkillFiles, fetchSkillMarkdown, type SkillFiles } from './github.js';
-import { scanRisks, sortRisks, type Risk } from './risks.js';
+import { scanRisks, sortRisks, unaudited, type Risk } from './risks.js';
+import { lookalikeRisk } from './catalog/lookalike.js';
 import type { Skill } from './types.js';
 
 /**
@@ -64,10 +65,19 @@ export async function auditSkills(
   );
 }
 
-const unaudited = (paths: string[]): Risk => ({
-  rule: 'unaudited', level: 'info', label: 'files not audited', line: 0, count: paths.length,
-  excerpt: paths.slice(0, 5).join(', ') + (paths.length > 5 ? ` (+${paths.length - 5})` : ''),
-});
+/**
+ * Adds, to each result, the far more installed skill its name could be taken for.
+ * The catalog tells it, not the skill's files: a result for a skill the catalog does
+ * not know is compared as one with no install.
+ */
+export function withLookalikes(results: AuditResult[], skills: Pick<Skill, 'id' | 'source' | 'name' | 'installs'>[]): AuditResult[] {
+  if (!skills.length) return results;
+  const known = new Map(skills.map((s) => [s.id.toLowerCase(), s]));
+  return results.map((r) => {
+    const risk = lookalikeRisk(known.get(r.id.toLowerCase()) ?? auditTarget(r.id), skills);
+    return risk ? { ...r, risks: sortRisks([...r.risks, risk]) } : r;
+  });
+}
 
 /** Whether to audit: on unless the config or the command line turns it off. */
 export const auditEnabled = (config: { audit?: boolean }, flag?: boolean): boolean => flag !== false && config.audit !== false;

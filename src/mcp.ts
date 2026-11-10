@@ -140,7 +140,7 @@ async function callTool(name: ToolName, args: unknown, opts: McpOptions, catalog
       const known = new Map(c.skills.map((s) => [s.id.toLowerCase(), s]));
       return json({ unchecked, skills: await Promise.all(outdated.map(async (s) => {
         const diff = await updateDiff(auditTarget(s.id, known), local).catch(() => undefined);
-        return diff ? { ...s, lines_added: diff.added, lines_removed: diff.removed, new_risks: diff.risks.map(({ rule, level, label, line, excerpt }) => ({ rule, level, label, line, excerpt })) } : s;
+        return diff ? { ...s, lines_added: diff.added, lines_removed: diff.removed, files_changed: diff.files.map(({ path, status, added, removed }) => ({ path, status, lines_added: added, lines_removed: removed })), new_risks: diff.risks.map(({ rule, level, label, line, excerpt, file }) => ({ rule, level, label, file: file ?? 'SKILL.md', line, excerpt })) } : s;
       })) });
     }
     case 'install_skills': {

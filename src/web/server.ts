@@ -9,7 +9,7 @@ import { PackSaveError, packTheme, savePack } from '../catalog/packs.js';
 import { byGrowth } from '../catalog/trending.js';
 import { createSearchIndex, SORT_ORDERS } from '../catalog/query.js';
 import { readConfig, writeConfig } from '../config.js';
-import { auditEnabled, auditSkills, failsAudit } from '../audit.js';
+import { auditEnabled, auditSkills, failsAudit, withLookalikes } from '../audit.js';
 import { fetchSkillMarkdown } from '../github.js';
 import { scanRisks } from '../risks.js';
 import { nameCollisions } from '../install/collisions.js';
@@ -201,7 +201,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
     if (badAgents.length) throw new HttpError(400, `unknown agents: ${badAgents.join(', ')}`);
     const enabled = auditEnabled(readConfig());
     const byId = new Map(catalogSkills.map((s) => [s.id, s]));
-    const results = enabled ? await auditSkills(install.map((id) => byId.get(id)!), readSkill) : [];
+    const results = enabled ? withLookalikes(await auditSkills(install.map((id) => byId.get(id)!), readSkill), catalogSkills) : [];
     const failing = results.filter(failsAudit).map((r) => r.id);
     if (auditOverrides.some((id) => !failing.includes(id))) throw new HttpError(400, 'invalid audit overrides');
     const blocked = failing.filter((id) => !auditOverrides.includes(id));
@@ -304,7 +304,7 @@ export async function startServer(opts: ServerOptions): Promise<AtlasServer> {
       const collisions = replacements([skill.id], inst.installed, scope);
       try {
         const markdown = await readSkill(skill);
-        return json(req, res, { id: skill.id, markdown, risks: scanRisks(markdown), collisions });
+        return json(req, res, { id: skill.id, markdown, risks: withLookalikes([{ id: skill.id, risks: scanRisks(markdown) }], catalogSkills)[0]!.risks, collisions });
       } catch (err) {
         return json(req, res, { id: skill.id, risks: [], collisions, error: err instanceof Error ? err.message : String(err) });
       }

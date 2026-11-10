@@ -60,6 +60,8 @@ export interface SkillFiles {
 }
 
 const TEXT = /\.(sh|bash|zsh|fish|ps1|psm1|bat|cmd|py|js|mjs|cjs|ts|rb|pl|php|lua|md|txt|json|ya?ml|toml|ini|cfg|env)$|(^|\/)(Makefile|Dockerfile|[^./]+)$/i;
+/** A file the audit reads: scripts, references, configs. */
+export const isTextFile = (path: string): boolean => TEXT.test(path);
 const MAX_BYTES = 64 * 1024;
 const MAX_FILES = 30;
 const FileTree = z.object({

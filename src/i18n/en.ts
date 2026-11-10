@@ -75,7 +75,7 @@ export const en = {
     updates: (n: number) => `${n} update${n === 1 ? '' : 's'} (u)`,
     previewLoading: 'Loading SKILL.md…',
     previewFailed: (msg: string) => `Could not load SKILL.md: ${msg}`,
-    risks: { pipeShell: "downloads and runs code", credentials: "touches credential files", destructive: "deletes broadly", hidden: "asks the agent to hide things or ignore its instructions", sudo: "runs commands as administrator", secrets: "reads secrets from the environment", sendsData: "sends data to a server", runsCode: "installs or runs packages or scripts", missingBin: "needs a program not found on this machine", requires: "states its requirements", unaudited: "files not audited" },
+    risks: { pipeShell: "downloads and runs code", credentials: "touches credential files", destructive: "deletes broadly", hidden: "asks the agent to hide things or ignore its instructions", sudo: "runs commands as administrator", secrets: "reads secrets from the environment", sendsData: "sends data to a server", runsCode: "installs or runs packages or scripts", missingBin: "needs a program not found on this machine", requires: "states its requirements", unaudited: "files not audited", remoteContent: "reads content from a URL, which can change after the review", hardcodedKey: "holds what looks like a secret key", lookalike: "name close to a far more installed skill" },
     riskLevels: { high: "high", medium: "medium", info: "info" },
     risksFound: (n: number) => `${n} warning sign${n === 1 ? '' : 's'} (a pattern check, not a guarantee)`,
     diffSummary: (added: number, removed: number) => `Changes since your version: +${added} −${removed} lines`,
